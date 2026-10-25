@@ -1,2 +1,5 @@
-.godot/
-builds/
+/.godot/
+/builds/
+/capture/
+/tools/godot/
+__pycache__/
