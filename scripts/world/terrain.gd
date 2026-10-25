@@ -1,11 +1,11 @@
 class_name Terrain
 extends Node3D
-## Процедурний рельєф 256x256 м: висоти + шар снігу/бруду, що деформується колесами.
+## Procedural 256x256 m terrain: heights + a snow/mud layer that the wheels deform.
 
 const SIZE := 256
 const HALF := 128.0
 const N := SIZE + 1
-const TRACK_RES := SIZE * 2 + 1  # 0.5 м на піксель
+const TRACK_RES := SIZE * 2 + 1  # 0.5 m per pixel
 const CHUNK := 32
 const MAX_SNOW := 0.8
 const MAX_MUD := 0.4
@@ -23,8 +23,8 @@ class Surface:
 
 
 var heights := PackedFloat32Array()
-var snow_img: Image  # R - сніг, G - бруд, B - дорога
-var track_img: Image  # утрамбованість 0..1
+var snow_img: Image  # R - snow, G - mud, B - road
+var track_img: Image  # compaction 0..1
 var track_tex: ImageTexture
 var roads: Array[PackedVector2Array] = []
 
@@ -50,16 +50,23 @@ func generate(p_roads: Array[PackedVector2Array], flats: Array[Dictionary], pudd
 			var p := Vector2(x - HALF, z - HALF)
 			var b := base.get_noise_2d(p.x, p.y) * 16.0
 			var h := b + detail.get_noise_2d(p.x, p.y) * 2.5
-			h += smoothstep(100.0, 126.0, maxf(absf(p.x), absf(p.y))) * 30.0
 			var rd := road_distance(p)
-			h = lerpf(h, b, 1.0 - smoothstep(ROAD_HALF_WIDTH, ROAD_HALF_WIDTH + 4.0, rd))
+			var road_t := 1.0 - smoothstep(ROAD_HALF_WIDTH, ROAD_HALF_WIDTH + 4.0, rd)
+			h = lerpf(h, b, road_t)
+			# The rim at the map's edge goes on after the flats, so a long ramp off a location
+			# near the edge cannot drag the rim down with it.
+			var rim := smoothstep(100.0, 126.0, maxf(absf(p.x), absf(p.y))) * 30.0 * (1.0 - road_t)
 			var flat_t := 0.0
 			for f in flats:
 				var r: float = f.radius
 				var d := p.distance_to(f.pos)
-				h = lerpf(h, f.height, 1.0 - smoothstep(r, r + 10.0, d))
+				# The higher the step down to the ground around, the longer the ramp off the
+				# flat, so the roads out of a location stay drivable.
+				var ramp := maxf(10.0, absf(b - f.height) * 5.0)
+				h = lerpf(h, f.height, 1.0 - smoothstep(r, r + ramp, d))
+				rim *= smoothstep(r, r + 10.0, d)
 				flat_t = maxf(flat_t, 1.0 - smoothstep(r - 3.0, r, d))
-			heights[z * N + x] = h
+			heights[z * N + x] = h + rim
 
 			var on_road := 1.0 - smoothstep(ROAD_HALF_WIDTH - 0.5, ROAD_HALF_WIDTH + 1.0, rd)
 			var snow := clampf(0.55 + snow_noise.get_noise_2d(p.x, p.y) * 0.6, 0.15, 1.0)
@@ -106,7 +113,7 @@ func sample(pos: Vector3) -> Surface:
 	return s
 
 
-## Колесо втоптує сніг/бруд у точці контакту.
+## A wheel packs down the snow/mud at its contact point.
 func compact(pos: Vector3, amount: float) -> void:
 	var ix := clampi(roundi((pos.x + HALF) * 2.0), 0, TRACK_RES - 1)
 	var iz := clampi(roundi((pos.z + HALF) * 2.0), 0, TRACK_RES - 1)
@@ -160,7 +167,7 @@ func _build_visuals() -> void:
 	snow_mat.set_shader_parameter("max_snow", MAX_SNOW)
 	snow_mat.set_shader_parameter("max_mud", MAX_MUD)
 
-	# Земля - 1 м між вершинами, сніг - 0.5 м, щоб колії було видно.
+	# Ground: 1 m between vertices; snow: 0.5 m, so the ruts show.
 	var ground_mesh := PlaneMesh.new()
 	ground_mesh.size = Vector2(CHUNK, CHUNK)
 	ground_mesh.subdivide_width = CHUNK - 1

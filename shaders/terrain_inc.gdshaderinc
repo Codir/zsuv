@@ -1,4 +1,4 @@
-// Доступ до карти висот рельєфу (257x257, 1 м між вершинами).
+// Terrain heightmap access (257x257, 1 m between vertices).
 
 uniform sampler2D height_tex : filter_nearest, repeat_disable;
 uniform sampler2D snow_tex : filter_linear, repeat_disable;

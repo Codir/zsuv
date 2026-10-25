@@ -1,19 +1,19 @@
 class_name Hud
 extends CanvasLayer
-## Приладова панель, поточне завдання, підказки й довідка по керуванню.
+## Dashboard, current objective, prompts and the controls help.
 
-const HELP_TEXT := """W/S   газ / гальмо, задній хід
-A/D   кермо       SPACE  ручник
-Q     повний привід 4x4
-X     блокування диференціала
-G     понижена передача
-H     фари         R  на колеса
-E     завантажити / заправитись
-F     лебідка, Shift - намотати
-M     мапа
-T     евакуація в депо
-ПКМ   камера, коліщатко - зум
-F1    сховати довідку"""
+const HELP_TEXT := """W/S   throttle / brake, reverse
+A/D   steer       SPACE  handbrake
+Q     all-wheel drive 4x4
+X     differential lock
+G     low range
+H     headlights   R  flip upright
+E     load / refuel
+F     winch, Shift - reel in
+M     map
+T     tow back to depot
+RMB   camera, wheel - zoom
+F1    hide help"""
 
 var vehicle: Vehicle
 var contracts: Contracts
@@ -55,7 +55,7 @@ func _process(delta: float) -> void:
 	if vehicle == null:
 		return
 	var fuel_bars := roundi(vehicle.fuel / Vehicle.FUEL_CAPACITY * 10.0)
-	_status.text = "%3d км/год  %s  %s  ДИФ:%s\nПАЛЬНЕ %s%s %2d л\n$ %d%s" % [
+	_status.text = "%3d km/h  %s  %s  DIFF:%s\nFUEL %s%s %2d L\n$ %d%s" % [
 		roundi(absf(vehicle.forward_speed) * 3.6),
 		"LOW " if vehicle.low_range else "HIGH",
 		"4x4" if vehicle.awd else "4x2",
@@ -64,10 +64,10 @@ func _process(delta: float) -> void:
 		"░".repeat(10 - fuel_bars),
 		roundi(vehicle.fuel),
 		contracts.money,
-		"   ВАНТАЖ" if vehicle.has_cargo else "",
+		"   CARGO" if vehicle.has_cargo else "",
 	]
 	if vehicle.winch.attached:
-		_status.text += "\nЛЕБІДКА %4.1f м  натяг %2d кН%s" % [
+		_status.text += "\nWINCH %4.1f m  pull %2d kN%s" % [
 			vehicle.winch.length, roundi(vehicle.winch.tension / 1000.0), "  <<" if vehicle.winch.reeling else ""]
 	_objective.text = contracts.objective_text()
 	_prompt.text = contracts.prompt if contracts.prompt != "" else vehicle.winch.prompt()

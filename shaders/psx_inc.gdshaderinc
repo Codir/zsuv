@@ -1,4 +1,4 @@
-// Спільні PSX-функції: прилипання вершин до сітки екрана та дешевий шум.
+// Shared PSX functions: vertices snapped to a screen grid, and cheap noise.
 
 const vec2 PSX_SNAP_RES = vec2(160.0, 90.0);
 

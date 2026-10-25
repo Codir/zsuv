@@ -1,6 +1,6 @@
 class_name Contracts
 extends Node3D
-## Простий цикл доставки: забрати вантаж у депо -> довезти -> отримати гроші.
+## A simple delivery loop: pick up cargo at the depot -> haul it -> get paid.
 
 signal message(text: String)
 
@@ -26,9 +26,9 @@ func setup(v: Vehicle, t: Terrain, locations: Dictionary) -> void:
 	terrain = t
 	_depot = locations.depot
 	_jobs = [
-		{"name": "Хутір", "cargo": "продукти", "loc": locations.farm, "reward": 250},
-		{"name": "Лісопилка", "cargo": "запчастини", "loc": locations.lumber, "reward": 300},
-		{"name": "Радіовежа", "cargo": "батареї для дронів", "loc": locations.tower, "reward": 500},
+		{"name": "Khutir", "cargo": "groceries", "loc": locations.farm, "reward": 250},
+		{"name": "Sawmill", "cargo": "spare parts", "loc": locations.lumber, "reward": 300},
+		{"name": "Radio Tower", "cargo": "drone batteries", "loc": locations.tower, "reward": 500},
 	]
 	_markers.append(_make_marker(_depot, Color(1.0, 0.8, 0.2)))
 	for job in _jobs:
@@ -50,8 +50,8 @@ func current_target() -> Dictionary:
 func objective_text() -> String:
 	var job := _jobs[_job_index]
 	if vehicle.has_cargo:
-		return "ДОСТАВКА: %s -> %s  %d м  +$%d" % [job.cargo, job.name, _distance_to(job.loc), job.reward]
-	return "ЗАБРАТИ В ДЕПО: %s для «%s»  %d м" % [job.cargo, job.name, _distance_to(_depot)]
+		return "DELIVER: %s -> %s  %d m  +$%d" % [job.cargo, job.name, _distance_to(job.loc), job.reward]
+	return "PICK UP AT DEPOT: %s for %s  %d m" % [job.cargo, job.name, _distance_to(_depot)]
 
 
 func _process(_delta: float) -> void:
@@ -69,22 +69,26 @@ func _process(_delta: float) -> void:
 	prompt = ""
 	var slow := absf(vehicle.forward_speed) < 2.0
 	if vehicle.has_cargo and _near(job.loc):
-		prompt = "[E] Розвантажити" if slow else "Зупиніться, щоб розвантажити"
+		prompt = "[E] Unload" if slow else "Stop to unload"
 	elif _near(_depot):
-		var action := "Заправитись" if vehicle.has_cargo else "Завантажити %s + заправитись" % job.cargo
-		prompt = ("[E] " + action) if slow else "Зупиніться біля депо"
+		var action := "Refuel" if vehicle.has_cargo else "Load %s + refuel" % job.cargo
+		prompt = ("[E] " + action) if slow else "Stop at the depot"
 	elif vehicle.fuel <= 0.0:
-		prompt = "Пальне скінчилось! [T] Евакуація в депо (-$%d)" % RECOVER_COST
+		prompt = "Out of fuel! [T] Tow to depot (-$%d)" % RECOVER_COST
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("interact"):
 		_interact()
 	elif event.is_action_pressed("recover"):
-		money -= RECOVER_COST
-		vehicle.fuel = maxf(vehicle.fuel, Vehicle.FUEL_CAPACITY * 0.5)
-		vehicle.teleport(spawn_pos, spawn_yaw)
-		message.emit("Евакуатор доставив вас у депо. -$%d" % RECOVER_COST)
+		recover()
+
+
+func recover() -> void:
+	money -= RECOVER_COST
+	vehicle.fuel = maxf(vehicle.fuel, Vehicle.FUEL_CAPACITY * 0.5)
+	vehicle.teleport(spawn_pos, spawn_yaw)
+	message.emit("The tow truck dragged you back to the depot. -$%d" % RECOVER_COST)
 
 
 func _interact() -> void:
@@ -94,17 +98,17 @@ func _interact() -> void:
 	if vehicle.has_cargo and _near(job.loc):
 		vehicle.set_cargo(false)
 		money += int(job.reward)
-		message.emit("Доставлено: %s! +$%d" % [job.name, job.reward])
+		message.emit("Delivered to %s! +$%d" % [job.name, job.reward])
 		_job_index = (_job_index + 1) % _jobs.size()
 		_update_markers()
 	elif _near(_depot):
 		vehicle.fuel = Vehicle.FUEL_CAPACITY
 		if not vehicle.has_cargo:
 			vehicle.set_cargo(true)
-			message.emit("Завантажено: %s. Курс на «%s»" % [job.cargo, job.name])
+			message.emit("Loaded: %s. Head for %s" % [job.cargo, job.name])
 			_update_markers()
 		else:
-			message.emit("Бак повний")
+			message.emit("Tank is full")
 
 
 func _update_markers() -> void:

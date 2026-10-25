@@ -1,7 +1,7 @@
 class_name Winch
 extends Node3D
-## Лебідка: чіпляється до найближчого дерева/каменя попереду.
-## Трос сам вибирає слабину (храповик), Shift - намотувати.
+## Winch: hooks onto the nearest tree or rock ahead.
+## The cable takes up its own slack (a ratchet); Shift reels it in.
 
 const RANGE := 16.0
 const MAX_FORCE := 32000.0
@@ -20,7 +20,7 @@ var length := 0.0
 var tension := 0.0
 var reeling := false
 var candidate := -1
-var auto_reel := false  # для тестів
+var auto_reel := false  # for tests
 
 var _segments: Array[MeshInstance3D] = []
 var _marker: MeshInstance3D
@@ -28,7 +28,7 @@ var _marker: MeshInstance3D
 
 func _ready() -> void:
 	for i in SEGMENTS:
-		var seg := Psx.box(self, Vector3(0.05, 0.05, 1.0), Vector3.ZERO, Color(0.12, 0.12, 0.12))
+		var seg := Psx.box(self, Vector3(0.08, 0.08, 1.0), Vector3.ZERO, Color(0.12, 0.12, 0.12))
 		seg.top_level = true
 		seg.visible = false
 		_segments.append(seg)
@@ -58,9 +58,9 @@ func detach() -> void:
 
 func prompt() -> String:
 	if attached:
-		return "[Shift] намотувати  [F] відчепити"
+		return "[Shift] reel in  [F] unhook"
 	if candidate >= 0:
-		return "[F] Лебідка до опори (%d м)" % roundi(mount_position().distance_to(anchors[candidate]))
+		return "[F] Winch to anchor (%d m)" % roundi(mount_position().distance_to(anchors[candidate]))
 	return ""
 
 
@@ -76,7 +76,7 @@ func _physics_process(delta: float) -> void:
 	if reeling:
 		length = maxf(length - REEL_SPEED * delta, MIN_LENGTH)
 		vehicle.fuel = maxf(vehicle.fuel - 0.15 * delta, 0.0)
-	length = minf(length, d)  # храповик: слабина вибирається сама
+	length = minf(length, d)  # ratchet: slack is taken up by itself
 	var stretch := d - length
 	tension = 0.0
 	if stretch > 0.0 and d > 0.01:

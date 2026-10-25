@@ -1,6 +1,6 @@
 class_name WorldBuilder
 extends Node3D
-## Розставляє дерева, камені, будівлі й снігові віхи вздовж доріг.
+## Places trees, rocks, buildings and snow marker poles along the roads.
 
 const TRUNK := Color(0.28, 0.18, 0.12)
 const PINE := Color(0.12, 0.24, 0.18)
@@ -10,7 +10,7 @@ const WARM_LIGHT := Color(1.0, 0.78, 0.45)
 
 var terrain: Terrain
 var tree_points := PackedVector2Array()
-var anchor_points := PackedVector3Array()  # опори для лебідки
+var anchor_points := PackedVector3Array()  # winch anchors
 var _rng := RandomNumberGenerator.new()
 
 
@@ -91,7 +91,7 @@ func _scatter_rocks(locations: Dictionary) -> void:
 	_multimesh(sphere, Psx.mat(Color(0.38, 0.38, 0.4)), xforms, Vector3.ZERO)
 
 
-## Помаранчеві снігові віхи вздовж доріг - орієнтир у хуртовину.
+## Orange snow poles along the roads: something to steer by in a blizzard.
 func _road_poles() -> void:
 	var xforms: Array[Transform3D] = []
 	var offset := Terrain.ROAD_HALF_WIDTH + 1.2
@@ -198,14 +198,14 @@ func _build_depot(loc: Dictionary) -> void:
 	for side in [-2.6, 2.6]:
 		Psx.box(self, Vector3(0.2, 4.2, 0.2), pump + Vector3(side, 2.1, 0.0), Color(0.3, 0.3, 0.32))
 	_lamp(_ground(c.x + 3.0, c.y + 2.0))
-	_sign(_ground(c.x - 7.0, c.y - 8.0) + Vector3(0.0, 8.5, 0.0), "ДЕПО UAV RANNER")
+	_sign(_ground(c.x - 7.0, c.y - 8.0) + Vector3(0.0, 8.5, 0.0), "DEPOT")
 
 
 func _build_farm(loc: Dictionary) -> void:
 	var c: Vector2 = loc.pos
 	_house(_ground(c.x - 4.0, c.y + 4.0), PI, Vector3(6.0, 3.5, 5.0), Color(0.45, 0.6, 0.7), Color(0.85, 0.88, 0.95))
 	_house(_ground(c.x + 7.0, c.y + 3.0), PI, Vector3(7.0, 5.0, 9.0), Color(0.6, 0.15, 0.1), Color(0.85, 0.88, 0.95), false)
-	_sign(_ground(c.x, c.y + 4.0) + Vector3(0.0, 7.5, 0.0), "ХУТІР")
+	_sign(_ground(c.x, c.y + 4.0) + Vector3(0.0, 7.5, 0.0), "KHUTIR")
 
 
 func _build_lumber(loc: Dictionary) -> void:
@@ -217,7 +217,7 @@ func _build_lumber(loc: Dictionary) -> void:
 			var p := _ground(c.x + 7.0, c.y - 4.0) + Vector3(0.0, 0.35 + row * 0.62, -1.1 + i * 0.72 + row * 0.36)
 			var m := Psx.mesh(self, logs, p, Color(0.5, 0.33, 0.2))
 			m.rotation.z = PI * 0.5
-	_sign(_ground(c.x, c.y + 6.0) + Vector3(0.0, 7.5, 0.0), "ЛІСОПИЛКА")
+	_sign(_ground(c.x, c.y + 6.0) + Vector3(0.0, 7.5, 0.0), "SAWMILL")
 
 
 func _build_tower(loc: Dictionary) -> void:
@@ -237,7 +237,7 @@ func _build_tower(loc: Dictionary) -> void:
 	add_child(tower_body)
 	_house(_ground(c.x - 4.0, c.y + 3.0), PI, Vector3(3.5, 2.6, 3.0), Color(0.55, 0.58, 0.5), Color(0.85, 0.88, 0.95))
 
-	# Маленький дрон на майданчику - натяк на майбутні UAV-механіки.
+	# A small drone on its pad: a hint of the UAV mechanics to come.
 	var pad := _ground(c.x - 3.0, c.y - 4.0) + Vector3(0.0, 0.4, 0.0)
 	Psx.mesh(self, Psx.cylinder(1.6, 1.6, 0.1, 8), pad, Color(0.3, 0.3, 0.32))
 	Psx.box(self, Vector3(0.5, 0.18, 0.5), pad + Vector3(0.0, 0.25, 0.0), Color(0.2, 0.22, 0.25))
@@ -245,7 +245,7 @@ func _build_tower(loc: Dictionary) -> void:
 		var dir := Vector3(cos(a * PI * 0.5 + PI * 0.25), 0.0, sin(a * PI * 0.5 + PI * 0.25))
 		Psx.box(self, Vector3(0.06, 0.06, 0.06), pad + Vector3(0.0, 0.25, 0.0) + dir * 0.35, Color(0.2, 0.2, 0.2))
 		Psx.mesh(self, Psx.cylinder(0.22, 0.22, 0.02, 8), pad + Vector3(0.0, 0.32, 0.0) + dir * 0.5, Color(0.3, 0.9, 0.4), 1.0)
-	_sign(base + Vector3(0.0, 23.0, 0.0), "РАДІОВЕЖА")
+	_sign(base + Vector3(0.0, 23.0, 0.0), "RADIO TOWER")
 
 
 func _boundary_walls() -> void:

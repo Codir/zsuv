@@ -1,6 +1,6 @@
 class_name CameraRig
 extends Node3D
-## Камера за машиною. ПКМ + миша - обертання, коліщатко - відстань.
+## Chase camera. RMB + mouse orbits, the wheel sets the distance.
 
 var target: Vehicle
 var terrain: Terrain
@@ -55,7 +55,7 @@ func _process(delta: float) -> void:
 	var cam_pos := global_position + Basis.from_euler(Vector3(pitch, yaw, 0.0)) * Vector3(0.0, 0.0, distance)
 	if terrain:
 		cam_pos.y = maxf(cam_pos.y, terrain.get_height(cam_pos.x, cam_pos.z) + 1.2)
-	# Якщо між машиною і камерою пагорб чи дерево - підтягуємо камеру ближче.
+	# A hill or a tree between the truck and the camera: pull the camera in.
 	var q := PhysicsRayQueryParameters3D.create(global_position, cam_pos)
 	q.exclude = [target.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)

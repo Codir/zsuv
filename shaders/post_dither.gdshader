@@ -1,6 +1,6 @@
 shader_type canvas_item;
 
-// Обмежена палітра + дизеринг Байєра 4x4 поверх низької роздільності.
+// A limited palette + 4x4 Bayer dithering on top of the low resolution.
 uniform sampler2D screen_tex : hint_screen_texture, filter_nearest;
 uniform float color_levels = 18.0;
 uniform float dither_strength = 1.0;

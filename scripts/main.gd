@@ -1,5 +1,5 @@
 extends Node3D
-## Точка входу: збирає світ, машину, камеру, HUD і контракти.
+## Entry point: builds the world, the truck, the camera, the HUD and the contracts.
 
 const POST_SHADER := preload("res://shaders/post_dither.gdshader")
 
@@ -9,6 +9,9 @@ var camera_rig: CameraRig
 var contracts: Contracts
 var hud: Hud
 var map_screen: MapScreen
+var builder: WorldBuilder
+var locations: Dictionary
+var roads: Array[PackedVector2Array] = []
 var _snowfall: CPUParticles3D
 
 
@@ -16,13 +19,13 @@ func _ready() -> void:
 	_setup_input()
 	_setup_environment()
 
-	var locations := {
-		"depot": {"name": "Депо", "pos": Vector2(-95, -95), "radius": 14.0},
-		"farm": {"name": "Хутір", "pos": Vector2(-72, 92), "radius": 10.0},
-		"lumber": {"name": "Лісопилка", "pos": Vector2(75, 88), "radius": 10.0},
-		"tower": {"name": "Радіовежа", "pos": Vector2(25, 35), "radius": 8.0},
+	locations = {
+		"depot": {"name": "Depot", "pos": Vector2(-95, -95), "radius": 14.0},
+		"farm": {"name": "Khutir", "pos": Vector2(-72, 92), "radius": 10.0},
+		"lumber": {"name": "Sawmill", "pos": Vector2(75, 88), "radius": 10.0},
+		"tower": {"name": "Radio Tower", "pos": Vector2(25, 35), "radius": 8.0},
 	}
-	var roads: Array[PackedVector2Array] = [
+	roads = [
 		PackedVector2Array([Vector2(-95, -95), Vector2(-60, -102), Vector2(-25, -85), Vector2(8, -96), Vector2(45, -80),
 			Vector2(85, -55), Vector2(96, -15), Vector2(92, 25), Vector2(78, 55), Vector2(75, 88)]),
 		PackedVector2Array([Vector2(-95, -95), Vector2(-100, -55), Vector2(-88, -15), Vector2(-98, 25), Vector2(-85, 60), Vector2(-72, 92)]),
@@ -41,7 +44,7 @@ func _ready() -> void:
 	add_child(terrain)
 	terrain.generate(roads, flats, puddles)
 
-	var builder := WorldBuilder.new()
+	builder = WorldBuilder.new()
 	builder.name = "World"
 	add_child(builder)
 	builder.build(terrain, locations)
@@ -78,12 +81,25 @@ func _ready() -> void:
 	map_screen.setup(terrain, vehicle, contracts, locations, builder.tree_points)
 
 	if "--autodrive" in OS.get_cmdline_user_args():
-		vehicle.autodrive = true
-		vehicle.autodrive_path = roads[0].slice(1)
+		vehicle.drive_along(roads[0].slice(1))
 	if "--maptest" in OS.get_cmdline_user_args():
 		_toggle_map()
 	if "--winchtest" in OS.get_cmdline_user_args():
 		_winch_test()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--capture="):
+			_capture(arg.get_slice("=", 1))
+
+
+## Store-page capture (scripts/capture/director.gd): --capture=trailer --out=<dir>.
+func _capture(what: String) -> void:
+	var director := Director.new()
+	director.main = self
+	director.out_dir = OS.get_user_data_dir().path_join("capture").path_join(what)
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--out="):
+			director.out_dir = arg.get_slice("=", 1)
+	add_child(director)
 
 
 func _process(_delta: float) -> void:
@@ -111,7 +127,7 @@ func _toggle_map() -> void:
 
 
 func _winch_test() -> void:
-	# Ставимо машину носом у глибокий сніг на схилі, чіпляємось і тягнемо.
+	# Park the truck nose-first in deep snow on a slope, hook up and pull.
 	var p := Vector2(-40.0, -60.0)
 	vehicle.teleport(Vector3(p.x, terrain.get_height(p.x, p.y) + 1.5, p.y), 0.0)
 	vehicle.set_cargo(true)
@@ -150,7 +166,7 @@ func _setup_input() -> void:
 		InputMap.add_action(action)
 		for key in map[action]:
 			var ev := InputEventKey.new()
-			ev.physical_keycode = key  # фізичні клавіші - працює і з українською розкладкою
+			ev.physical_keycode = key  # physical keys: works with any keyboard layout
 			InputMap.action_add_event(action, ev)
 
 

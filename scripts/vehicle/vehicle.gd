@@ -1,8 +1,8 @@
 class_name Vehicle
 extends RigidBody3D
-## Вантажівка на raycast-підвісці.
-## Сніг і бруд дають опір кочення та зменшують зчеплення. Відкритий диференціал
-## віддає момент колесу з найгіршим зчепленням, блокування - кожному окремо.
+## A truck on raycast suspension.
+## Snow and mud add rolling resistance and cut grip. An open differential limits
+## both wheels of an axle to the worse grip of the two; the lock lets each use its own.
 
 const WHEEL_RADIUS := 0.5
 const REST_LENGTH := 0.5
@@ -20,6 +20,7 @@ const BASE_MASS := 2000.0
 const CARGO_MASS := 900.0
 const FUEL_CAPACITY := 80.0
 const SLIP_SPIN := 14.0
+const AUTODRIVE_LOOK := 10.0
 
 const BODY_COLOR := Color(0.9, 0.62, 0.16)
 const DARK := Color(0.12, 0.12, 0.13)
@@ -55,7 +56,9 @@ var has_cargo := false
 var fuel := FUEL_CAPACITY
 var autodrive := false
 var autodrive_path := PackedVector2Array()
+var autodrive_speed := 9.0
 var _autodrive_index := 0
+var _autodrive_from := Vector2.ZERO
 var forward_speed := 0.0
 
 var throttle_input := 0.0
@@ -153,8 +156,8 @@ func _physics_process(delta: float) -> void:
 			brake = 1.0
 		else:
 			drive = throttle_input
-	elif absf(forward_speed) < 0.8:
-		brake = 1.0  # утримання на схилі
+	elif absf(forward_speed) < 0.8 and not winch.reeling:
+		brake = 1.0  # hold on a slope, but let the winch pull
 	if fuel <= 0.0:
 		drive = 0.0
 
@@ -168,7 +171,7 @@ func _physics_process(delta: float) -> void:
 	_apply_anti_roll(wheels[0], wheels[1], basis.y)
 	_apply_anti_roll(wheels[2], wheels[3], basis.y)
 
-	# Розподіл моменту між колесами.
+	# Split the torque between the wheels.
 	var driven := 0
 	for w in wheels:
 		w.traction = w.load * w.surface.grip if w.contact else 0.0
@@ -219,20 +222,61 @@ func _read_input() -> void:
 	handbrake = Input.is_action_pressed("handbrake")
 
 
-## Тестовий автопілот: їде по точках autodrive_path (для запису кадрів/перевірок).
+## Starts the test autopilot along path (points on the XZ plane) at up to speed m/s.
+func drive_along(path: PackedVector2Array, speed := 9.0) -> void:
+	autodrive_path = path
+	autodrive_speed = speed
+	_autodrive_index = 0
+	_autodrive_from = Vector2(global_position.x, global_position.z)
+	autodrive = true
+
+
+## Test autopilot (frame captures, the trailer, tests): steers at a point a few metres ahead
+## on autodrive_path, slows down for bends and slippery ground, and stops at the last point.
 func _autodrive_input() -> void:
 	handbrake = false
+	var path := autodrive_path
 	var pos := Vector2(global_position.x, global_position.z)
-	while _autodrive_index < autodrive_path.size() and pos.distance_to(autodrive_path[_autodrive_index]) < 6.0:
+	# A waypoint is passed when we are at it, or beyond it along the leg that led to it.
+	while _autodrive_index < path.size():
+		var wp := path[_autodrive_index]
+		var from := path[_autodrive_index - 1] if _autodrive_index > 0 else _autodrive_from
+		var passed := pos.distance_to(wp) < 3.0
+		if _autodrive_index < path.size() - 1:
+			passed = passed or (pos - wp).dot(wp - from) > 0.0
+		if not passed:
+			break
 		_autodrive_index += 1
-	if _autodrive_index >= autodrive_path.size():
+	if _autodrive_index >= path.size():
 		throttle_input = 0.0
 		steer_input = 0.0
 		return
+
+	var wp := path[_autodrive_index]
+	var to_wp := pos.distance_to(wp)
+	var last := _autodrive_index == path.size() - 1
+	var target := wp
+	if to_wp < AUTODRIVE_LOOK and not last:
+		var next := path[_autodrive_index + 1]
+		target = wp + (next - wp).normalized() * minf(AUTODRIVE_LOOK - to_wp, wp.distance_to(next))
 	var fwd := Vector2(-global_transform.basis.z.x, -global_transform.basis.z.z)
-	var angle := fwd.angle_to(autodrive_path[_autodrive_index] - pos)
-	steer_input = clampf(-angle * 2.0, -1.0, 1.0)
-	throttle_input = 0.7 if absf(angle) < 0.5 else 0.4
+	var angle := fwd.angle_to(target - pos)
+	steer_input = clampf(-angle * 1.6, -1.0, 1.0)
+
+	var v := autodrive_speed
+	if not last:  # ease off before a sharp bend
+		var from := path[_autodrive_index - 1] if _autodrive_index > 0 else _autodrive_from
+		var bend := absf((wp - from).angle_to(path[_autodrive_index + 1] - wp))
+		var bend_v := lerpf(autodrive_speed, 4.0, clampf(bend / 1.2, 0.0, 1.0))
+		v = lerpf(bend_v, v, clampf((to_wp - 6.0) / 25.0, 0.0, 1.0))
+	else:
+		v = minf(v, to_wp * 0.4)
+	var grip := 0.0
+	for w in wheels:
+		grip += w.surface.grip
+	v *= clampf(grip / wheels.size(), 0.5, 1.0) * clampf(1.0 - absf(angle) * 0.8, 0.35, 1.0)
+	var err := v - forward_speed
+	throttle_input = -0.6 if err < -1.5 else clampf(err * 0.5, 0.0, 1.0)
 
 
 func _update_suspension(w: Wheel, space: PhysicsDirectSpaceState3D, up: Vector3, delta: float) -> void:

@@ -1,11 +1,12 @@
 class_name Psx
 extends RefCounted
-## Хелпери для PSX-матеріалів, простих мешів і піксельного шрифту.
+## Helpers for PSX materials, simple meshes and the pixel font.
 
 const LIT_SHADER := preload("res://shaders/psx_lit.gdshader")
+const FONT := preload("res://fonts/Inconsolata-Variable.ttf")
 
 static var _materials := {}
-static var _font: SystemFont
+static var _font: FontFile
 
 
 static func mat(color: Color, emission := 0.0, noise := 0.1) -> ShaderMaterial:
@@ -47,9 +48,12 @@ static func cylinder(top: float, bottom: float, height: float, segments := 8) ->
 	return cm
 
 
-static func font() -> SystemFont:
+## Inconsolata, bundled (fonts/OFL.txt): the Web build has no system fonts, and Linux and
+## macOS have no Consolas, so every build draws the same crisp, unsmoothed pixels.
+static func font() -> FontFile:
 	if _font == null:
-		_font = SystemFont.new()
-		_font.font_names = PackedStringArray(["Consolas", "Courier New", "monospace"])
+		_font = FONT
 		_font.antialiasing = TextServer.FONT_ANTIALIASING_NONE
+		_font.hinting = TextServer.HINTING_NORMAL
+		_font.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
 	return _font
