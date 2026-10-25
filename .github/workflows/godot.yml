@@ -25,7 +25,7 @@ jobs:
     container:
       image: barichello/godot-ci:4.7.2
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Import project
         run: godot --headless --path . --import
@@ -46,7 +46,7 @@ jobs:
 
       - name: Create the GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
 
@@ -83,7 +83,7 @@ jobs:
             channel: mac
             asset: macos.zip
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up export templates
         run: |
@@ -109,7 +109,7 @@ jobs:
       - name: Upload Web zip
         if: matrix.preset == 'Web' && !startsWith(github.ref, 'refs/tags/v')
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: KhutirRoad-web-zip
           path: builds/KhutirRoad-web.zip
@@ -146,6 +146,6 @@ jobs:
 
       - name: Attach to the GitHub Release
         if: ${{ !cancelled() && steps.release_file.outcome == 'success' }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: out/*
