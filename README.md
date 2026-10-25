@@ -10,7 +10,7 @@ that pack down into ruts under your wheels.
 Godot 4.7.2 (GL Compatibility, Jolt Physics), everything procedural; runs on Windows, Linux,
 macOS and in the browser.
 
-Trailer: [media/trailer/khutir-road-trailer.mp4](media/trailer/khutir-road-trailer.mp4) ·
+Trailer: https://youtu.be/HrOh6fI9AkE ([media/trailer/khutir-road-trailer.mp4](media/trailer/khutir-road-trailer.mp4)) ·
 itch.io: https://codirs.itch.io/psxrunner
 
 | | |

@@ -5,8 +5,8 @@
 **Short description / tagline:** A PSX winter delivery drive down the road to a lone khutir.
 
 **Cover:** `media/cover.png` (630x500) · **Screenshots:** `media/screenshots/*.png` (1920x1080) ·
-**Trailer:** upload `media/trailer/khutir-road-trailer.mp4` to YouTube and paste the link
-(itch.io takes a YouTube or Vimeo link) · **GIF for the description:** `media/khutir-road.gif`
+**Trailer:** https://youtu.be/HrOh6fI9AkE (the page's "Gameplay video or trailer" field;
+the file is `media/trailer/khutir-road-trailer.mp4`) · **GIF for the description:** `media/khutir-road.gif`
 
 **Classification:** Game · **Genre:** Simulation · **Tags:** driving, off-road, psx, low-poly,
 snow, delivery, truck, retro, atmospheric, physics
