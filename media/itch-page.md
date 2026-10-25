@@ -8,8 +8,10 @@
 **Trailer:** https://youtu.be/HrOh6fI9AkE (the page's "Gameplay video or trailer" field;
 the file is `media/trailer/khutir-road-trailer.mp4`) · **GIF for the description:** `media/khutir-road.gif`
 
-**Classification:** Game · **Genre:** Simulation · **Tags:** driving, off-road, psx, low-poly,
-snow, delivery, truck, retro, atmospheric, physics
+**Classification:** Game · **Release status:** In development · **Genre:** Simulation ·
+**Tags:** driving, off-road, psx, low-poly, snow, delivery, truck, retro, atmospheric, physics
+
+**AI generation disclosure:** Yes: Graphics, Text & Dialog, Code (no Sounds: the game has none)
 
 **Browser build:** kind of project "HTML", the `html5` channel upload marked "This file will be
 played in the browser", viewport 960 x 540 (the game scales to any size), "Fullscreen button" on.
