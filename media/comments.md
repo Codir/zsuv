@@ -18,15 +18,8 @@ The owner's account is **Codirs**: a post by Codirs is an answer.
 
 Changes players asked for. `[x]` is in the plan for the next release (the owner's pick), `[ ]` is
 not yet. When a picked one ships, its CHANGELOG line names who asked, and it leaves this list.
-All four picked on 2026-10-28.
+All four picked on 2026-10-28; the throttle fix (smokeyai) shipped in 0.1.1.
 
-- [x] **W let go outside the browser's frame stays held** (smokeyai, jam). Reproduced on 0.1.0 with
-  a headless script: after the focus-out notifications `accelerate` is still pressed and the fuel
-  goes 80 -> 77.5 L in 5 s with nothing held. Fix as in Crashcut 0.3.3: let go of every pressed
-  action on `NOTIFICATION_APPLICATION_FOCUS_OUT` / `NOTIFICATION_WM_WINDOW_FOCUS_OUT`, with a test.
-  An hour. **Done on `main`, not released yet** (2026-10-28): `test_losing_focus_lets_go_of_the_keys`;
-  in Chrome, the Web build in an iframe on localhost, W held, a click outside the frame, W let go
-  there: 0.1.0 kept burning fuel (68 -> 64 L in 8 s at 0 km/h), the fix holds it at 78 L.
 - [x] **The controls on screen, but not over it** (Philip, jam). The help card is 190x150 of the
   480x270 frame, top right, until F1 hides it. A one-line key hint instead, the full card on F1.
   An hour.
@@ -52,7 +45,9 @@ Newest first within each page. Status: **new** (not read into this file's lists 
   Crashcut, reproduced 2 of 2 here: hold W, let the focus leave the game (a click on the page
   outside the frame), release W there, and the game never sees the release: bogged at 0 km/h, the
   fuel 80 -> 74 L in about 9 s with nothing pressed. Suggests releasing the input actions on
-  `NOTIFICATION_APPLICATION_FOCUS_OUT`. **Open**.
+  `NOTIFICATION_APPLICATION_FOCUS_OUT`. **Open**: fixed in 0.1.1 as he suggested (checked in
+  Chrome: 0.1.0 burnt 68 -> 64 L in 8 s after the click outside, 0.1.1 holds the fuel); the
+  answer is ready.
 
 ### Playtest & Feedback Exchange Jam #9
 

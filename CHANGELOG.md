@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 — 2026-10-28 — Hands off
+
+- In the browser, W let go after a click outside the game's frame no longer leaves the truck on
+  the throttle, burning fuel with nothing pressed (smokeyai's report in AI Browser Game Jam 5):
+  the game lets go of every key when it loses the keyboard.
+- GitHub Actions run on Node 24.
+
 ## 0.1.0 — 2026-10-25 — Khutir Road
 
 - The game has a name, Khutir Road, and speaks English: HUD, prompts, help, map, signs and code
