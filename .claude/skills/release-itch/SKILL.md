@@ -31,27 +31,38 @@ their file to the release. Tag runs use no artifacts. Nothing else deploys.
    - Top entry not yet tagged → that is the version.
    - Top entry already tagged → add a new entry above it (patch bump unless the author named a
      version; today's date; bullets from `git log v<last>..HEAD --oneline`), then continue.
+   A change a player asked for (a `[x]` in `media/comments.md`) names who asked in its bullet
+   ("as Philip asked in the jam") and leaves the ledger's candidates.
 3. **Sync** `project.godot` `config/version="X.Y.Z"`.
-4. **Run the tests locally** (`GODOT=<path to Godot 4.7.2 console exe>` if it is not in `tools/godot/`):
+4. **Write the devlog**, every release: `media/devlog/X.Y.Z.md`, the post for the itch.io page's
+   Devlog tab. Same title as the CHANGELOG entry; a one-line lead, then a short bold-headed
+   paragraph per change a player notices, in the player's words (what they hear, see and feel, no
+   code names), credits for anything not made here; under the title, where it goes and which
+   `media/screenshots/` image to attach. `media/devlog/` holds every earlier post: match their
+   voice. The author posts it after the deploy.
+5. **Run the tests locally** (`GODOT=<path to Godot 4.7.2 console exe>` if it is not in `tools/godot/`):
    ```bash
    ./godot.sh check && ./godot.sh test
    ```
    Must end with `N/N tests passed`, exit 0. Any FAIL → stop, report, no tag.
-5. **Commit the version bump** (plus the CHANGELOG entry) with message `Release X.Y.Z`. Push `main`.
-6. **Tag and push the tag:**
+6. **Commit the version bump** (plus the CHANGELOG entry, the devlog and the ledger) with message
+   `Release X.Y.Z`. Push `main`.
+7. **Tag and push the tag:**
    ```bash
    git tag -a vX.Y.Z -m "X.Y.Z — <CHANGELOG title>"
    git push origin vX.Y.Z
    ```
-7. **Verify locally:** `git ls-remote --tags origin` shows `refs/tags/vX.Y.Z^{}` with the hash of
+8. **Verify locally:** `git ls-remote --tags origin` shows `refs/tags/vX.Y.Z^{}` with the hash of
    HEAD; `git status -sb` shows no ahead/behind.
-8. **Report** (Ukrainian, short): release commit hash, tag, local test result, and links:
+9. **Report** (Ukrainian, short): release commit hash, tag, local test result, the devlog's path, and links:
    - run: `https://github.com/Codir/UAVRanner/actions`
    - release: `https://github.com/Codir/UAVRanner/releases/tag/vX.Y.Z`
    - itch: `https://codirs.itch.io/psxrunner` — four channels `html5` / `windows` / `linux` / `mac` at X.Y.Z.
    - the release carries `KhutirRoad-vX.Y.Z-windows.exe`, `-linux.x86_64`, `-macos.zip`.
    First release only: the `html5` upload must be marked "This file will be played in the browser"
    on itch.io (viewport 960x540), and the page needs its cover, screenshots and text from `media/`.
+   Then offer the `player-comments` answer round for the comments this release answers
+   (`media/comments.md`).
 
 ## Rules
 
