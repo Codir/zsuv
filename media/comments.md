@@ -18,7 +18,8 @@ The owner's account is **Codirs**: a post by Codirs is an answer.
 
 Changes players asked for. `[x]` is in the plan for the next release (the owner's pick), `[ ]` is
 not yet. When a picked one ships, its CHANGELOG line names who asked, and it leaves this list.
-All four picked on 2026-10-28; the throttle fix (smokeyai) shipped in 0.1.1.
+All four picked on 2026-10-28; the throttle fix (smokeyai) shipped in 0.1.1. The owner's order:
+the hint and the sound in 0.1.2, then the maps and challenges in 0.2.0.
 
 - [x] **The controls on screen, but not over it** (Philip, jam). The help card is 190x150 of the
   480x270 frame, top right, until F1 hides it. A one-line key hint instead, the full card on F1.
@@ -26,7 +27,14 @@ All four picked on 2026-10-28; the throttle fix (smokeyai) shipped in 0.1.1.
 - [x] **Sound: the engine labouring through the gears, the tyres in the snow** (Philip, jam). The
   game has no sound at all. A CC0 diesel loop pitched by revs and load (low range lower and
   harder), a snow crunch and a mud squelch by wheel slip. A day.
-- [x] **More maps and challenges** (Philip, jam). A release of its own.
+- [x] **More maps and challenges** (Philip, jam). A release of its own, 0.2.0. The owner's plan
+  (2026-10-29): three valleys of the same size, each with its own locations, time of day and
+  weather, picked on a valley screen: today's khutir valley, a spring thaw in Polissia (mud, bog,
+  ice on a lake) and a Carpathian pass (switchbacks, deep snow, a ridge). The next valley opens
+  for money earned in the one before (about $1500), saved, in the browser too. New jobs beside
+  the plain delivery: against the clock with gold / silver / bronze and a record per job; fragile
+  cargo that hard knocks and landings break, paying less; heavy cargo that sits the truck low,
+  sinks it deeper and drinks more fuel; a stuck car to winch out of a ditch back onto the road.
 
 ## Comments
 
@@ -45,9 +53,9 @@ Newest first within each page. Status: **new** (not read into this file's lists 
   Crashcut, reproduced 2 of 2 here: hold W, let the focus leave the game (a click on the page
   outside the frame), release W there, and the game never sees the release: bogged at 0 km/h, the
   fuel 80 -> 74 L in about 9 s with nothing pressed. Suggests releasing the input actions on
-  `NOTIFICATION_APPLICATION_FOCUS_OUT`. **Open**: fixed in 0.1.1 as he suggested (checked in
-  Chrome: 0.1.0 burnt 68 -> 64 L in 8 s after the click outside, 0.1.1 holds the fuel); the
-  answer is ready.
+  `NOTIFICATION_APPLICATION_FOCUS_OUT`. **Answered**: fixed in 0.1.1 as he suggested (checked in
+  Chrome: 0.1.0 burnt 68 -> 64 L in 8 s after the click outside, 0.1.1 holds the fuel); Codirs
+  told him in #post-17740758 (2026-10-29).
 
 ### Playtest & Feedback Exchange Jam #9
 
