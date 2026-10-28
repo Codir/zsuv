@@ -2,6 +2,15 @@ class_name Hud
 extends CanvasLayer
 ## Dashboard, current objective, prompts and the controls help.
 
+## What the controls help shows; F1 steps through them in this order.
+enum Help { HINT, FULL, OFF }
+
+## The keys a drive needs, in a corner: the full card covered the view (Philip, in the jam).
+## E, F and T need no place here: the prompt at the bottom names them when they apply.
+const HINT_TEXT := """WASD drive  SPACE handbrake
+Q 4x4  X diff  G low  M map
+F1 all keys"""
+
 const HELP_TEXT := """W/S   throttle / brake, reverse
 A/D   steer       SPACE  handbrake
 Q     all-wheel drive 4x4
@@ -23,7 +32,9 @@ var _objective: Label
 var _prompt: Label
 var _message: Label
 var _help: Label
+var _hint: Label
 var _message_time := 0.0
+var help := Help.HINT
 
 
 func setup(v: Vehicle, c: Contracts) -> void:
@@ -39,11 +50,21 @@ func setup(v: Vehicle, c: Contracts) -> void:
 	_message.add_theme_color_override("font_color", Color(0.5, 1.0, 0.6))
 	_help = _make_label(Vector2(size.x - 196, 4), Vector2(190, 150), HORIZONTAL_ALIGNMENT_LEFT)
 	_help.text = HELP_TEXT
+	_hint = _make_label(Vector2(size.x - 146, 4), Vector2(140, 40), HORIZONTAL_ALIGNMENT_LEFT)
+	_hint.text = HINT_TEXT
+	set_help(help)
 	contracts.message.connect(show_message)
 
 
+## F1: the hint, then the full card, then nothing, then the hint again.
 func toggle_help() -> void:
-	_help.visible = not _help.visible
+	set_help(((help + 1) % Help.size()) as Help)
+
+
+func set_help(mode: Help) -> void:
+	help = mode
+	_hint.visible = mode == Help.HINT
+	_help.visible = mode == Help.FULL
 
 
 func show_message(text: String) -> void:

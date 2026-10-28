@@ -35,7 +35,7 @@ itch.io: https://codirs.itch.io/psxrunner
 | T | tow back to the depot ($100) |
 | R | flip upright |
 | Right mouse + drag, wheel | orbit and zoom the camera |
-| F1 | hide the help |
+| F1 | the help: a short hint in the corner, then every key, then none |
 
 Keys are physical, so they sit in the same place on any keyboard layout.
 
