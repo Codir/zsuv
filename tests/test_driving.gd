@@ -41,6 +41,27 @@ func test_no_drive_without_fuel(t: TCase) -> void:
 	v.fuel = Vehicle.FUEL_CAPACITY
 
 
+## A key let go after the game lost the keyboard (in a browser, a click outside the game's frame)
+## never reaches it: losing focus lets go of every key, or the truck keeps its throttle on.
+func test_losing_focus_lets_go_of_the_keys(t: TCase) -> void:
+	var v: Vehicle = t.world.vehicle
+	var farm: Vector2 = t.world.locations.farm.pos
+	await t.place(farm + Vector2(0.0, -4.0), 0.0)
+	var held: Array[StringName] = [&"accelerate", &"steer_left", &"handbrake"]
+	for what in [Node.NOTIFICATION_APPLICATION_FOCUS_OUT, Node.NOTIFICATION_WM_WINDOW_FOCUS_OUT]:
+		for action in held:
+			Input.action_press(action)
+		await t.ticks(2)
+		t.ok(v.throttle_input > 0.0, "W held does not open the throttle")
+		t.tree.root.propagate_notification(what)
+		await t.ticks(2)
+		for action in held:
+			t.ok(not Input.is_action_pressed(action), "%s still held after focus out (%d)" % [action, what])
+		t.eq(v.throttle_input, 0.0, "throttle after focus out (%d)" % what)
+	for action in held:
+		Input.action_release(action)
+
+
 ## Number of compacted track pixels.
 func _ruts(terrain: Terrain) -> int:
 	var n := 0

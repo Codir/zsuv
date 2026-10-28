@@ -109,6 +109,16 @@ func _process(_delta: float) -> void:
 	_snowfall.global_position = cam.global_position - cam.global_transform.basis.z * 10.0 + Vector3(0.0, 8.0, 0.0)
 
 
+## The window or the browser tab lost the keyboard: a key let go out there never reaches the game
+## (in a browser, after a click outside the game's frame), so every key is let go here, or the
+## truck would keep its throttle on with nothing pressed.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		for action in InputMap.get_actions():
+			if Input.is_action_pressed(action):
+				Input.action_release(action)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_help"):
 		hud.toggle_help()
