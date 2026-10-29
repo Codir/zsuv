@@ -60,6 +60,7 @@ var autodrive_speed := 9.0
 var _autodrive_index := 0
 var _autodrive_from := Vector2.ZERO
 var forward_speed := 0.0
+var drive := 0.0  # what the engine gives this tick, -1..1: the throttle, none on an empty tank
 
 var throttle_input := 0.0
 var steer_input := 0.0
@@ -67,6 +68,7 @@ var handbrake := false
 
 var wheels: Array[Wheel] = []
 var winch: Winch
+var audio: TruckAudio
 var _steer := 0.0
 var _reset_requested := false
 var _reset_transform := Transform3D()
@@ -86,6 +88,9 @@ func _ready() -> void:
 	add_child(winch)
 	for m in [Vector3(-0.95, 0.2, -1.55), Vector3(0.95, 0.2, -1.55), Vector3(-0.95, 0.2, 1.45), Vector3(0.95, 0.2, 1.45)]:
 		_add_wheel(m)
+	audio = TruckAudio.new()
+	audio.vehicle = self
+	add_child(audio)
 
 
 func set_cargo(on: bool) -> void:
@@ -142,7 +147,7 @@ func _physics_process(delta: float) -> void:
 	var steer_limit := lerpf(MAX_STEER, 0.25, clampf(absf(forward_speed) / MAX_SPEED_HIGH, 0.0, 1.0))
 	_steer = move_toward(_steer, steer_input * steer_limit, STEER_SPEED * delta)
 
-	var drive := 0.0
+	drive = 0.0
 	var brake := 0.0
 	if handbrake:
 		brake = 1.0

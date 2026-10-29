@@ -20,6 +20,7 @@ var _log := PackedStringArray()
 func _ready() -> void:
 	process_priority = 1000  # after the truck, the chase camera and the contracts
 	main.hud.set_help(Hud.Help.OFF)
+	AudioServer.set_bus_mute(0, true)  # frames come slower than real time: the sound would stutter
 	_run.call_deferred()
 
 

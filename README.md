@@ -51,14 +51,17 @@ GODOT=/path/to/Godot_v4.7.2-stable_win64_console.exe ./godot.sh run   # use a Go
 ## Tests
 
 ```bash
-./godot.sh check    # every script parses, every shader compiles
-./godot.sh test     # tests/test_*.gd against one shared world, at a fixed 60 fps
+./godot.sh check        # every script parses, every shader compiles
+./godot.sh test         # tests/test_*.gd against one shared world, at a fixed 60 fps
+./godot.sh soundcheck   # record the game's mix on a scripted drive into capture/soundcheck.wav
 ```
 
 The tests build the real valley and drive it: the truck stands on four wheels, drives the road,
 burns fuel and leaves ruts; snow and mud grip less and drag more until packed down; the delivery
-loop pays; the winch pulls; and no text in the game or on screen is left untranslated. Any error
-the engine logs during a test fails it, and a watchdog ends a run that hangs.
+loop pays; the winch pulls; the engine revs through its gears and labours when the truck can't
+move, the tyres crunch and squelch only when they roll; and no text in the game or on screen is
+left untranslated. Any error the engine logs during a test fails it, and a watchdog ends a run
+that hangs. The soundcheck prints how loud each part of its drive was.
 
 ## Export
 
@@ -96,7 +99,20 @@ The director runs the game at a fixed frame rate, so every capture is the same. 
 needs Python 3 with Pillow and NumPy, and Blender 4.5 for the MP4 (its FFmpeg is the encoder).
 Copy for the itch.io page is in [media/itch-page.md](media/itch-page.md).
 
+## Sound
+
+```bash
+python tools/make_sounds.py    # cut sounds/source/ (CC0 recordings, never shipped) into sounds/
+```
+
+Needs Python 3 with NumPy, SciPy and soundfile. [docs/sound.md](docs/sound.md) has the
+recordings, the cuts, how the truck plays them and how loud.
+
 ## Credits
 
 Font: [Inconsolata](https://github.com/googlefonts/Inconsolata) by Raph Levien and the Inconsolata
 Project Authors, SIL Open Font License 1.1 ([fonts/OFL.txt](fonts/OFL.txt)).
+
+Sounds: CC0 recordings by Joseph SARDIN of [BigSoundBank](https://bigsoundbank.com) (a diesel
+truck engine, footsteps in snow, an electric winch) and by rubberduck
+([25 CC0 mud sfx](https://opengameart.org/content/25-cc0-mud-sfx), OpenGameArt).

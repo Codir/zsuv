@@ -9,6 +9,7 @@
 #   ./godot.sh export [preset|all]   Web | Windows | Linux | macOS -> builds/
 #   ./godot.sh web                   export Web and serve it on http://localhost:8060
 #   ./godot.sh capture               record the trailer scenes into capture/trailer/ (tools/make_media.py)
+#   ./godot.sh soundcheck            record the game's mix on a scripted drive into capture/soundcheck.wav
 # Works with the bash 3.2 of a stock Mac as well as Git Bash on Windows.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -77,5 +78,7 @@ case "$cmd" in
   capture) fetch; imported; what="${1:-trailer}"; out="$(pwd -W 2>/dev/null || pwd)/capture/$what"; rm -rf "$out"; mkdir -p "$out"
     ${LIMIT:+$LIMIT 900} "$BIN" --path . --fixed-fps 30 --disable-vsync -- --capture="$what" --out="$out"
     cat "$out/done.txt";;
-  *) sed -n '2,12p' godot.sh; exit 1;;
+  soundcheck) fetch; imported; out="$(pwd -W 2>/dev/null || pwd)/capture/soundcheck.wav"
+    ${LIMIT:+$LIMIT 300} "$BIN" --headless --path . -s res://tests/soundcheck.gd -- --out="$out" 2>&1 | grep -v "^Godot Engine\|^autodrive pos";;
+  *) sed -n '2,13p' godot.sh; exit 1;;
 esac

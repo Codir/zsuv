@@ -87,4 +87,8 @@ func _run() -> void:
 				if t.failures.size() > 12:
 					print("       ... ", t.failures.size() - 12, " more")
 	print("%d/%d tests passed" % [passed, total])
+	# A sound still playing at exit leaks its stream: the world goes first, and the audio
+	# thread, which runs on the wall clock, gets a moment to let go of what it played.
+	world.free()
+	OS.delay_msec(100)
 	quit(0 if passed == total and total > 0 else 1)
