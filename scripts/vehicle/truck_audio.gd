@@ -57,8 +57,6 @@ func _ready() -> void:
 	mud = _player(_randomizer("mud", MUD_HITS), &"Sfx", Vector3.ZERO)
 	snow.max_polyphony = 4
 	mud.max_polyphony = 4
-	if vehicle.terrain and vehicle.terrain.valley.layer == "sand":
-		snow.pitch_scale = 0.7  # sand: the crunch of the snow, duller and lower
 	_start_engine()
 
 
@@ -151,7 +149,7 @@ func _tyres(delta: float) -> void:
 		mud_hits += 1
 
 
-## Snow and sand crunch under a tyre; a dry road's dust does not.
+## Snow crunches under a tyre; a dry road's dust does not.
 func _layer_heard() -> bool:
 	return vehicle.terrain == null or vehicle.terrain.valley.layer != "dust"
 

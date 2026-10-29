@@ -29,6 +29,15 @@ and the sound (Philip) in 0.1.2. Next: the maps and challenges in 0.2.0.
   at the depot: against the clock (gold / silver / bronze, records), fragile, heavy, and a stuck
   car to winch out of a ditch.
 
+- [ ] **Different trucks for different loads, and trailers, as in SnowRunner** (the owner,
+  2026-10-29, for 0.3.0 after 0.2.0 ships). Bought in a garage at the depot and kept for every
+  valley: a heavy 6x6 truck, a tractor unit with a semi-trailer for long loads (logs, pipes,
+  turbine blades), a tractor with a trailer for bog and deep snow, and a trailer for the pickup.
+  Heavy loads only go on the heavy ones; the board says what a job needs.
+- [ ] **Sivash, the salt lakes** (the owner, 2026-10-29): a valley of pink lakes and salt flats
+  that slide like ice, in place of the Oleshky Sands (a desert with pines did not look right, and
+  there are five valleys for now).
+
 ## Comments
 
 Newest first within each page. Status: **new** (not read into this file's lists yet), **open**

@@ -1,8 +1,8 @@
 class_name Valley
 extends RefCounted
-## One valley: its places and roads, the shape of its ground, what lies on it (snow or sand, mud,
-## ice), its trees, colours and price. Valley.all() lists the six in the order they open, easiest
-## first (docs/valleys.md); every one is 256 m square.
+## One valley: its places and roads, the shape of its ground, what lies on it (snow or dust, mud,
+## ice), its trees, colours and price. Valley.all() lists the five in the order they open, easiest
+## first, with more places to deliver to as they go (docs/valleys.md); every one is 256 m square.
 
 var id := ""
 var title := ""
@@ -13,10 +13,11 @@ var season := "winter"  # winter | spring | summer | autumn: snow or rain, the t
 var pay := 1.0  # jobs here pay this many times the khutir valley's
 var own: Weather  # its own sky; the start screen can switch it (Weather.Kind)
 
-# Ground: noise relief, then features: {type: hill | ridge | lake | gully | ditch | sea, ...}.
+# Ground: noise relief, then features: {type: hill | ridge | lake | gully | ditch, ...}.
 var seed := 1337
 var relief := 16.0
 var detail := 2.5
+var rim := 30.0  # how high the land climbs at the map's edge
 var features: Array[Dictionary] = []
 
 # Places: key -> {name, pos, radius, kind (what the world builder puts there), cargo, reward;
@@ -29,7 +30,7 @@ var ramp_max := INF  # the longest ramp off a place: on a mountain, a high place
 var spawn := Vector2.ZERO
 var spawn_yaw := 0.0
 
-# The soft layer the wheels pack into ruts: snow, sand, or the dust of a dry dirt road.
+# The soft layer the wheels pack into ruts: snow, or the dust of a dry dirt road.
 var layer := "snow"
 var layer_base := 0.55
 var layer_noise := 0.6
@@ -41,6 +42,7 @@ var layer_rolling := 0.45  # rolling resistance per metre of it
 var mud_from := 0.3  # mud where its noise climbs from this
 var puddles: Array[Dictionary] = []  # {pos, radius}: mud pools, bogs
 var mud_below := INF  # mud only below this height (the wet lows)
+var ditches: Array[Dictionary] = []  # {pos: the road beside it, at: its middle, dir}: a car can be stuck there
 
 # Looks.
 var earth := Color(0.2, 0.15, 0.11)
@@ -57,7 +59,7 @@ var poles := true  # orange snow poles along the roads
 
 
 static func all() -> Array[Valley]:
-	return [khutir(), steppe(), zakarpattia(), polissia(), oleshky(), carpathians()]
+	return [khutir(), steppe(), zakarpattia(), polissia(), carpathians()]
 
 
 static func find(valley_id: String) -> Valley:
@@ -95,7 +97,7 @@ static func khutir() -> Valley:
 	]
 	v.spawn = Vector2(-88.0, -93.0)
 	v.spawn_yaw = -PI * 0.5
-	return v
+	return v._with_ditches()
 
 
 ## A sunny autumn in the Slobozhanshchyna steppe: long dry dirt roads, gullies, a hill of turbines.
@@ -113,6 +115,7 @@ static func steppe() -> Valley:
 	v.seed = 2024
 	v.relief = 8.0
 	v.detail = 1.5
+	v.rim = 10.0
 	v.features = [
 		{"type": "gully", "points": PackedVector2Array([Vector2(-130, -20), Vector2(-62, 38), Vector2(-40, 62), Vector2(-12, 130)]),
 			"width": 30.0, "depth": 6.0},
@@ -128,12 +131,18 @@ static func steppe() -> Valley:
 			"cargo": "sheep feed", "reward": 250},
 		"wind": {"name": "Wind Farm", "pos": Vector2(60, 55), "radius": 10.0, "kind": "wind_farm",
 			"cargo": "turbine parts", "reward": 350},
+		"kurgan": {"name": "Kurgan Dig", "pos": Vector2(-72, 92), "radius": 10.0, "kind": "kurgan_dig",
+			"cargo": "the archaeologists' tents", "reward": 350},
 	}
 	v.roads = [
 		PackedVector2Array([Vector2(-90, -85), Vector2(-40, -92), Vector2(20, -88), Vector2(72, -78)]),
 		PackedVector2Array([Vector2(-90, -85), Vector2(-96, -30), Vector2(-72, 20), Vector2(-42, 60)]),
 		PackedVector2Array([Vector2(20, -88), Vector2(36, -30), Vector2(44, 15), Vector2(60, 55)]),
+		_bends(PackedVector2Array([Vector2(-42, 60), Vector2(-52, 84), Vector2(-72, 92)]), 9.0),
 	]
+	v.road_smooth = 14.0
+	v.road_grade = 0.22
+	v.ramp_max = 36.0
 	v.puddles = [{"pos": Vector2(-56, 34), "radius": 7.0}, {"pos": Vector2(28, -22), "radius": 6.0}]
 	v.layer = "dust"
 	v.layer_base = 0.16
@@ -151,7 +160,7 @@ static func steppe() -> Valley:
 	v.tree_count = 110
 	v.rock_count = 25
 	v.poles = false
-	return v._near_depot()
+	return v._near_depot()._with_ditches()
 
 
 ## A sunny spring in Zakarpattia after the rain: vineyards, a castle on its hill, snow on the peaks.
@@ -180,11 +189,14 @@ static func zakarpattia() -> Valley:
 			"cargo": "festival stage lights", "reward": 400},
 		"church": {"name": "Wooden Church", "pos": Vector2(-30, -72), "radius": 10.0, "kind": "wooden_church",
 			"cargo": "roof shingles", "reward": 350},
+		"spring": {"name": "Mineral Spring", "pos": Vector2(66, -34), "radius": 10.0, "kind": "pump_room",
+			"cargo": "bottle crates", "reward": 350},
 	}
 	v.roads = [
 		PackedVector2Array([Vector2(-80, 86), Vector2(-42, 80), Vector2(-12, 60), Vector2(10, 38)]),
 		_bends(PackedVector2Array([Vector2(10, 38), Vector2(40, 44), Vector2(48, 66), Vector2(62, 80), Vector2(76, 70)]), 9.0),
 		_bends(PackedVector2Array([Vector2(10, 38), Vector2(-4, 10), Vector2(-28, -14), Vector2(-8, -38), Vector2(-40, -52), Vector2(-30, -72)]), 9.0),
+		_bends(PackedVector2Array([Vector2(10, 38), Vector2(40, 22), Vector2(58, -8), Vector2(66, -34)]), 9.0),
 	]
 	v.road_smooth = 20.0
 	v.road_grade = 0.2
@@ -204,7 +216,7 @@ static func zakarpattia() -> Valley:
 	v.tree_count = 320
 	v.rock_count = 50
 	v.poles = false
-	return v._near_depot()
+	return v._near_depot()._with_ditches()
 
 
 ## A spring thaw in Polissia on a grey foggy morning: bogs, mud, and the road across a frozen lake.
@@ -233,11 +245,17 @@ static func polissia() -> Valley:
 			"cargo": "excavator parts", "reward": 350},
 		"village": {"name": "Village", "pos": Vector2(66, 82), "radius": 12.0, "kind": "village_church",
 			"cargo": "bread and post", "reward": 300},
+		"apiary": {"name": "Apiary", "pos": Vector2(-8, 46), "radius": 9.0, "kind": "apiary",
+			"cargo": "empty frames", "reward": 300},
+		"forestry": {"name": "Forestry", "pos": Vector2(4, -78), "radius": 10.0, "kind": "forestry",
+			"cargo": "saplings", "reward": 300},
 	}
 	v.roads = [
 		PackedVector2Array([Vector2(-85, -80), Vector2(-60, -40), Vector2(-34, -14), Vector2(15, -12), Vector2(46, -18), Vector2(62, -22)]),
 		PackedVector2Array([Vector2(-85, -80), Vector2(-92, -20), Vector2(-76, 25), Vector2(-56, 50), Vector2(-40, 72)]),
 		PackedVector2Array([Vector2(62, -22), Vector2(78, 14), Vector2(72, 50), Vector2(66, 82)]),
+		PackedVector2Array([Vector2(-76, 25), Vector2(-42, 36), Vector2(-8, 46)]),
+		PackedVector2Array([Vector2(-85, -80), Vector2(-52, -88), Vector2(-22, -84), Vector2(4, -78)]),
 	]
 	v.puddles = [{"pos": Vector2(-44, 54), "radius": 16.0}, {"pos": Vector2(-72, 40), "radius": 11.0},
 		{"pos": Vector2(-90, 0), "radius": 7.0}, {"pos": Vector2(76, 30), "radius": 7.0}]
@@ -256,56 +274,7 @@ static func polissia() -> Valley:
 	v.tree_count = 420
 	v.rock_count = 20
 	v.poles = false
-	return v._near_depot()
-
-
-## Summer in the Oleshky Sands: dunes, deep sand on every track, pines, a lighthouse on the sea.
-static func oleshky() -> Valley:
-	var v := Valley.new()
-	v.id = "oleshky"
-	v.title = "The Oleshky Sands"
-	v.blurb = "Summer sun. Deep sand on every track, dunes, the sea beyond."
-	v.price = 6000
-	v.stars = 4
-	v.season = "summer"
-	v.pay = 2.0
-	v.own = _sky("summer sun", Color(0.45, 0.68, 0.98), Color(0.86, 0.88, 0.92), 0.004,
-		Color(0.76, 0.75, 0.7), 0.75, Color(1.0, 0.97, 0.9), 1.3, Vector3(-62.0, 20.0, 0.0))
-	v.seed = 5059
-	v.relief = 6.0
-	v.detail = 3.5
-	v.features = [{"type": "sea", "side": "south", "coast": 96.0, "level": -2.0}]
-	v.locations = {
-		"depot": {"name": "Village", "pos": Vector2(-85, -85), "radius": 14.0, "kind": "village_edge"},
-		"forestry": {"name": "Forestry", "pos": Vector2(-60, 30), "radius": 10.0, "kind": "forestry",
-			"cargo": "saplings", "reward": 300},
-		"apiary": {"name": "Apiary", "pos": Vector2(30, -30), "radius": 9.0, "kind": "apiary",
-			"cargo": "empty frames", "reward": 300},
-		"lighthouse": {"name": "Lighthouse", "pos": Vector2(60, 86), "radius": 9.0, "kind": "lighthouse",
-			"cargo": "a lamp and batteries", "reward": 450},
-	}
-	v.roads = [
-		PackedVector2Array([Vector2(-85, -85), Vector2(-92, -40), Vector2(-76, 0), Vector2(-60, 30)]),
-		PackedVector2Array([Vector2(-85, -85), Vector2(-40, -80), Vector2(0, -56), Vector2(30, -30)]),
-		PackedVector2Array([Vector2(30, -30), Vector2(56, 0), Vector2(70, 44), Vector2(60, 86)]),
-	]
-	v.layer = "sand"
-	v.layer_base = 0.6
-	v.layer_noise = 0.5
-	v.layer_min = 0.3
-	v.layer_on_road = 0.4
-	v.layer_grip = 0.7
-	v.layer_rolling = 0.55
-	v.mud_from = 9.0
-	v.earth = Color(0.62, 0.54, 0.38)
-	v.gravel = Color(0.72, 0.63, 0.45)
-	v.layer_color = Color(0.88, 0.78, 0.54)
-	v.layer_packed = Color(0.7, 0.6, 0.42)
-	v.trees = "pine"
-	v.tree_count = 260
-	v.rock_count = 0
-	v.poles = false
-	return v._near_depot()
+	return v._near_depot()._with_ditches()
 
 
 ## A Carpathian pass at night in a blizzard: switchbacks through deep snow up to a ridge.
@@ -314,7 +283,7 @@ static func carpathians() -> Valley:
 	v.id = "carpathians"
 	v.title = "The Carpathian Pass"
 	v.blurb = "Night, a blizzard. Switchbacks through deep snow up to the ridge."
-	v.price = 8500
+	v.price = 6000
 	v.stars = 5
 	v.season = "winter"
 	v.pay = 2.4
@@ -328,7 +297,6 @@ static func carpathians() -> Valley:
 	v.relief = 10.0
 	v.features = [
 		{"type": "ridge", "from": Vector2(-140, -62), "to": Vector2(140, -72), "width": 72.0, "height": 22.0},
-		{"type": "hill", "pos": Vector2(-62, -10), "radius": 40.0, "height": 9.0},
 	]
 	v.locations = {
 		"depot": {"name": "Village", "pos": Vector2(-80, 90), "radius": 14.0, "kind": "yard"},
@@ -338,12 +306,21 @@ static func carpathians() -> Valley:
 			"cargo": "instrument batteries", "reward": 500},
 		"rescue": {"name": "Mountain Rescue", "pos": Vector2(70, 20), "radius": 10.0, "kind": "rescue_base",
 			"cargo": "ropes and stretchers", "reward": 400},
+		"logging": {"name": "Logging Camp", "pos": Vector2(-18, 22), "radius": 10.0, "kind": "sawmill",
+			"cargo": "chainsaw chains", "reward": 350},
+		"village": {"name": "Mountain Village", "pos": Vector2(-12, -28), "radius": 10.0, "kind": "wooden_church",
+			"cargo": "flour and candles", "reward": 450},
 	}
 	v.roads = [
 		_bends(PackedVector2Array([Vector2(-80, 90), Vector2(-40, 86), Vector2(-8, 70), Vector2(22, 60), Vector2(50, 46), Vector2(70, 20)]), 10.0),
 		_bends(PackedVector2Array([Vector2(-80, 90), Vector2(-92, 64), Vector2(-64, 48), Vector2(-90, 28), Vector2(-66, 10), Vector2(-62, -10)]), 8.0),
-		_bends(PackedVector2Array([Vector2(70, 20), Vector2(90, 2), Vector2(50, -12), Vector2(90, -30), Vector2(52, -46),
-			Vector2(46, -64)]), 9.0),
+		# Legs that climb across the slope, and each hairpin a U of 12 m at their ends: a V is
+		# tighter than the truck turns.
+		_bends(PackedVector2Array([Vector2(70, 20), Vector2(88, 2), Vector2(88, -10), Vector2(54, -22), Vector2(54, -34),
+			Vector2(86, -44), Vector2(86, -54), Vector2(52, -60), Vector2(46, -64)]), 6.0),
+		_bends(PackedVector2Array([Vector2(-62, -10), Vector2(-40, 6), Vector2(-18, 22)]), 9.0),
+		_bends(PackedVector2Array([Vector2(-18, 22), Vector2(8, 16), Vector2(8, 2), Vector2(-22, -6), Vector2(-22, -20),
+			Vector2(-12, -28)]), 7.0),  # U turns too
 	]
 	v.road_smooth = 24.0
 	v.road_grade = 0.2
@@ -356,7 +333,51 @@ static func carpathians() -> Valley:
 	v.trees = "spruce_snow"
 	v.tree_count = 450
 	v.rock_count = 80
-	return v._near_depot()
+	return v._near_depot()._with_ditches()
+
+
+## A ditch beside the middle of each road, on alternate sides, where a stuck car can wait: dug
+## as a ditch feature 7 m off the road's centre line, clear of the other roads and the places.
+func _with_ditches() -> Valley:
+	for r in roads.size():
+		var road := roads[r]
+		var total := 0.0
+		for i in road.size() - 1:
+			total += road[i].distance_to(road[i + 1])
+		for try in [0.5, 0.4, 0.6, 0.3, 0.7]:
+			var done := false
+			for side in [1.0 if r % 2 == 0 else -1.0, -1.0 if r % 2 == 0 else 1.0]:
+				var along: float = total * try
+				var i := 0
+				while i < road.size() - 2 and along > road[i].distance_to(road[i + 1]):
+					along -= road[i].distance_to(road[i + 1])
+					i += 1
+				var dir := (road[i + 1] - road[i]).normalized()
+				var p: Vector2 = road[i] + dir * along
+				var at: Vector2 = p + Vector2(-dir.y, dir.x) * side * 7.0
+				if _ditch_clear(at, r):
+					ditches.append({"pos": p, "at": at, "dir": dir})
+					features.append({"type": "ditch", "pos": at, "dir": dir, "length": 10.0, "width": 3.4, "depth": 1.4})
+					done = true
+					break
+			if done:
+				break
+	return self
+
+
+func _ditch_clear(at: Vector2, own: int) -> bool:
+	if absf(at.x) > 96.0 or absf(at.y) > 96.0:
+		return false
+	for loc in locations.values():
+		if at.distance_to(loc.pos) < float(loc.radius) + 14.0:
+			return false
+	for r in roads.size():
+		var road := roads[r]
+		for i in road.size() - 1:
+			var c := Geometry2D.get_closest_point_to_segment(at, road[i], road[i + 1])
+			if at.distance_to(c) < (6.5 if r == own else 11.0):
+				return false
+	return true
 
 
 ## The truck starts beside the depot, facing the first road out.

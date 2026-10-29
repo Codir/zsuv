@@ -8,7 +8,6 @@ const PAPER := Color(0.93, 0.88, 0.76)
 const INK := Color(0.22, 0.17, 0.12)
 const TRAIL_STEP := 3.0
 const TRAIL_MAX := 3000
-const SEA := Color(0.3, 0.48, 0.62)
 
 var terrain: Terrain
 var vehicle: Vehicle
@@ -120,8 +119,6 @@ func _on_draw() -> void:
 	for ft in v.features:
 		if ft.get("ice", false):
 			legend.append([v.ice_color, "ice"])
-		elif ft.type == "sea":
-			legend.append([SEA, "sea"])
 	legend.append([Color(0.2, 0.32, 0.22), "trees"])
 	for item in legend:
 		_canvas.draw_rect(Rect2(Vector2(x, y - 7), Vector2(8, 8)), item[0])
@@ -156,10 +153,6 @@ func _render_image(trees: PackedVector2Array) -> Image:
 	var h := terrain.heights
 	var stride := Terrain.N
 	var v := terrain.valley
-	var sea_level := INF
-	for ft in v.features:
-		if ft.type == "sea":
-			sea_level = ft.level
 	for z in n:
 		for x in n:
 			var i := z * stride + x
@@ -174,8 +167,6 @@ func _render_image(trees: PackedVector2Array) -> Image:
 			col = col.lerp(Color(0.42, 0.3, 0.2), c.g)
 			col = col.lerp(Color(0.38, 0.33, 0.28), c.b)
 			col = col.lerp(v.ice_color, 1.0 - c.a)
-			if hz < sea_level:
-				col = SEA
 			col = Color(col.r * shade, col.g * shade, col.b * shade)
 			# A contour line every 3 m.
 			var band := floori(hz / 3.0)

@@ -1,6 +1,6 @@
 class_name Terrain
 extends Node3D
-## Procedural 256x256 m terrain from a Valley: heights + a snow (or sand) and mud layer that the
+## Procedural 256x256 m terrain from a Valley: heights + a snow (or dust) and mud layer that the
 ## wheels deform, ice on frozen lakes.
 
 const SIZE := 256
@@ -19,14 +19,14 @@ const SNOW_SHADER := preload("res://shaders/terrain_snow.gdshader")
 class Surface:
 	var grip := 1.0
 	var rolling := 0.015
-	var snow := 0.0  # the soft layer's depth, m: snow, or sand (valley.layer)
+	var snow := 0.0  # the soft layer's depth, m: snow, or dust (valley.layer)
 	var mud := 0.0
 	var ice := 0.0
 
 
 var valley: Valley
 var heights := PackedFloat32Array()
-var snow_img: Image  # R - snow or sand, G - mud, B - road, A - 1 - ice
+var snow_img: Image  # R - snow or dust, G - mud, B - road, A - 1 - ice
 var track_img: Image  # compaction 0..1
 var track_tex: ImageTexture
 var roads: Array[PackedVector2Array] = []
@@ -37,6 +37,7 @@ var _base: FastNoiseLite
 var _profiles: Array[Dictionary] = []  # per road: {at: cumulative length at each point, h: heights every PROFILE_STEP}
 
 const PROFILE_STEP := 2.0
+const PIN := 14.0  # a smoothed road keeps to the ground this far from its ends: across the place there
 
 
 func generate(v: Valley) -> void:
@@ -52,7 +53,6 @@ func generate(v: Valley) -> void:
 		f.height = base_height(f.pos)
 	var lakes: Array[Dictionary] = []
 	var ditches: Array[Dictionary] = []
-	var sea := {}
 	for ft in v.features:
 		match ft.type:
 			"lake":
@@ -60,8 +60,6 @@ func generate(v: Valley) -> void:
 				lakes.append(ft)
 			"ditch":
 				ditches.append(ft)
-			"sea":
-				sea = ft
 
 	_profiles.clear()
 	for road in roads:
@@ -83,8 +81,8 @@ func generate(v: Valley) -> void:
 			if road_t > 0.0 and not road_last:
 				h = lerpf(h, _road_height(near), road_t)
 			# The rim at the map's edge goes on after the flats, so a long ramp off a location
-			# near the edge cannot drag the rim down with it. No rim on the sea's side.
-			var rim := _rim(p, sea) * 30.0 * (1.0 - road_t)
+			# near the edge cannot drag the rim down with it.
+			var rim := smoothstep(100.0, 126.0, maxf(absf(p.x), absf(p.y))) * v.rim * (1.0 - road_t)
 			var flat_t := 0.0
 			for f in flats:
 				var r: float = f.radius
@@ -95,6 +93,8 @@ func generate(v: Valley) -> void:
 				h = lerpf(h, f.height, 1.0 - smoothstep(r, r + ramp, d))
 				rim *= smoothstep(r, r + 10.0, d)
 				flat_t = maxf(flat_t, 1.0 - smoothstep(r - 3.0, r, d))
+			for f in flats:  # a place's own flat wins over another place's long ramp
+				h = lerpf(h, f.height, 1.0 - smoothstep(f.radius - 3.0, f.radius, p.distance_to(f.pos)))
 			if road_t > 0.0 and road_last:
 				h = lerpf(h, _road_height(near), road_t)
 				for f in flats:  # a place stays level where the road arrives in it
@@ -111,8 +111,6 @@ func generate(v: Valley) -> void:
 				var half: Vector2 = dt.dir * float(dt.length) * 0.5
 				var d := p.distance_to(Geometry2D.get_closest_point_to_segment(p, dt.pos - half, dt.pos + half))
 				h -= float(dt.depth) * _bump(d / float(dt.width))
-			if not sea.is_empty():
-				h = lerpf(h, float(sea.level) - 4.0, smoothstep(0.0, 30.0, _past_coast(p, sea)))
 			heights[z * N + x] = h
 
 			var on_road := 1.0 - smoothstep(ROAD_HALF_WIDTH - 0.5, ROAD_HALF_WIDTH + 1.0, rd)
@@ -160,6 +158,8 @@ func _ramped(p: Vector2) -> float:
 	for f in valley.locations.values():
 		var ramp := clampf(absf(b - f.height) * 5.0, 10.0, valley.ramp_max)
 		h = lerpf(h, f.height, 1.0 - smoothstep(f.radius, f.radius + ramp, p.distance_to(f.pos)))
+	for f in valley.locations.values():
+		h = lerpf(h, f.height, 1.0 - smoothstep(f.radius - 3.0, f.radius, p.distance_to(f.pos)))
 	return h
 
 
@@ -168,58 +168,46 @@ func _bump(t: float) -> float:
 	return 0.5 + 0.5 * cos(PI * clampf(t, 0.0, 1.0))
 
 
-func _rim(p: Vector2, sea: Dictionary) -> float:
-	var r := 0.0
-	for axis in 2:
-		for sgn in [-1.0, 1.0]:
-			if not sea.is_empty() and _side(sea.side) == Vector2(axis, sgn):
-				continue
-			r = maxf(r, smoothstep(100.0, 126.0, p[axis] * sgn))
-	return r
-
-
-## How far past the coast p is, towards the sea's side of the map (negative: inland).
-func _past_coast(p: Vector2, sea: Dictionary) -> float:
-	var s := _side(sea.side)
-	return p[int(s.x)] * s.y - float(sea.coast)
-
-
-## A side of the map as (axis, sign): x is 0, z is 1.
-func _side(side: String) -> Vector2:
-	match side:
-		"west":
-			return Vector2(0, -1)
-		"east":
-			return Vector2(0, 1)
-		"north":
-			return Vector2(1, -1)
-	return Vector2(1, 1)  # south
-
-
-## The nearest road to p: {x: distance, at: its nearest point, road: index, s: metres along it}.
+## The nearest road to p: {x: distance, at: its nearest point, road: index, s: metres along it},
+## and the nearest other road the same way under "other" (empty when there is no other).
 func _road_closest(p: Vector2) -> Dictionary:
-	var best := INF
-	var out := {"x": INF, "at": p, "road": -1, "s": 0.0}
+	var best := {"x": INF, "at": p, "road": -1, "s": 0.0}
+	var other := {}
 	for r in roads.size():
 		var road := roads[r]
 		var along := 0.0
+		var mine := {"x": INF}
 		for i in road.size() - 1:
 			var c := Geometry2D.get_closest_point_to_segment(p, road[i], road[i + 1])
-			var d := p.distance_squared_to(c)
-			if d < best:
-				best = d
-				out = {"x": 0.0, "at": c, "road": r, "s": along + road[i].distance_to(c)}
+			var d := p.distance_to(c)
+			if d < mine.x:
+				mine = {"x": d, "at": c, "road": r, "s": along + road[i].distance_to(c)}
 			along += road[i].distance_to(road[i + 1])
-	out.x = sqrt(best)
-	return out
+		if mine.x < best.x:
+			other = best if best.road >= 0 else {}
+			best = mine
+		elif other.is_empty() or mine.x < other.x:
+			other = mine
+	best.other = other
+	return best
 
 
 func road_distance(p: Vector2) -> float:
 	return _road_closest(p).x
 
 
-## How high the road is at its nearest point: the ground there, or its smoothed profile.
+## How high the road is at its nearest point: the ground there, or its smoothed profile. Where
+## two smoothed roads meet, their profiles blend over the 4 m where both are about as near, so
+## a junction has no step in it.
 func _road_height(near: Dictionary) -> float:
+	var h := _profile_height(near)
+	var other: Dictionary = near.other
+	if valley.road_smooth > 0.0 and not other.is_empty() and other.x - near.x < 4.0:
+		h = lerpf(h, _profile_height(other), 0.5 * (1.0 - smoothstep(0.0, 4.0, other.x - near.x)))
+	return h
+
+
+func _profile_height(near: Dictionary) -> float:
 	var prof: Dictionary = _profiles[near.road]
 	if prof.is_empty():
 		return base_height(near.at)
@@ -230,8 +218,8 @@ func _road_height(near: Dictionary) -> float:
 
 
 ## A road's heights every PROFILE_STEP metres, averaged over smooth metres either way so it cuts
-## through bumps and fills hollows, but the ground's own height at both ends, where it meets a
-## place or another road. Empty when smooth is 0: the road keeps to the ground.
+## through bumps and fills hollows, but the ground's own height for PIN metres at both ends, where
+## it crosses a place or meets another road. Empty when smooth is 0: the road keeps to the ground.
 func _profile(road: PackedVector2Array, smooth: float) -> Dictionary:
 	if smooth <= 0.0:
 		return {}
@@ -259,16 +247,23 @@ func _profile(road: PackedVector2Array, smooth: float) -> Dictionary:
 		for j in range(maxi(k - w, 0), mini(k + w, raw.size() - 1) + 1):
 			sum += raw[j]
 			n += 1
-		var end_t := smoothstep(0.0, smooth, minf(k * PROFILE_STEP, total - k * PROFILE_STEP))
+		var end_t := smoothstep(PIN, PIN + smooth, minf(k * PROFILE_STEP, total - k * PROFILE_STEP))
 		hs[k] = lerpf(raw[k], sum / n, end_t)
 	# No steeper than the valley's grade, both ways: the road cuts into the slope above it and
 	# is filled below, as a hairpin turning up a mountainside has to be.
+	# The PIN metres at each end are left as the ground has them, flats and ramps and all.
 	var rise := valley.road_grade * PROFILE_STEP
+	var pinned := ceili(PIN / PROFILE_STEP)
+	# A climb the grade cannot make between the pinned ends gets the grade it needs: a steeper
+	# road, never a step.
+	var span := hs.size() - 2 * pinned + 1
+	if rise > 0.0 and span > 0:
+		rise = maxf(rise, absf(hs[hs.size() - pinned] - hs[pinned - 1]) / span * 1.05)
 	if rise > 0.0:
-		for round in 4:  # the ends stay where the places are
-			for k in range(1, hs.size() - 1):
+		for round in 4:
+			for k in range(pinned, hs.size() - pinned):
 				hs[k] = clampf(hs[k], hs[k - 1] - rise, hs[k - 1] + rise)
-			for k in range(hs.size() - 2, 0, -1):
+			for k in range(hs.size() - pinned - 1, pinned - 1, -1):
 				hs[k] = clampf(hs[k], hs[k + 1] - rise, hs[k + 1] + rise)
 	return {"h": hs}
 

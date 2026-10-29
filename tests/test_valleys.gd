@@ -1,14 +1,14 @@
 extends RefCounted
-## The six valleys: each builds in its own world beside the shared one, has a depot and three
-## places to deliver to on flat ground at the ends of its roads, nothing standing on a road, and
-## every road drivable both ways in 4x4 by the test autopilot.
+## The five valleys: each builds in its own world beside the shared one, has a depot and more
+## places to deliver to than the one before (3, 4, 4, 5, 5) on flat ground at the ends of its
+## roads, nothing standing on a road, and every road drivable both ways in 4x4 by the test autopilot.
 
 const SCENE := preload("res://scenes/main.tscn")
 
 
-func test_six_valleys_in_order(t: TCase) -> void:
+func test_five_valleys_in_order(t: TCase) -> void:
 	var all := Valley.all()
-	t.eq(all.size(), 6, "valleys")
+	t.eq(all.size(), 5, "valleys")
 	t.eq(all[0].id, "khutir", "the first")
 	t.eq(all[0].price, 0, "the first is free")
 	var ids := {}
@@ -20,11 +20,14 @@ func test_six_valleys_in_order(t: TCase) -> void:
 		if i > 0:
 			t.ok(v.price > all[i - 1].price, "%s costs no more than %s" % [v.id, all[i - 1].id])
 			t.ok(v.pay > all[i - 1].pay, "%s pays no more than %s" % [v.id, all[i - 1].id])
-	t.eq([all[1].price, all[2].price, all[3].price, all[4].price, all[5].price], [1500, 2500, 4000, 6000, 8500], "prices")
+	t.eq([all[1].price, all[2].price, all[3].price, all[4].price], [1500, 2500, 4000, 6000], "prices")
 
 
 func test_every_valley_builds(t: TCase) -> void:
-	for v in Valley.all():
+	var places := [3, 4, 4, 5, 5]
+	var all := Valley.all()
+	for vi in all.size():
+		var v := all[vi]
 		var vp := _world(v, t)
 		var world = vp.get_child(0)
 		await t.ticks(90)
@@ -39,7 +42,7 @@ func test_every_valley_builds(t: TCase) -> void:
 			t.ok(loc.get("offroad", false) or terrain.road_distance(p) < 1.0, "%s: no road to %s" % [v.id, loc.name])
 			if loc.has("cargo"):
 				deliveries += 1
-		t.eq(deliveries, 3, "%s: places to deliver to" % v.id)
+		t.eq(deliveries, places[vi], "%s: places to deliver to" % v.id)
 		var contacts := 0
 		for w in world.vehicle.wheels:
 			contacts += 1 if w.contact else 0

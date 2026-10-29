@@ -25,9 +25,6 @@ func build(t: Terrain, v: Valley) -> void:
 		_road_poles()
 	for loc in v.locations.values():
 		call("_build_" + String(loc.kind), loc)
-	for ft in v.features:
-		if ft.type == "sea":
-			_sea(ft)
 	_boundary_walls()
 
 
@@ -36,6 +33,9 @@ func _is_clear(p: Vector2, locations: Dictionary, margin: float) -> bool:
 		return false
 	for l in locations.values():
 		if p.distance_to(l.pos) < float(l.radius) + margin + 4.0:
+			return false
+	for d in valley.ditches:  # room for a stuck car and the truck winching it
+		if p.distance_to(d.at) < 8.0 + margin:
 			return false
 	return true
 
@@ -420,12 +420,7 @@ func _boundary_walls() -> void:
 		var cs := CollisionShape3D.new()
 		cs.shape = shape
 		var s := -1.0 if i % 2 == 0 else 1.0
-		var at := 127.0
-		for ft in valley.features:
-			# On the sea's side the wall stands in the shallows, before the water gets deep.
-			if ft.type == "sea" and ft.side == ["west", "east", "north", "south"][i]:
-				at = float(ft.coast) + 12.0
-		cs.position = Vector3(s * at, 0.0, 0.0) if i < 2 else Vector3(0.0, 0.0, s * at)
+		cs.position = Vector3(s * 127.0, 0.0, 0.0) if i < 2 else Vector3(0.0, 0.0, s * 127.0)
 		body.add_child(cs)
 
 
@@ -459,13 +454,6 @@ func _build_station(loc: Dictionary) -> void:
 	_solid(engine + Vector3(0.0, 0.4, 0.0), _yaw(0.0), Vector3(4.0, 1.4, 1.6), Color(0.15, 0.42, 0.25))
 	_piece(Vector3(1.4, 1.2, 1.6), engine, Vector3(-1.3, 2.4, 0.0), _yaw(0.0), Color(0.15, 0.42, 0.25))
 	_piece(Vector3(0.3, 0.8, 0.3), engine, Vector3(1.4, 2.2, 0.0), _yaw(0.0), Color(0.12, 0.12, 0.12))
-
-
-func _build_village_edge(loc: Dictionary) -> void:
-	_build_yard(loc)
-	_frame(loc)
-	_house(_at(-17.0, 8.0), _yaw(PI * 0.5), Vector3(6.0, 3.2, 5.0), Color(0.92, 0.9, 0.84), Color(0.2, 0.36, 0.6))
-	_house(_at(-18.0, -9.0), _yaw(PI * 0.5), Vector3(5.0, 3.0, 4.5), Color(0.9, 0.86, 0.72), Color(0.62, 0.24, 0.16), false)
 
 
 func _build_elevator(loc: Dictionary) -> void:
@@ -650,25 +638,6 @@ func _build_apiary(loc: Dictionary) -> void:
 	_sign(_at(-7.0, 0.0) + Vector3(0.0, 5.5, 0.0), loc.name.to_upper())
 
 
-func _build_lighthouse(loc: Dictionary) -> void:
-	_frame(loc)
-	var base := _at(-9.0, 0.0)
-	_column(base, 1.8, 2.0, Color(0.95, 0.95, 0.92), 1.7)
-	for i in 6:
-		Psx.mesh(self, Psx.cylinder(1.7 - (i + 1) * 0.12, 1.7 - i * 0.12, 3.0, 10), base + Vector3(0.0, 3.5 + i * 3.0, 0.0),
-			Color(0.85, 0.15, 0.12) if i % 2 else Color(0.95, 0.95, 0.92))
-	Psx.mesh(self, Psx.cylinder(0.9, 0.9, 1.4, 8), base + Vector3(0.0, 21.7, 0.0), Color(1.0, 0.92, 0.6), 3.0)
-	Psx.mesh(self, Psx.cylinder(0.0, 1.2, 1.2, 8), base + Vector3(0.0, 23.0, 0.0), Color(0.2, 0.2, 0.22))
-	var l := OmniLight3D.new()
-	l.position = base + Vector3(0.0, 21.7, 0.0)
-	l.light_color = Color(1.0, 0.9, 0.6)
-	l.light_energy = 2.0
-	l.omni_range = 30.0
-	add_child(l)
-	_house(_at(-3.0, 10.0), _yaw(PI), Vector3(6.0, 3.0, 4.5), Color(0.95, 0.95, 0.92), Color(0.2, 0.36, 0.6))
-	_sign(base + Vector3(0.0, 26.0, 0.0), loc.name.to_upper())
-
-
 func _build_koliba(loc: Dictionary) -> void:
 	_frame(loc)
 	var c := _at(-9.0, 0.0)
@@ -728,7 +697,6 @@ func _build_rescue_base(loc: Dictionary) -> void:
 	_sign(_at(-8.0, 6.0) + Vector3(0.0, 8.0, 0.0), loc.name.to_upper())
 
 
-## The sea beyond a valley's coast, a little below its beach.
 func _sea(sea: Dictionary) -> void:
 	var water := PlaneMesh.new()
 	water.size = Vector2(400.0, 160.0)
@@ -746,3 +714,60 @@ func _sea(sea: Dictionary) -> void:
 		"west":
 			m.position = Vector3(-far, sea.level, 0.0)
 			m.rotation.y = PI * 0.5
+
+
+func _build_kurgan_dig(loc: Dictionary) -> void:
+	_frame(loc)
+	# The mound behind the dig, a trench cut into its face, strings over the squares.
+	var mound := _at(-15.0, 0.0)
+	var body := StaticBody3D.new()
+	body.position = mound
+	add_child(body)
+	var shape := CylinderShape3D.new()
+	shape.radius = 6.0
+	shape.height = 2.4
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	cs.position = Vector3(0.0, 1.0, 0.0)
+	body.add_child(cs)
+	var earth := SphereMesh.new()
+	earth.radius = 7.0
+	earth.height = 4.4
+	earth.radial_segments = 10
+	earth.rings = 4
+	Psx.mesh(body, earth, Vector3(0.0, 0.2, 0.0), Color(0.5, 0.42, 0.26))
+	_piece(Vector3(4.0, 0.9, 1.6), mound, Vector3(5.2, 0.8, 0.0), _yaw(0.0), Color(0.34, 0.26, 0.16))
+	for i in 4:
+		_piece(Vector3(0.04, 0.04, 6.0), mound, Vector3(1.5 + i * 1.3, 1.9, 0.0), _yaw(0.0), Color(0.95, 0.95, 0.9))
+	for t in [Vector2(-4.0, 9.0), Vector2(2.0, 10.5)]:
+		_roof(_at(t.x, t.y) + Vector3(0.0, 1.0, 0.0), _yaw(0.3), Vector3(2.6, 2.0, 3.2), Color(0.56, 0.54, 0.34))
+	var table := _at(-5.0, -8.0)
+	_piece(Vector3(2.4, 0.08, 1.0), table, Vector3(0.0, 1.0, 0.0), _yaw(0.0), Color(0.5, 0.36, 0.22))
+	for k in [-0.8, 0.0, 0.8]:
+		_piece(Vector3(0.6, 0.12, 0.6), table, Vector3(k, 1.1, 0.0), _yaw(0.0), Color(0.6, 0.6, 0.58))
+	_column(_at(-8.0, 7.0), 0.06, 4.0, Color(0.7, 0.7, 0.72))
+	_piece(Vector3(0.05, 0.8, 1.3), _at(-8.0, 7.0), Vector3(0.0, 3.5, 0.65), _yaw(0.0), Color(0.2, 0.4, 0.85), 0.4)
+	_sign(mound + Vector3(0.0, 6.0, 0.0), loc.name.to_upper())
+
+
+## A mineral spring's pump room: a round pavilion of columns under a copper dome.
+func _build_pump_room(loc: Dictionary) -> void:
+	_frame(loc)
+	var c := _at(-10.0, 0.0)
+	Psx.mesh(self, Psx.cylinder(3.4, 3.4, 0.4, 12), c + Vector3(0.0, 0.5, 0.0), Color(0.82, 0.8, 0.74))
+	for k in 6:
+		var a := k * TAU / 6.0
+		_column(c + Vector3(cos(a) * 2.8, 0.3, sin(a) * 2.8), 0.22, 3.4, Color(0.95, 0.94, 0.9))
+	Psx.mesh(self, Psx.cylinder(3.3, 3.3, 0.4, 12), c + Vector3(0.0, 3.9, 0.0), Color(0.9, 0.88, 0.82))
+	var dome := SphereMesh.new()
+	dome.radius = 3.0
+	dome.height = 3.0
+	dome.radial_segments = 10
+	dome.rings = 4
+	Psx.mesh(self, dome, c + Vector3(0.0, 4.4, 0.0), Color(0.36, 0.62, 0.54))
+	_column(c + Vector3(0.0, 0.3, 0.0), 0.7, 1.0, Color(0.6, 0.6, 0.6))
+	Psx.mesh(self, Psx.cylinder(0.6, 0.6, 0.08, 10), c + Vector3(0.0, 1.32, 0.0), Color(0.55, 0.8, 0.92), 0.6)
+	for side in [-1.0, 1.0]:
+		_piece(Vector3(2.0, 0.45, 0.5), _at(-3.0, 6.0 * side), Vector3(0.0, 0.55, 0.0), _yaw(0.0), Color(0.42, 0.28, 0.16))
+	_lamp(_at(-4.0, -3.0))
+	_sign(c + Vector3(0.0, 7.5, 0.0), loc.name.to_upper())

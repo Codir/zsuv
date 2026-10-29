@@ -1,8 +1,9 @@
 class_name StartScreen
 extends CanvasLayer
-## The valleys: a picture of each and a card of what awaits there (its sky, how hard, its ground,
-## where the deliveries go, what it costs), a sky to pick, and the way in. They open in order,
-## bought with the money earned. A/D or the arrows pick a valley, W/S its sky, Enter drives or buys.
+## The valleys: a picture of each and a card of what awaits there, in icons (its season and sky,
+## how hard, the depot and the places to deliver to; the mouse over one names it) and a line of
+## words, a sky to pick, and the way in. They open in order, bought with the money earned. A/D or
+## the arrows pick a valley, W/S its sky, Enter drives or buys.
 
 signal drive(valley: Valley, kind: Weather.Kind)
 
@@ -21,7 +22,12 @@ var _picture: TextureRect
 var _no_picture: Label
 var _title: Label
 var _sky: Label
+var _sky_icons: Control
+var _sky_end: Label
 var _card: Label
+var _weather: Control
+var _peaks: Control
+var _places: Control
 var _action: Label
 var _money: Label
 var _count: Label
@@ -51,12 +57,17 @@ func _ready() -> void:
 	_no_picture = _label(Vector2(12, 90), Vector2(PREVIEW.x, 14), "no picture yet", DIM, HORIZONTAL_ALIGNMENT_CENTER)
 	_title = _label(Vector2(264, 26), Vector2(170, 14), "", GOLD)
 	_count = _label(Vector2(430, 26), Vector2(38, 14), "", DIM, HORIZONTAL_ALIGNMENT_RIGHT)
-	_card = _label(Vector2(264, 42), Vector2(206, 124), "", INK)
+	_weather = _row(Vector2(264, 44))
+	_peaks = _row(Vector2(264, 62))
+	_card = _label(Vector2(264, 80), Vector2(206, 56), "", INK)
 	_card.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_places = _row(Vector2(264, 126))
 	var prev := _label(Vector2(12, 170), Vector2(50, 14), "< A", INK)
 	var next := _label(Vector2(202, 170), Vector2(50, 14), "D >", INK, HORIZONTAL_ALIGNMENT_RIGHT)
 	_label(Vector2(62, 170), Vector2(140, 14), "valley", DIM, HORIZONTAL_ALIGNMENT_CENTER)
-	_sky = _label(Vector2(12, 190), Vector2(456, 14), "", INK)
+	_sky = _label(Vector2(12, 190), Vector2(40, 14), "Sky  <", INK)
+	_sky_icons = _row(Vector2(52, 191))
+	_sky_end = _label(Vector2(100, 190), Vector2(300, 14), "", INK)
 	_action = _label(Vector2(12, 214), Vector2(456, 14), "", GOLD)
 	var hints := "A/D valley   W/S sky   ENTER drive / buy"
 	if not OS.has_feature("web"):
@@ -64,7 +75,8 @@ func _ready() -> void:
 	_label(Vector2(12, 252), Vector2(456, 14), hints, DIM)
 	_clickable(prev, func() -> void: step(-1))
 	_clickable(next, func() -> void: step(1))
-	_clickable(_sky, func() -> void: step_sky(1))
+	_clickable(_sky, func() -> void: step_sky(-1))
+	_clickable(_sky_end, func() -> void: step_sky(1))
 	_clickable(_action, go)
 	for i in valleys.size():
 		if valleys[i].id == profile.last:
@@ -138,15 +150,25 @@ func _refresh() -> void:
 	_title.text = v.title.to_upper()
 	_count.text = "%d/%d" % [index + 1, valleys.size()]
 	_money.text = "$ %d" % profile.money
-	var places := PackedStringArray()
+	_card.text = v.blurb
+	_icons(_weather, Icons.sky(v.own, v.season, true), [v.season, v.own.name])
+	var peaks: Array[Texture2D] = []
+	var hard: String = ["", "easy", "fair", "hard", "harder", "hardest"][v.stars]
+	for i in 5:
+		peaks.append(Icons.peak(i < v.stars))
+	_icons(_peaks, peaks, ["difficulty: " + hard])
+	var places: Array[Texture2D] = []
+	var names: Array[String] = []
 	for loc in v.locations.values():
-		if loc.has("cargo"):
-			places.append(loc.name)
-	_card.text = "%s\n%s  %s\n\n%s\n\nDeliveries: %s.\nJobs pay x%.1f." % [
-		v.own.name.capitalize(), "*".repeat(v.stars) + "-".repeat(5 - v.stars), ["", "easy", "fair", "hard", "harder", "hardest"][v.stars],
-		v.blurb, ", ".join(places), v.pay]
+		places.append(Icons.place(loc.kind))
+		names.append(loc.name if loc.has("cargo") else "%s: the depot" % loc.name)
+	_icons(_places, places, names)
 	var kind := profile.sky(v.id)
-	_sky.text = "Sky  < %s >   (W/S)" % ("its own: " + v.own.name if kind == Weather.Kind.OWN else Weather.label(kind, v))
+	var w := Weather.make(kind, v)
+	var sky_name := ("its own: " + v.own.name) if kind == Weather.Kind.OWN else Weather.label(kind, v)
+	_icons(_sky_icons, Icons.sky(w, v.season), [sky_name])
+	_sky_end.position.x = _sky_icons.position.x + _sky_icons.get_child_count() * 16.0 + 2.0
+	_sky_end.text = ">   (W/S)"
 	var why := profile.cannot_buy(v)
 	if why == "owned":
 		_action.text = "[ENTER] Drive"
@@ -170,6 +192,34 @@ func _label(pos: Vector2, size: Vector2, text: String, color: Color, align := HO
 	l.add_theme_color_override("font_color", color)
 	add_child(l)
 	return l
+
+
+## A row of icons under pos.
+func _row(pos: Vector2) -> Control:
+	var row := Control.new()
+	row.position = pos
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
+	var t := Theme.new()
+	t.default_font = Psx.font()
+	t.default_font_size = 10
+	row.theme = t
+	add_child(row)
+	return row
+
+
+## Fills row with textures 16 px apart; each names itself in tips (the last tip for the rest)
+## when the mouse is over it.
+func _icons(row: Control, textures: Array[Texture2D], tips: Array) -> void:
+	for c in row.get_children():
+		c.free()
+	for i in textures.size():
+		var r := TextureRect.new()
+		r.texture = textures[i]
+		r.position = Vector2(i * 16.0, 0.0)
+		r.size = Vector2(Icons.SIZE, Icons.SIZE)
+		r.tooltip_text = tips[mini(i, tips.size() - 1)]
+		r.mouse_filter = Control.MOUSE_FILTER_STOP
+		row.add_child(r)
 
 
 func _clickable(l: Label, call: Callable) -> void:
