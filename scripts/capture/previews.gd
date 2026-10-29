@@ -25,7 +25,7 @@ func _run() -> void:
 		world.hud.visible = false
 		world.contracts.set_process(false)
 		world.contracts._arrow.visible = false
-		for m in world.contracts._markers:
+		for m in world.contracts._markers.values():
 			m.visible = false
 		world.camera_rig.set_process(false)
 		var cam: Camera3D = world.camera_rig.camera

@@ -62,7 +62,7 @@ func _depart_depot() -> void:
 
 	# Loading up: the crate drops onto the bed, the depot's lit windows behind.
 	_cam = _orbit_truck(7.5, 3.2, deg_to_rad(-55.0), deg_to_rad(-15.0), 5.0)
-	await _record("02-depot", 5.0, {1.6: func() -> void: c.call("_interact")})
+	await _record("02-depot", 5.0, {1.6: func() -> void: c.take(c.offer("farm", "plain"))})
 
 	# Out of the depot and up the west road towards the khutir.
 	main.map_screen._trail.clear()
