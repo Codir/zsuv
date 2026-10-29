@@ -132,7 +132,7 @@ func _tyres(delta: float) -> void:
 		if s.mud > 0.1 and s.mud > s.snow:
 			mud_rate += tread / MUD_STEP
 			mud_depth = maxf(mud_depth, s.mud)
-		elif s.snow > 0.05:
+		elif s.snow > 0.05 and _layer_heard():
 			snow_rate += tread / SNOW_STEP
 			snow_depth = maxf(snow_depth, s.snow)
 	_snow_due += minf(snow_rate, MAX_HITS) * delta
@@ -147,6 +147,11 @@ func _tyres(delta: float) -> void:
 		mud.volume_db = MUD_DB + linear_to_db(clampf(mud_depth, 0.3, 1.0))
 		mud.play()
 		mud_hits += 1
+
+
+## Snow crunches under a tyre; a dry road's dust does not.
+func _layer_heard() -> bool:
+	return vehicle.terrain == null or vehicle.terrain.valley.layer != "dust"
 
 
 ## The motor runs while the winch reels in, lower as the cable takes the strain.

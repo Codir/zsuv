@@ -5,8 +5,8 @@ config_version=5
 
 config/name="Khutir Road"
 config/description="A PSX-style winter delivery drive down the road to a lone khutir."
-config/version="0.1.2"
-run/main_scene="res://scenes/main.tscn"
+config/version="0.2.0"
+run/main_scene="res://scenes/game.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 boot_splash/bg_color=Color(0.23, 0.267, 0.349, 1)

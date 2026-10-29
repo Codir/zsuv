@@ -18,17 +18,18 @@ The owner's account is **Codirs**: a post by Codirs is an answer.
 
 Changes players asked for. `[x]` is in the plan for the next release (the owner's pick), `[ ]` is
 not yet. When a picked one ships, its CHANGELOG line names who asked, and it leaves this list.
-All four picked on 2026-10-28; the throttle fix (smokeyai) shipped in 0.1.1, the controls hint
-and the sound (Philip) in 0.1.2. Next: the maps and challenges in 0.2.0.
+All four picked on 2026-10-28 have shipped: the throttle fix (smokeyai) in 0.1.1, the controls
+hint and the sound (Philip) in 0.1.2, the maps and challenges (Philip) in 0.2.0, five valleys and
+a job board (`docs/valleys.md`).
 
-- [x] **More maps and challenges** (Philip, jam). A release of its own, 0.2.0. The owner's plan
-  (2026-10-29): three valleys of the same size, each with its own locations, time of day and
-  weather, picked on a valley screen: today's khutir valley, a spring thaw in Polissia (mud, bog,
-  ice on a lake) and a Carpathian pass (switchbacks, deep snow, a ridge). The next valley opens
-  for money earned in the one before (about $1500), saved, in the browser too. New jobs beside
-  the plain delivery: against the clock with gold / silver / bronze and a record per job; fragile
-  cargo that hard knocks and landings break, paying less; heavy cargo that sits the truck low,
-  sinks it deeper and drinks more fuel; a stuck car to winch out of a ditch back onto the road.
+- [ ] **Different trucks for different loads, and trailers, as in SnowRunner** (the owner,
+  2026-10-29, for 0.3.0 after 0.2.0 ships). Bought in a garage at the depot and kept for every
+  valley: a heavy 6x6 truck, a tractor unit with a semi-trailer for long loads (logs, pipes,
+  turbine blades), a tractor with a trailer for bog and deep snow, and a trailer for the pickup.
+  Heavy loads only go on the heavy ones; the board says what a job needs.
+- [ ] **Sivash, the salt lakes** (the owner, 2026-10-29): a valley of pink lakes and salt flats
+  that slide like ice, in place of the Oleshky Sands (a desert with pines did not look right, and
+  there are five valleys for now).
 
 ## Comments
 

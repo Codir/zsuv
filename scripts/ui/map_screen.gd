@@ -100,21 +100,26 @@ func _on_draw() -> void:
 	# Right column: title, objective, legend.
 	var x := _origin.x + MAP_SIZE + 18.0
 	var y := _origin.y + 4.0
-	_text(font, Vector2(x, y + 8), "MAP - SNOW VALLEY", Color(1.0, 0.85, 0.3))
+	_text(font, Vector2(x, y + 8), terrain.valley.title.to_upper(), Color(1.0, 0.85, 0.3))
 	y += 26.0
 	for line in _wrap(contracts.objective_text(), 36):
 		_text(font, Vector2(x, y), line, Color(1.0, 1.0, 1.0))
 		y += 12.0
 	y += 12.0
+	var v := terrain.valley
 	var legend := [
 		[Color(0.95, 0.25, 0.15), "your truck"],
 		[Color(0.9, 0.7, 0.1), "target"],
 		[Color(0.95, 0.45, 0.1), "your trail"],
 		[Color(0.38, 0.33, 0.28), "road"],
 		[Color(0.42, 0.3, 0.2), "mud"],
-		[Color(0.85, 0.88, 0.94), "deep snow"],
-		[Color(0.2, 0.32, 0.22), "forest"],
 	]
+	if v.layer != "dust":
+		legend.append([v.layer_color, "deep " + v.layer])
+	for ft in v.features:
+		if ft.get("ice", false):
+			legend.append([v.ice_color, "ice"])
+	legend.append([Color(0.2, 0.32, 0.22), "trees"])
 	for item in legend:
 		_canvas.draw_rect(Rect2(Vector2(x, y - 7), Vector2(8, 8)), item[0])
 		_text(font, Vector2(x + 13, y), item[1], Color(0.9, 0.9, 0.85))
@@ -147,6 +152,7 @@ func _render_image(trees: PackedVector2Array) -> Image:
 	var img := Image.create_empty(n, n, false, Image.FORMAT_RGBA8)
 	var h := terrain.heights
 	var stride := Terrain.N
+	var v := terrain.valley
 	for z in n:
 		for x in n:
 			var i := z * stride + x
@@ -155,9 +161,12 @@ func _render_image(trees: PackedVector2Array) -> Image:
 			var se := h[mini(z + 1, n) * stride + mini(x + 1, n)]
 			var shade := clampf(0.85 + (nw - se) * 0.08, 0.55, 1.15)
 			var c := terrain.snow_img.get_pixel(x, z)
-			var col := Color(0.62, 0.55, 0.45).lerp(Color(0.85, 0.88, 0.94), clampf(c.r * 1.6, 0.0, 1.0))
+			var col := Color(0.62, 0.55, 0.45)
+			if v.layer != "dust":
+				col = col.lerp(v.layer_color, clampf(c.r * 1.6, 0.0, 1.0))
 			col = col.lerp(Color(0.42, 0.3, 0.2), c.g)
 			col = col.lerp(Color(0.38, 0.33, 0.28), c.b)
+			col = col.lerp(v.ice_color, 1.0 - c.a)
 			col = Color(col.r * shade, col.g * shade, col.b * shade)
 			# A contour line every 3 m.
 			var band := floori(hz / 3.0)

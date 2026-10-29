@@ -1,8 +1,12 @@
 extends Node3D
-## Entry point: builds the world, the truck, the camera, the HUD and the contracts.
+## A valley in play: builds its world, the truck, the camera, the HUD and the contracts.
 
 const POST_SHADER := preload("res://shaders/post_dither.gdshader")
 
+signal leave  # Esc: back to the valleys (scripts/game.gd)
+
+var valley: Valley  # set before the scene enters the tree; the khutir valley if not
+var profile: Profile  # the same; a profile in memory if not
 var terrain: Terrain
 var vehicle: Vehicle
 var camera_rig: CameraRig
@@ -12,45 +16,32 @@ var map_screen: MapScreen
 var builder: WorldBuilder
 var locations: Dictionary
 var roads: Array[PackedVector2Array] = []
-var _snowfall: CPUParticles3D
+var weather: Weather  # set before the scene enters the tree; the valley's own if not
+var _env: Environment
+var _sun: DirectionalLight3D
+var _fall: CPUParticles3D
 
 
 func _ready() -> void:
 	_setup_input()
-	_setup_environment()
-
-	locations = {
-		"depot": {"name": "Depot", "pos": Vector2(-95, -95), "radius": 14.0},
-		"farm": {"name": "Khutir", "pos": Vector2(-72, 92), "radius": 10.0},
-		"lumber": {"name": "Sawmill", "pos": Vector2(75, 88), "radius": 10.0},
-		"tower": {"name": "Radio Tower", "pos": Vector2(25, 35), "radius": 8.0},
-	}
-	roads = [
-		PackedVector2Array([Vector2(-95, -95), Vector2(-60, -102), Vector2(-25, -85), Vector2(8, -96), Vector2(45, -80),
-			Vector2(85, -55), Vector2(96, -15), Vector2(92, 25), Vector2(78, 55), Vector2(75, 88)]),
-		PackedVector2Array([Vector2(-95, -95), Vector2(-100, -55), Vector2(-88, -15), Vector2(-98, 25), Vector2(-85, 60), Vector2(-72, 92)]),
-	]
-	var puddles: Array[Dictionary] = [
-		{"pos": Vector2(8, -96), "radius": 7.0},
-		{"pos": Vector2(-88, -15), "radius": 6.0},
-		{"pos": Vector2(92, 25), "radius": 6.0},
-	]
-	var flats: Array[Dictionary] = []
-	for l in locations.values():
-		flats.append(l)
+	if valley == null:
+		valley = Valley.khutir()
+	apply_weather(weather if weather else valley.own)
+	locations = valley.locations
+	roads = valley.roads
 
 	terrain = Terrain.new()
 	terrain.name = "Terrain"
 	add_child(terrain)
-	terrain.generate(roads, flats, puddles)
+	terrain.generate(valley)
 
 	builder = WorldBuilder.new()
 	builder.name = "World"
 	add_child(builder)
-	builder.build(terrain, locations)
+	builder.build(terrain, valley)
 
-	var spawn := Vector3(-88.0, terrain.get_height(-88.0, -93.0) + 1.5, -93.0)
-	var spawn_yaw := -PI * 0.5
+	var spawn := Vector3(valley.spawn.x, terrain.get_height(valley.spawn.x, valley.spawn.y) + 1.5, valley.spawn.y)
+	var spawn_yaw := valley.spawn_yaw
 	vehicle = Vehicle.new()
 	vehicle.name = "Truck"
 	vehicle.terrain = terrain
@@ -69,9 +60,10 @@ func _ready() -> void:
 	contracts.spawn_pos = spawn
 	contracts.spawn_yaw = spawn_yaw
 	add_child(contracts)
+	if profile:
+		contracts.profile = profile
 	contracts.setup(vehicle, terrain, locations)
 
-	_setup_snowfall()
 	_setup_post()
 	hud = Hud.new()
 	add_child(hud)
@@ -106,7 +98,8 @@ func _process(_delta: float) -> void:
 	if vehicle.autodrive and Engine.get_process_frames() % 30 == 0:
 		print("autodrive pos %s  speed %.1f" % [vehicle.global_position.snapped(Vector3.ONE * 0.1), vehicle.forward_speed])
 	var cam := camera_rig.camera
-	_snowfall.global_position = cam.global_position - cam.global_transform.basis.z * 10.0 + Vector3(0.0, 8.0, 0.0)
+	if _fall:
+		_fall.global_position = cam.global_position - cam.global_transform.basis.z * 10.0 + Vector3(0.0, 8.0, 0.0)
 
 
 ## The window or the browser tab lost the keyboard: a key let go out there never reaches the game
@@ -127,8 +120,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and (event as InputEventKey).physical_keycode == KEY_ESCAPE:
 		if map_screen.visible:
 			_toggle_map()
-		else:
+		elif leave.get_connections().is_empty():
 			get_tree().quit()
+		else:
+			leave.emit()
 
 
 func _toggle_map() -> void:
@@ -180,49 +175,70 @@ func _setup_input() -> void:
 			InputMap.action_add_event(action, ev)
 
 
-func _setup_environment() -> void:
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.3, 0.34, 0.43)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.55, 0.6, 0.75)
-	env.ambient_light_energy = 0.55
-	env.fog_enabled = true
-	env.fog_light_color = Color(0.38, 0.42, 0.5)
-	env.fog_density = 0.022
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
+## The sky, the light, the fog and what falls from it; called again to change the weather.
+func apply_weather(w: Weather) -> void:
+	weather = w
+	if _env == null:
+		_env = Environment.new()
+		_env.background_mode = Environment.BG_COLOR
+		_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		_env.fog_enabled = true
+		var we := WorldEnvironment.new()
+		we.environment = _env
+		add_child(we)
+		_sun = DirectionalLight3D.new()
+		add_child(_sun)
+	_env.background_color = w.sky
+	_env.ambient_light_color = w.ambient
+	_env.ambient_light_energy = w.ambient_energy
+	_env.fog_light_color = w.fog
+	_env.fog_density = w.fog_density
+	_sun.rotation_degrees = w.sun_angle
+	_sun.light_color = w.sun
+	_sun.light_energy = w.sun_energy
+	_setup_fall(w)
 
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-35.0, 40.0, 0.0)
-	sun.light_color = Color(0.85, 0.88, 1.0)
-	sun.light_energy = 0.55
-	add_child(sun)
 
-
-func _setup_snowfall() -> void:
-	_snowfall = CPUParticles3D.new()
-	_snowfall.amount = 900
-	_snowfall.lifetime = 5.0
-	_snowfall.preprocess = 5.0
-	_snowfall.local_coords = false
-	_snowfall.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	_snowfall.emission_box_extents = Vector3(30.0, 2.0, 30.0)
-	_snowfall.direction = Vector3(0.2, -1.0, 0.0)
-	_snowfall.spread = 10.0
-	_snowfall.initial_velocity_min = 1.5
-	_snowfall.initial_velocity_max = 2.5
-	_snowfall.gravity = Vector3(0.3, -0.6, 0.0)
+## Snow drifting down around the camera, or rain streaking through, or nothing.
+func _setup_fall(w: Weather) -> void:
+	if _fall:
+		_fall.queue_free()
+		_fall = null
+	if w.fall == "none":
+		return
+	_fall = CPUParticles3D.new()
+	_fall.amount = w.fall_amount
+	_fall.local_coords = false
+	_fall.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	_fall.emission_box_extents = Vector3(30.0, 2.0, 30.0)
+	_fall.spread = 10.0
 	var quad := QuadMesh.new()
-	quad.size = Vector2(0.07, 0.07)
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	m.albedo_color = Color(0.95, 0.97, 1.0)
+	if w.fall == "rain":
+		_fall.lifetime = 1.4
+		_fall.preprocess = 1.4
+		_fall.direction = Vector3(w.wind * 0.3, -1.0, 0.0)
+		_fall.initial_velocity_min = 12.0
+		_fall.initial_velocity_max = 15.0
+		_fall.gravity = Vector3(w.wind, -9.0, 0.0)
+		quad.size = Vector2(0.02, 0.6)
+		m.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_color = Color(0.72, 0.78, 0.88, 0.55)
+	else:
+		_fall.lifetime = 5.0
+		_fall.preprocess = 5.0
+		_fall.direction = Vector3(w.wind, -1.0, 0.0)
+		_fall.initial_velocity_min = 1.5
+		_fall.initial_velocity_max = 2.5
+		_fall.gravity = Vector3(w.wind * 1.5, -0.6, 0.0)
+		quad.size = Vector2(0.07, 0.07)
+		m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		m.albedo_color = Color(0.95, 0.97, 1.0)
 	quad.material = m
-	_snowfall.mesh = quad
-	add_child(_snowfall)
+	_fall.mesh = quad
+	add_child(_fall)
 
 
 func _setup_post() -> void:

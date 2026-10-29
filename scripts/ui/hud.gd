@@ -22,7 +22,7 @@ F     winch, Shift - reel in
 M     map
 T     tow back to depot
 RMB   camera, wheel - zoom
-F1    hide help"""
+F1    hide help  ESC valleys"""
 
 var vehicle: Vehicle
 var contracts: Contracts
@@ -33,6 +33,8 @@ var _prompt: Label
 var _message: Label
 var _help: Label
 var _hint: Label
+var _board: Label
+var _board_bg: ColorRect
 var _message_time := 0.0
 var help := Help.HINT
 
@@ -47,6 +49,15 @@ func setup(v: Vehicle, c: Contracts) -> void:
 	_prompt = _make_label(Vector2(0, size.y - 18), Vector2(size.x, 12), HORIZONTAL_ALIGNMENT_CENTER)
 	_prompt.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
 	_message = _make_label(Vector2(0, 60), Vector2(size.x, 12), HORIZONTAL_ALIGNMENT_CENTER)
+	_board_bg = ColorRect.new()
+	_board_bg.color = Color(0.0, 0.0, 0.0, 0.72)
+	_board_bg.position = Vector2(20, 78)
+	_board_bg.size = Vector2(size.x - 40, 74)
+	_board_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_board_bg.visible = false
+	add_child(_board_bg)
+	_board = _make_label(Vector2(28, 82), Vector2(size.x - 56, 66), HORIZONTAL_ALIGNMENT_LEFT)
+	_board.visible = false
 	_message.add_theme_color_override("font_color", Color(0.5, 1.0, 0.6))
 	_help = _make_label(Vector2(size.x - 196, 4), Vector2(190, 150), HORIZONTAL_ALIGNMENT_LEFT)
 	_help.text = HELP_TEXT
@@ -85,12 +96,16 @@ func _process(delta: float) -> void:
 		"░".repeat(10 - fuel_bars),
 		roundi(vehicle.fuel),
 		contracts.money,
-		"   CARGO" if vehicle.has_cargo else "",
+		("   " + contracts.cargo_text()) if contracts.cargo_text() != "" else "",
 	]
 	if vehicle.winch.attached:
 		_status.text += "\nWINCH %4.1f m  pull %2d kN%s" % [
 			vehicle.winch.length, roundi(vehicle.winch.tension / 1000.0), "  <<" if vehicle.winch.reeling else ""]
 	_objective.text = contracts.objective_text()
+	_board.visible = contracts.board_open
+	_board_bg.visible = contracts.board_open
+	if _board.visible:
+		_board.text = contracts.board_text()
 	_prompt.text = contracts.prompt if contracts.prompt != "" else vehicle.winch.prompt()
 	_message_time -= delta
 	_message.visible = _message_time > 0.0

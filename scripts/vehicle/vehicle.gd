@@ -18,6 +18,7 @@ const MAX_STEER := 0.6
 const STEER_SPEED := 2.2
 const BASE_MASS := 2000.0
 const CARGO_MASS := 900.0
+const HEAVY_MASS := 1800.0
 const FUEL_CAPACITY := 80.0
 const SLIP_SPIN := 14.0
 const AUTODRIVE_LOOK := 10.0
@@ -53,6 +54,7 @@ var awd := false
 var diff_lock := false
 var low_range := false
 var has_cargo := false
+var cargo := ""  # what is on the bed (a job's kind: plain, timed, fragile, heavy); "" nothing
 var fuel := FUEL_CAPACITY
 var autodrive := false
 var autodrive_path := PackedVector2Array()
@@ -71,8 +73,9 @@ var winch: Winch
 var audio: TruckAudio
 var _steer := 0.0
 var _reset_requested := false
+var teleports := 0  # how many times teleport() has moved the truck: no jolt, a jump
 var _reset_transform := Transform3D()
-var _cargo_node: Node3D
+var _loads := {}  # look -> its node on the bed: crates, fragile, heavy
 var _lights: Array[SpotLight3D] = []
 
 
@@ -93,10 +96,13 @@ func _ready() -> void:
 	add_child(audio)
 
 
-func set_cargo(on: bool) -> void:
+func set_cargo(on: bool, kind := "plain") -> void:
 	has_cargo = on
-	mass = BASE_MASS + (CARGO_MASS if on else 0.0)
-	_cargo_node.visible = on
+	cargo = kind if on else ""
+	mass = BASE_MASS + ((HEAVY_MASS if kind == "heavy" else CARGO_MASS) if on else 0.0)
+	var look: String = kind if kind in _loads else "crates"
+	for k in _loads:
+		_loads[k].visible = on and k == look
 
 
 func set_lights(on: bool) -> void:
@@ -135,6 +141,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if _reset_requested:
 		_reset_requested = false
+		teleports += 1
 		state.transform = _reset_transform
 		state.linear_velocity = Vector3.ZERO
 		state.angular_velocity = Vector3.ZERO
@@ -161,8 +168,8 @@ func _physics_process(delta: float) -> void:
 			brake = 1.0
 		else:
 			drive = throttle_input
-	elif absf(forward_speed) < 0.8 and not winch.reeling:
-		brake = 1.0  # hold on a slope, but let the winch pull
+	elif absf(forward_speed) < 0.8 and not (winch.reeling and winch.anchor_body == null):
+		brake = 1.0  # hold on a slope; let the winch pull the truck, but hold it while it pulls a car
 	if fuel <= 0.0:
 		drive = 0.0
 
@@ -198,7 +205,7 @@ func _physics_process(delta: float) -> void:
 	for w in wheels:
 		_apply_tire(w, brake, delta)
 
-	var burn := 0.04 + absf(drive) * 0.45 * (1.2 if awd else 1.0) * (1.15 if low_range else 1.0)
+	var burn := 0.04 + absf(drive) * 0.45 * (1.2 if awd else 1.0) * (1.15 if low_range else 1.0) * (1.5 if cargo == "heavy" else 1.0)
 	fuel = maxf(fuel - burn * delta, 0.0)
 
 
@@ -215,7 +222,12 @@ func _process(delta: float) -> void:
 		if spraying:
 			w.spray.global_position = w.point + up * 0.15
 			w.spray.direction = Vector3(0.0, 1.0, 1.2 * signf(w.request))
-			w.spray.color = Color(0.3, 0.22, 0.15) if w.surface.mud > w.surface.snow else Color(0.9, 0.93, 1.0)
+			w.spray.color = Color(0.3, 0.22, 0.15) if w.surface.mud > w.surface.snow else _layer_spray()
+
+
+## What flies off a spinning wheel that is not mud: snow, sand or dust, as the valley has it.
+func _layer_spray() -> Color:
+	return terrain.valley.layer_color.lightened(0.15) if terrain else Color(0.9, 0.93, 1.0)
 
 
 func _read_input() -> void:
@@ -269,9 +281,17 @@ func _autodrive_input() -> void:
 	steer_input = clampf(-angle * 1.6, -1.0, 1.0)
 
 	var v := autodrive_speed
-	if not last:  # ease off before a sharp bend
+	if not last:  # ease off before a sharp bend: how far the road turns over the next 15 m
 		var from := path[_autodrive_index - 1] if _autodrive_index > 0 else _autodrive_from
-		var bend := absf((wp - from).angle_to(path[_autodrive_index + 1] - wp))
+		var ahead := wp
+		var left := 15.0
+		for i in range(_autodrive_index + 1, path.size()):
+			var step := path[i - 1].distance_to(path[i])
+			ahead = path[i - 1].lerp(path[i], minf(left / maxf(step, 0.001), 1.0))
+			left -= step
+			if left <= 0.0:
+				break
+		var bend := absf((wp - from).angle_to(ahead - wp))
 		var bend_v := lerpf(autodrive_speed, 4.0, clampf(bend / 1.2, 0.0, 1.0))
 		v = lerpf(bend_v, v, clampf((to_wp - 6.0) / 25.0, 0.0, 1.0))
 	else:
@@ -383,12 +403,27 @@ func _build_body() -> void:
 	Psx.box(gfx, Vector3(2.0, 0.25, 0.2), Vector3(0.0, 0.15, -2.25), Color(0.4, 0.4, 0.42))
 	Psx.box(gfx, Vector3(0.3, 0.12, 0.3), Vector3(0.0, 1.35, -0.5), Color(1.0, 0.5, 0.1), 2.0)
 
-	_cargo_node = Node3D.new()
-	gfx.add_child(_cargo_node)
-	Psx.box(_cargo_node, Vector3(1.5, 0.9, 1.7), Vector3(0.0, 0.75, 1.2), Color(0.55, 0.38, 0.2))
-	Psx.box(_cargo_node, Vector3(1.55, 0.08, 0.15), Vector3(0.0, 1.2, 0.8), DARK)
-	Psx.box(_cargo_node, Vector3(1.55, 0.08, 0.15), Vector3(0.0, 1.2, 1.6), DARK)
-	_cargo_node.visible = false
+	var crates := Node3D.new()
+	Psx.box(crates, Vector3(1.5, 0.9, 1.7), Vector3(0.0, 0.75, 1.2), Color(0.55, 0.38, 0.2))
+	Psx.box(crates, Vector3(1.55, 0.08, 0.15), Vector3(0.0, 1.2, 0.8), DARK)
+	Psx.box(crates, Vector3(1.55, 0.08, 0.15), Vector3(0.0, 1.2, 1.6), DARK)
+	# Fragile: smaller crates, strapped, red and white.
+	var fragile := Node3D.new()
+	for i in 2:
+		var z := 0.75 + i * 0.9
+		Psx.box(fragile, Vector3(1.3, 0.7, 0.75), Vector3(0.0, 0.65, z), Color(0.86, 0.84, 0.78))
+		Psx.box(fragile, Vector3(1.32, 0.14, 0.77), Vector3(0.0, 0.75, z), Color(0.85, 0.15, 0.1))
+	Psx.box(fragile, Vector3(0.06, 0.9, 1.9), Vector3(0.0, 0.6, 1.2), DARK)
+	# Heavy: two concrete rings lying on the bed.
+	var heavy := Node3D.new()
+	for i in 2:
+		var ring := Psx.mesh(heavy, Psx.cylinder(0.72, 0.72, 0.8, 10), Vector3(0.0, 1.02, 0.75 + i * 0.9), Color(0.62, 0.62, 0.6))
+		ring.rotation.x = PI * 0.5
+		Psx.mesh(heavy, Psx.cylinder(0.5, 0.5, 0.82, 10), Vector3(0.0, 1.02, 0.75 + i * 0.9), DARK).rotation.x = PI * 0.5
+	_loads = {"crates": crates, "fragile": fragile, "heavy": heavy}
+	for k in _loads:
+		gfx.add_child(_loads[k])
+		_loads[k].visible = false
 
 	for side in [-1.0, 1.0]:
 		var l := SpotLight3D.new()

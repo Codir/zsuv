@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.0 — 2026-10-29 — Five valleys
+
+- Four new valleys beside the khutir valley, as Philip asked in AI Browser Game Jam 5 for more
+  maps: a sunny autumn steppe of dry dirt roads, gullies, a hill of wind turbines and a dig on a
+  kurgan; Zakarpattia in the spring sun, vineyards, a castle on its hill, a wooden church, a
+  mineral spring and snow on the peaks; Polissia in a foggy thaw, bogs, a road across a frozen
+  lake, a fish farm, peat works, a village, an apiary and a forestry; the Carpathian pass at
+  night in a blizzard, switchbacks through deep snow to a weather station on the ridge, a koliba,
+  a mountain rescue base, a logging camp and a mountain village. More places to deliver to in
+  each: 3, 4, 4, 5, 5.
+- The valleys screen: a picture of each and a card in icons of what awaits (season and sky,
+  difficulty, the places; the mouse names them). They open in order for the money earned, $1500
+  to $6000. Each valley's sky can be switched to sun, overcast, snow or rain, or night. Esc in a
+  valley goes back to the screen. Money, valleys, skies and records are saved, in the browser too.
+- A job board at the depot, as Philip asked for challenges: three jobs at a time, plain, against
+  the clock (gold, silver, bronze and a record each), fragile (it breaks on hard knocks and
+  landings and pays for what is whole), heavy (concrete rings that sit the truck low and drink
+  fuel, for more pay), and a car stuck in a ditch to winch back onto the road.
+- The winch hooks a stuck car and pulls it while the truck holds; the test autopilot slows for
+  the bend ahead.
+- Tests for the valleys (each builds, nothing on a road, every road drives both ways), the
+  skies, the valleys screen and the profile, the jobs and the stuck car; `./godot.sh previews`
+  renders the screen's pictures.
+
 ## 0.1.2 — 2026-10-29 — Hear it work
 
 - The truck is heard, as Philip asked in AI Browser Game Jam 5: the diesel climbs through its
