@@ -4,6 +4,10 @@ render_mode diffuse_lambert, specular_disabled;
 #include "res://shaders/psx_inc.gdshaderinc"
 #include "res://shaders/terrain_inc.gdshaderinc"
 
+uniform vec3 earth_col = vec3(0.2, 0.15, 0.11);
+uniform vec3 gravel_col = vec3(0.36, 0.34, 0.31);
+uniform vec3 ice_col = vec3(0.62, 0.74, 0.82);
+
 varying vec3 world_pos;
 
 void vertex() {
@@ -18,7 +22,8 @@ void vertex() {
 void fragment() {
 	vec4 s = texture(snow_tex, (world_pos.xz + T_HALF + 0.5) / T_N);
 	float n = psx_hash(floor(world_pos * 2.0));
-	vec3 earth = vec3(0.2, 0.15, 0.11);
-	vec3 gravel = vec3(0.36, 0.34, 0.31);
-	ALBEDO = mix(earth, gravel, s.b) * (0.85 + n * 0.3);
+	vec3 ground = mix(earth_col, gravel_col, s.b) * (0.85 + n * 0.3);
+	// Ice on a frozen lake: smooth, a little lighter in streaks.
+	vec3 ice = ice_col * (0.95 + psx_hash(floor(world_pos * 0.5)) * 0.1);
+	ALBEDO = mix(ground, ice, 1.0 - s.a);
 }

@@ -25,11 +25,10 @@ func setup(v: Vehicle, t: Terrain, locations: Dictionary) -> void:
 	vehicle = v
 	terrain = t
 	_depot = locations.depot
-	_jobs = [
-		{"name": "Khutir", "cargo": "groceries", "loc": locations.farm, "reward": 250},
-		{"name": "Sawmill", "cargo": "spare parts", "loc": locations.lumber, "reward": 300},
-		{"name": "Radio Tower", "cargo": "drone batteries", "loc": locations.tower, "reward": 500},
-	]
+	_jobs = []
+	for loc in locations.values():
+		if loc.has("cargo"):
+			_jobs.append({"name": loc.name, "cargo": loc.cargo, "loc": loc, "reward": loc.reward})
 	_markers.append(_make_marker(_depot, Color(1.0, 0.8, 0.2)))
 	for job in _jobs:
 		_markers.append(_make_marker(job.loc, Color(0.3, 1.0, 0.4)))

@@ -1,6 +1,6 @@
 class_name WorldBuilder
 extends Node3D
-## Places trees, rocks, buildings and snow marker poles along the roads.
+## Places a valley's trees, rocks, buildings and the snow marker poles along its roads.
 
 const TRUNK := Color(0.28, 0.18, 0.12)
 const PINE := Color(0.12, 0.24, 0.18)
@@ -9,21 +9,22 @@ const SNOW := Color(0.88, 0.92, 1.0)
 const WARM_LIGHT := Color(1.0, 0.78, 0.45)
 
 var terrain: Terrain
+var valley: Valley
 var tree_points := PackedVector2Array()
 var anchor_points := PackedVector3Array()  # winch anchors
 var _rng := RandomNumberGenerator.new()
 
 
-func build(t: Terrain, locations: Dictionary) -> void:
+func build(t: Terrain, v: Valley) -> void:
 	terrain = t
-	_rng.seed = 4242
-	_scatter_trees(locations)
-	_scatter_rocks(locations)
-	_road_poles()
-	_build_depot(locations.depot)
-	_build_farm(locations.farm)
-	_build_lumber(locations.lumber)
-	_build_tower(locations.tower)
+	valley = v
+	_rng.seed = 4242 + v.seed - 1337
+	_scatter_trees(v.locations)
+	_scatter_rocks(v.locations)
+	if v.poles:
+		_road_poles()
+	for loc in v.locations.values():
+		call("_build_" + String(loc.kind), loc)
 	_boundary_walls()
 
 
@@ -41,7 +42,7 @@ func _scatter_trees(locations: Dictionary) -> void:
 	var body := StaticBody3D.new()
 	add_child(body)
 	var attempts := 0
-	while xforms.size() < 500 and attempts < 5000:
+	while xforms.size() < valley.tree_count and attempts < valley.tree_count * 10:
 		attempts += 1
 		var p := Vector2(_rng.randf_range(-118.0, 118.0), _rng.randf_range(-118.0, 118.0))
 		if not _is_clear(p, locations, 2.5):
@@ -69,7 +70,7 @@ func _scatter_rocks(locations: Dictionary) -> void:
 	var body := StaticBody3D.new()
 	add_child(body)
 	var attempts := 0
-	while xforms.size() < 60 and attempts < 1000:
+	while xforms.size() < valley.rock_count and attempts < valley.rock_count * 17:
 		attempts += 1
 		var p := Vector2(_rng.randf_range(-115.0, 115.0), _rng.randf_range(-115.0, 115.0))
 		if not _is_clear(p, locations, 1.5):
@@ -198,17 +199,17 @@ func _build_depot(loc: Dictionary) -> void:
 	for side in [-2.6, 2.6]:
 		Psx.box(self, Vector3(0.2, 4.2, 0.2), pump + Vector3(side, 2.1, 0.0), Color(0.3, 0.3, 0.32))
 	_lamp(_ground(c.x + 3.0, c.y + 2.0))
-	_sign(_ground(c.x - 7.0, c.y - 8.0) + Vector3(0.0, 8.5, 0.0), "DEPOT")
+	_sign(_ground(c.x - 7.0, c.y - 8.0) + Vector3(0.0, 8.5, 0.0), loc.name.to_upper())
 
 
-func _build_farm(loc: Dictionary) -> void:
+func _build_khutir(loc: Dictionary) -> void:
 	var c: Vector2 = loc.pos
 	_house(_ground(c.x - 4.0, c.y + 4.0), PI, Vector3(6.0, 3.5, 5.0), Color(0.45, 0.6, 0.7), Color(0.85, 0.88, 0.95))
 	_house(_ground(c.x + 7.0, c.y + 3.0), PI, Vector3(7.0, 5.0, 9.0), Color(0.6, 0.15, 0.1), Color(0.85, 0.88, 0.95), false)
-	_sign(_ground(c.x, c.y + 4.0) + Vector3(0.0, 7.5, 0.0), "KHUTIR")
+	_sign(_ground(c.x, c.y + 4.0) + Vector3(0.0, 7.5, 0.0), loc.name.to_upper())
 
 
-func _build_lumber(loc: Dictionary) -> void:
+func _build_sawmill(loc: Dictionary) -> void:
 	var c: Vector2 = loc.pos
 	_house(_ground(c.x, c.y + 6.0), PI, Vector3(9.0, 4.0, 6.0), Color(0.42, 0.28, 0.16), Color(0.85, 0.88, 0.95))
 	var logs := Psx.cylinder(0.35, 0.35, 6.0, 7)
@@ -217,10 +218,10 @@ func _build_lumber(loc: Dictionary) -> void:
 			var p := _ground(c.x + 7.0, c.y - 4.0) + Vector3(0.0, 0.35 + row * 0.62, -1.1 + i * 0.72 + row * 0.36)
 			var m := Psx.mesh(self, logs, p, Color(0.5, 0.33, 0.2))
 			m.rotation.z = PI * 0.5
-	_sign(_ground(c.x, c.y + 6.0) + Vector3(0.0, 7.5, 0.0), "SAWMILL")
+	_sign(_ground(c.x, c.y + 6.0) + Vector3(0.0, 7.5, 0.0), loc.name.to_upper())
 
 
-func _build_tower(loc: Dictionary) -> void:
+func _build_radio_tower(loc: Dictionary) -> void:
 	var c: Vector2 = loc.pos
 	var base := _ground(c.x + 4.0, c.y + 4.0)
 	Psx.box(self, Vector3(0.7, 20.0, 0.7), base + Vector3(0.0, 10.0, 0.0), Color(0.6, 0.6, 0.62))
@@ -245,7 +246,7 @@ func _build_tower(loc: Dictionary) -> void:
 		var dir := Vector3(cos(a * PI * 0.5 + PI * 0.25), 0.0, sin(a * PI * 0.5 + PI * 0.25))
 		Psx.box(self, Vector3(0.06, 0.06, 0.06), pad + Vector3(0.0, 0.25, 0.0) + dir * 0.35, Color(0.2, 0.2, 0.2))
 		Psx.mesh(self, Psx.cylinder(0.22, 0.22, 0.02, 8), pad + Vector3(0.0, 0.32, 0.0) + dir * 0.5, Color(0.3, 0.9, 0.4), 1.0)
-	_sign(base + Vector3(0.0, 23.0, 0.0), "RADIO TOWER")
+	_sign(base + Vector3(0.0, 23.0, 0.0), loc.name.to_upper())
 
 
 func _boundary_walls() -> void:

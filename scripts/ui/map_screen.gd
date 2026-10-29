@@ -100,7 +100,7 @@ func _on_draw() -> void:
 	# Right column: title, objective, legend.
 	var x := _origin.x + MAP_SIZE + 18.0
 	var y := _origin.y + 4.0
-	_text(font, Vector2(x, y + 8), "MAP - SNOW VALLEY", Color(1.0, 0.85, 0.3))
+	_text(font, Vector2(x, y + 8), terrain.valley.title.to_upper(), Color(1.0, 0.85, 0.3))
 	y += 26.0
 	for line in _wrap(contracts.objective_text(), 36):
 		_text(font, Vector2(x, y), line, Color(1.0, 1.0, 1.0))

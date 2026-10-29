@@ -1,8 +1,9 @@
 extends Node3D
-## Entry point: builds the world, the truck, the camera, the HUD and the contracts.
+## A valley in play: builds its world, the truck, the camera, the HUD and the contracts.
 
 const POST_SHADER := preload("res://shaders/post_dither.gdshader")
 
+var valley: Valley  # set before the scene enters the tree; the khutir valley if not
 var terrain: Terrain
 var vehicle: Vehicle
 var camera_rig: CameraRig
@@ -19,38 +20,23 @@ func _ready() -> void:
 	_setup_input()
 	_setup_environment()
 
-	locations = {
-		"depot": {"name": "Depot", "pos": Vector2(-95, -95), "radius": 14.0},
-		"farm": {"name": "Khutir", "pos": Vector2(-72, 92), "radius": 10.0},
-		"lumber": {"name": "Sawmill", "pos": Vector2(75, 88), "radius": 10.0},
-		"tower": {"name": "Radio Tower", "pos": Vector2(25, 35), "radius": 8.0},
-	}
-	roads = [
-		PackedVector2Array([Vector2(-95, -95), Vector2(-60, -102), Vector2(-25, -85), Vector2(8, -96), Vector2(45, -80),
-			Vector2(85, -55), Vector2(96, -15), Vector2(92, 25), Vector2(78, 55), Vector2(75, 88)]),
-		PackedVector2Array([Vector2(-95, -95), Vector2(-100, -55), Vector2(-88, -15), Vector2(-98, 25), Vector2(-85, 60), Vector2(-72, 92)]),
-	]
-	var puddles: Array[Dictionary] = [
-		{"pos": Vector2(8, -96), "radius": 7.0},
-		{"pos": Vector2(-88, -15), "radius": 6.0},
-		{"pos": Vector2(92, 25), "radius": 6.0},
-	]
-	var flats: Array[Dictionary] = []
-	for l in locations.values():
-		flats.append(l)
+	if valley == null:
+		valley = Valley.khutir()
+	locations = valley.locations
+	roads = valley.roads
 
 	terrain = Terrain.new()
 	terrain.name = "Terrain"
 	add_child(terrain)
-	terrain.generate(roads, flats, puddles)
+	terrain.generate(valley)
 
 	builder = WorldBuilder.new()
 	builder.name = "World"
 	add_child(builder)
-	builder.build(terrain, locations)
+	builder.build(terrain, valley)
 
-	var spawn := Vector3(-88.0, terrain.get_height(-88.0, -93.0) + 1.5, -93.0)
-	var spawn_yaw := -PI * 0.5
+	var spawn := Vector3(valley.spawn.x, terrain.get_height(valley.spawn.x, valley.spawn.y) + 1.5, valley.spawn.y)
+	var spawn_yaw := valley.spawn_yaw
 	vehicle = Vehicle.new()
 	vehicle.name = "Truck"
 	vehicle.terrain = terrain
