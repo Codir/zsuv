@@ -2,10 +2,12 @@
 
 ![Khutir Road](media/khutir-road.gif)
 
-A small orange 4x4, a snowbound valley at dusk, and cargo that has to get through. Khutir Road is
-a PSX-style off-road delivery game: haul groceries to a lone *khutir* (a Ukrainian farmstead),
-spare parts to the sawmill and drone batteries to the radio tower, through deep snow and mud
-that pack down into ruts under your wheels.
+A small orange 4x4, five valleys of Ukraine, and cargo that has to get through. Khutir Road is a
+PSX-style off-road delivery game: haul groceries to a lone *khutir* (a Ukrainian farmstead) in a
+snowbound valley at dusk, then buy your way on to a sunny autumn steppe, Zakarpattia's spring
+vineyards, a foggy Polissia thaw with a road across a frozen lake, and a Carpathian pass at night
+in a blizzard, through snow and mud that pack down into ruts under your wheels. Take jobs from the
+board at the depot: against the clock, fragile, heavy, or a car to winch out of a ditch.
 
 Godot 4.7.2 (GL Compatibility, Jolt Physics), everything procedural; runs on Windows, Linux,
 macOS and in the browser.
@@ -29,13 +31,18 @@ itch.io: https://codirs.itch.io/psxrunner
 | X | differential lock |
 | G | low range |
 | H | headlights |
-| E | load / unload / refuel (stopped, at a depot or a delivery point) |
-| F | winch to the tree or rock ahead; hold Shift to reel in |
+| E | the job board at the depot, unload at a delivery point, refuel (stopped) |
+| 1 / 2 / 3 | take a job from the board |
+| F | winch to the tree, rock or stuck car ahead; hold Shift to reel in |
 | M | paper map |
 | T | tow back to the depot ($100) |
 | R | flip upright |
 | Right mouse + drag, wheel | orbit and zoom the camera |
 | F1 | the help: a short hint in the corner, then every key, then none |
+| Esc | back to the valleys |
+
+On the valleys screen: A / D (or the arrows) pick a valley, W / S its sky, Enter drives in or
+buys it; the mouse works too, and names an icon when over it.
 
 Keys are physical, so they sit in the same place on any keyboard layout.
 
@@ -57,10 +64,12 @@ GODOT=/path/to/Godot_v4.7.2-stable_win64_console.exe ./godot.sh run   # use a Go
 ```
 
 The tests build the real valley and drive it: the truck stands on four wheels, drives the road,
-burns fuel and leaves ruts; snow and mud grip less and drag more until packed down; the delivery
-loop pays; the winch pulls; the engine revs through its gears and labours when the truck can't
-move, the tyres crunch and squelch only when they roll; and no text in the game or on screen is
-left untranslated. Any error the engine logs during a test fails it, and a watchdog ends a run
+burns fuel and leaves ruts; snow and mud grip less and drag more until packed down; every valley
+builds with nothing on its roads, and every road drives both ways; the job board's jobs pay as
+they should (medals and records, fragile loads breaking on drops, heavy ones drinking, a stuck
+car winched out); the valleys screen buys and drives in, the profile saves; the winch pulls; the
+engine revs through its gears and labours when the truck can't move, the tyres crunch and
+squelch only when they roll; and no text in the game or on screen is left untranslated. Any error the engine logs during a test fails it, and a watchdog ends a run
 that hangs. The soundcheck prints how loud each part of its drive was.
 
 ## Export
@@ -98,6 +107,15 @@ python tools/make_media.py     # the trailer, screenshots, cover and GIF into me
 The director runs the game at a fixed frame rate, so every capture is the same. `make_media.py`
 needs Python 3 with Pillow and NumPy, and Blender 4.5 for the MP4 (its FFmpeg is the encoder).
 Copy for the itch.io page is in [media/itch-page.md](media/itch-page.md).
+
+## Valleys
+
+```bash
+./godot.sh previews    # render the valleys screen's pictures into previews/ (needs a window)
+```
+
+[docs/valleys.md](docs/valleys.md) has the five valleys, the jobs and what is saved;
+`scripts/world/valley.gd` holds each valley as data, `scripts/world/weather.gd` the skies.
 
 ## Sound
 

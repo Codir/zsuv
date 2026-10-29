@@ -1,7 +1,10 @@
-# Valleys and jobs for 0.2.0 (the plan)
+# Valleys and jobs (0.2.0)
 
 Philip asked in AI Browser Game Jam 5 for "more maps and challenges" (`media/comments.md`). The
-owner's decisions, 2026-10-29, one release: 0.2.0.
+owner's decisions, 2026-10-29, built for 0.2.0: `scripts/world/valley.gd` (the valleys as data),
+`scripts/world/weather.gd` (the skies), `scripts/ui/start_screen.gd` and `scripts/ui/icons.gd`
+(the valleys screen), `scripts/systems/profile.gd` (what is saved), `scripts/systems/contracts.gd`
+(the jobs), `scripts/vehicle/stuck_car.gd`.
 
 ## Five valleys
 
@@ -26,19 +29,34 @@ one first.
 
 ## Jobs
 
-A job board at the depot offers two or three jobs at a time (what, where, kind, pay); the player
-picks one with a key. Beside the plain delivery:
+E at the depot opens a board of three jobs, each to a different place and of a different kind,
+with what it pays; 1, 2 or 3 takes one, loads it and fills the tank. A place pays its reward
+times the valley's pay (1, 1.2, 1.4, 1.7, 2.4), and by kind:
 
-- **Against the clock:** gold, silver and bronze for an average along the road of about 30, 22
-  and 15 km/h (the times follow from the route's length, one number to tune); a record per job.
-- **Fragile:** the HUD shows the cargo's integrity (CARGO 100%); every hard knock or landing takes
-  some off, by its force; it pays the reward times the integrity, nothing at 0 (broken).
-- **Heavy:** 1800 kg instead of 900: the truck sits lower, sinks deeper and burns 1.5 times the
-  fuel; pays 1.6 times.
-- **A stuck car:** a car in a ditch beside a road; F hooks the winch onto it, Shift reels it in;
-  paid once its wheels are on the road.
+- **Plain:** as it is.
+- **Against the clock:** gold, silver and bronze for 30, 22 and 15 km/h along the shortest way
+  by road from the depot (the straight line and 30% for a place off the roads), paying 1.5, 1.25
+  and 1 times, 0.6 without a medal. The best time of each job is kept and shown on the board.
+- **Fragile:** the HUD shows the load's integrity; every jolt over 38 m/s2, measured over 50 ms,
+  breaks 0.6% of it per m/s2 above (driving the roads stays under 33; a drop of 2 m costs about
+  7%, 4 m about 75%); a tow or setting the truck upright is no jolt. Pays 1.3 times what is
+  left; at nothing left it is gone.
+- **Heavy:** 1800 kg of concrete rings instead of 900 kg of crates: the truck sits lower, drags
+  deeper and burns 1.5 times the fuel; pays 1.6 times.
+- **A stuck car:** a car slid into the ditch beside one of the roads (each road has one, dug 7 m
+  off its middle, clear of trees); F hooks the winch on its towing eye, Shift reels it, and the
+  truck holds on its brake while the car comes. Upright and at rest on the road or its shoulder,
+  it pays $300 times the valley's pay.
+
+## Roads in the hills
+
+A road is a shelf level across. In the hills (Zakarpattia, the steppe, the pass) its profile is
+averaged over 14-24 m and kept to 20-22% (or what a climb needs, never a step), cut into the
+slope above and filled below, except for 14 m at each end where it crosses a place; two roads
+blend where they meet; hairpins are U turns at the ends of legs that climb across the slope.
+Every road of every valley drives both ways in 4x4 (`tests/test_valleys.gd`).
 
 ## Saved
 
-The money, the valleys bought, the records and medals; in the browser too (`user://` is
-IndexedDB there).
+`user://khutir_road.cfg` (IndexedDB in a browser): the money, the valleys bought, the sky picked
+for each, the records, the last valley. Saved on every change.
