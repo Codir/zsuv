@@ -50,6 +50,16 @@ func enter(v: Valley, kind: Weather.Kind) -> void:
 	world.leave.connect(_leave)
 
 
+## A key let go outside the window or the browser frame never reaches the game; main.gd lets go
+## of every key in a valley, and this does on the valleys screen, or the truck would drive off
+## with nothing pressed in the next valley.
+func _notification(what: int) -> void:
+	if world == null and (what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT):
+		for action in InputMap.get_actions():
+			if Input.is_action_pressed(action):
+				Input.action_release(action)
+
+
 func _leave() -> void:
 	world.queue_free()
 	world = null

@@ -37,6 +37,7 @@ var _base: FastNoiseLite
 var _profiles: Array[Dictionary] = []  # per road: {at: cumulative length at each point, h: heights every PROFILE_STEP}
 
 const PROFILE_STEP := 2.0
+const DITCH_BANK := 2.4  # how far past its edge a ditch blends back into the ground
 const PIN := 14.0  # a smoothed road keeps to the ground this far from its ends: across the place there
 
 
@@ -107,10 +108,6 @@ func generate(v: Valley) -> void:
 				if l.get("ice", false):
 					ice = maxf(ice, 1.0 - smoothstep(r * 0.82, r * 0.92, d))
 			h += rim
-			for dt in ditches:
-				var half: Vector2 = dt.dir * float(dt.length) * 0.5
-				var d := p.distance_to(Geometry2D.get_closest_point_to_segment(p, dt.pos - half, dt.pos + half))
-				h -= float(dt.depth) * _bump(d / float(dt.width))
 			heights[z * N + x] = h
 
 			var on_road := 1.0 - smoothstep(ROAD_HALF_WIDTH - 0.5, ROAD_HALF_WIDTH + 1.0, rd)
@@ -127,6 +124,7 @@ func generate(v: Valley) -> void:
 			snow *= 1.0 - ice
 			mud *= 1.0 - ice
 			snow_img.set_pixel(x, z, Color(snow, mud, on_road, 1.0 - ice))
+	_dig(ditches)
 
 	_build_visuals()
 	_build_collision()
@@ -194,6 +192,38 @@ func _road_closest(p: Vector2) -> Dictionary:
 
 func road_distance(p: Vector2) -> float:
 	return _road_closest(p).x
+
+
+## The ground on the road's centre line at its point nearest p, as built.
+func road_height(p: Vector2) -> float:
+	var at: Vector2 = _road_closest(p).at
+	return get_height(at.x, at.y)
+
+
+## Digs the ditches into the finished ground: each a trench at the level of the road beside it, cut
+## into a slope above the road or banked up on one below it, so a car slid in stays in.
+func _dig(ditches: Array[Dictionary]) -> void:
+	var built := heights.duplicate()
+	for dt in ditches:
+		var half: Vector2 = dt.dir * float(dt.length) * 0.5
+		var w: float = dt.width
+		var reach := half.length() + w + DITCH_BANK
+		var road := roads[dt.road]
+		for z in range(maxi(0, int(dt.pos.y + HALF - reach)), mini(N, int(dt.pos.y + HALF + reach) + 2)):
+			for x in range(maxi(0, int(dt.pos.x + HALF - reach)), mini(N, int(dt.pos.x + HALF + reach) + 2)):
+				var p := Vector2(x - HALF, z - HALF)
+				var d := p.distance_to(Geometry2D.get_closest_point_to_segment(p, dt.pos - half, dt.pos + half))
+				if d >= w + DITCH_BANK:
+					continue
+				var c := Vector2.ZERO
+				var best := INF
+				for i in road.size() - 1:
+					var q := Geometry2D.get_closest_point_to_segment(p, road[i], road[i + 1])
+					if p.distance_to(q) < best:
+						best = p.distance_to(q)
+						c = q
+				var level := _bilinear(built, c.x, c.y) - float(dt.depth) * _bump(d / w)
+				heights[z * N + x] = lerpf(heights[z * N + x], level, 1.0 - smoothstep(w, w + DITCH_BANK, d))
 
 
 ## How high the road is at its nearest point: the ground there, or its smoothed profile. Where
@@ -269,6 +299,10 @@ func _profile(road: PackedVector2Array, smooth: float) -> Dictionary:
 
 
 func get_height(x: float, z: float) -> float:
+	return _bilinear(heights, x, z)
+
+
+static func _bilinear(hs: PackedFloat32Array, x: float, z: float) -> float:
 	var fx := clampf(x + HALF, 0.0, SIZE - 0.001)
 	var fz := clampf(z + HALF, 0.0, SIZE - 0.001)
 	var ix := int(fx)
@@ -276,7 +310,7 @@ func get_height(x: float, z: float) -> float:
 	var tx := fx - ix
 	var tz := fz - iz
 	var i := iz * N + ix
-	return lerpf(lerpf(heights[i], heights[i + 1], tx), lerpf(heights[i + N], heights[i + N + 1], tx), tz)
+	return lerpf(lerpf(hs[i], hs[i + 1], tx), lerpf(hs[i + N], hs[i + N + 1], tx), tz)
 
 
 func sample(pos: Vector3) -> Surface:

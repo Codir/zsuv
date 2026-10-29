@@ -1,7 +1,8 @@
 extends RefCounted
 ## The five valleys: each builds in its own world beside the shared one, has a depot and more
 ## places to deliver to than the one before (3, 4, 4, 5, 5) on flat ground at the ends of its
-## roads, nothing standing on a road, and every road drivable both ways in 4x4 by the test autopilot.
+## roads, nothing standing on a road, a car slid into any of its ditches stays there, and every
+## road drivable both ways in 4x4 by the test autopilot.
 
 const SCENE := preload("res://scenes/main.tscn")
 
@@ -49,6 +50,7 @@ func test_every_valley_builds(t: TCase) -> void:
 		t.eq(contacts, 4, "%s: the truck's wheels on the ground at the start" % v.id)
 		t.ok(world.vehicle.global_transform.basis.y.y > 0.9, "%s: the truck starts tilted" % v.id)
 		_nothing_on_the_roads(t, v, world)
+		await _cars_stay_in_their_ditches(t, v, world)
 		vp.free()
 
 
@@ -133,3 +135,23 @@ func _world(v: Valley, t: TCase) -> SubViewport:
 	vp.add_child(world)
 	t.tree.root.add_child(vp)
 	return vp
+
+
+## A car in each ditch at once: it settles where it slid in, on its wheels, off the road, so a
+## stuck car job is neither done by itself nor lost on its roof.
+func _cars_stay_in_their_ditches(t: TCase, v: Valley, world: Node) -> void:
+	var terrain: Terrain = world.terrain
+	var cars: Array[StuckCar] = []
+	for d in v.ditches:
+		var car := StuckCar.new()
+		world.add_child(car)
+		car.slide_into(d, terrain)
+		cars.append(car)
+	await t.ticks(180)
+	for i in cars.size():
+		var car := cars[i]
+		var at: Vector2 = v.ditches[i].at
+		var moved := Vector2(car.global_position.x, car.global_position.z).distance_to(at)
+		t.ok(moved < 1.5 and car.upright() and not car.on_road(terrain),
+			"%s: the car in ditch %d moved %.1f m, up %.2f, on the road %s" % [v.id, i, moved, car.global_transform.basis.y.y, car.on_road(terrain)])
+		car.free()

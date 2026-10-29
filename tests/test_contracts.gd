@@ -1,7 +1,8 @@
 extends RefCounted
 ## The jobs: the board at the depot offers three; a plain delivery pays; a timed one pays by its
 ## medal and keeps its record; a fragile one breaks on hard landings and pays for what is whole;
-## a heavy one sits the truck low and drinks; the tow costs money.
+## a heavy one sits the truck low and drinks; a new job at the depot drops the one in hand; the
+## tow costs money.
 
 
 func test_the_board_offers_three_jobs(t: TCase) -> void:
@@ -25,8 +26,48 @@ func test_the_board_offers_three_jobs(t: TCase) -> void:
 	t.eq(places.size(), 3, "different places")
 	t.eq(kinds.size(), 3, "different kinds")
 	t.eq(c.board_text().split("\n").size(), 5, "lines on the board")
-	c.take(c.offers[1])
+	var o: Dictionary = c.offers[0] if c.offers[0].kind != "stuck" else c.offers[1]
+	c.take(o)
 	t.ok(not c.board_open and v.has_cargo, "taking a job does not load it")
+	_clear(c, v)
+
+
+func test_a_new_job_at_the_depot_drops_the_one_in_hand(t: TCase) -> void:
+	var c: Contracts = t.world.contracts
+	var v: Vehicle = t.world.vehicle
+	var got: Array[String] = []
+	var on_message := func(text: String) -> void: got.append(text)
+	c.message.connect(on_message)
+	_clear(c, v)
+	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw)
+	c.take(c.offer_stuck(0))
+	v.fuel = 20.0
+	await t.ticks(2)
+	t.eq(c.prompt, "[E] Refuel, job board", "prompt at the depot with a job")
+	c.call("_interact")
+	t.eq(v.fuel, Vehicle.FUEL_CAPACITY, "E does not refuel")
+	t.ok(c.board_open, "E does not open the board with a job in hand")
+	t.ok(c.board_text().begins_with("JOB BOARD - DEPOT   (a new job drops pull a car out)"), "board: " + c.board_text())
+	var car: StuckCar = c._car
+	c.take(c.offer("farm", "heavy"))
+	t.ok(c.job.kind == "heavy" and v.has_cargo, "the new job is not loaded")
+	t.ok(got.any(func(m: String) -> bool: return m.begins_with("Dropped: pull a car out for the ditch near")), "messages: %s" % [got])
+	t.ok(not v.winch.bodies.has(car), "the dropped job's car is still there to winch")
+	await t.ticks(200)
+	t.ok(not is_instance_valid(car), "the dropped job's car does not drive off")
+	c.message.disconnect(on_message)
+	_clear(c, v)
+
+
+func test_out_of_fuel_on_a_stuck_car_job_offers_the_tow(t: TCase) -> void:
+	var c: Contracts = t.world.contracts
+	var v: Vehicle = t.world.vehicle
+	_clear(c, v)
+	c.take(c.offer_stuck(0))
+	await t.place(Vector2(40.0, -82.0), 0.0, 30)
+	v.fuel = 0.0
+	await t.ticks(2)
+	t.ok(c.prompt.begins_with("Out of fuel! [T] Tow"), "prompt: " + c.prompt)
 	_clear(c, v)
 
 
@@ -105,8 +146,9 @@ func test_a_fragile_load_breaks_on_hard_landings(t: TCase) -> void:
 	t.ok(c.integrity < driven - 0.3, "a 4 m drop did not break it: %d%%" % roundi(c.integrity * 100.0))
 	t.ok(c.integrity > 0.0, "a 4 m drop broke all of it")
 	var whole := c.integrity
+	var reward: int = c.job.reward
 	c.call("_interact")
-	t.eq(c.money, Contracts._round(250 * 1.3 * whole), "pays for what is whole")
+	t.eq(c.money, Contracts._round(reward * whole), "pays for what is whole")
 
 
 func test_a_heavy_load_sits_low_and_drinks(t: TCase) -> void:
@@ -151,6 +193,5 @@ func test_tow_to_depot(t: TCase) -> void:
 
 
 func _clear(c: Contracts, v: Vehicle) -> void:
-	c.job = {}
+	c.call("_end_job")
 	c.board_open = false
-	v.set_cargo(false)

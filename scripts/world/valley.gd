@@ -4,6 +4,9 @@ extends RefCounted
 ## ice), its trees, colours and price. Valley.all() lists the five in the order they open, easiest
 ## first, with more places to deliver to as they go (docs/valleys.md); every one is 256 m square.
 
+const DITCH_LENGTH := 10.0
+const DITCH_WIDTH := 2.4  # from its middle to where it meets the ground
+
 var id := ""
 var title := ""
 var blurb := ""  # one line for the start screen's card
@@ -337,7 +340,9 @@ static func carpathians() -> Valley:
 
 
 ## A ditch beside the middle of each road, on alternate sides, where a stuck car can wait: dug
-## as a ditch feature 7 m off the road's centre line, clear of the other roads and the places.
+## as a ditch feature 7 m off the road's centre line, its floor 1.4 m below the road beside it (a
+## trench cut into a slope above the road, banked up on one below), all of it clear of the road,
+## its other legs, the other roads and the places.
 func _with_ditches() -> Valley:
 	for r in roads.size():
 		var road := roads[r]
@@ -355,9 +360,10 @@ func _with_ditches() -> Valley:
 				var dir := (road[i + 1] - road[i]).normalized()
 				var p: Vector2 = road[i] + dir * along
 				var at: Vector2 = p + Vector2(-dir.y, dir.x) * side * 7.0
-				if _ditch_clear(at, r):
+				if _ditch_clear(at, dir, r, total * try):
 					ditches.append({"pos": p, "at": at, "dir": dir})
-					features.append({"type": "ditch", "pos": at, "dir": dir, "length": 10.0, "width": 3.4, "depth": 1.4})
+					features.append({"type": "ditch", "pos": at, "dir": dir, "road": r, "length": DITCH_LENGTH,
+						"width": DITCH_WIDTH, "depth": 1.4})
 					done = true
 					break
 			if done:
@@ -365,18 +371,25 @@ func _with_ditches() -> Valley:
 	return self
 
 
-func _ditch_clear(at: Vector2, own: int) -> bool:
+## Whether a ditch along dir at at, beside road own s metres along it, keeps off the roads (its own
+## road's edge too, on a bend, and further off its other legs) and the places.
+func _ditch_clear(at: Vector2, dir: Vector2, own: int, s: float) -> bool:
 	if absf(at.x) > 96.0 or absf(at.y) > 96.0:
 		return false
 	for loc in locations.values():
 		if at.distance_to(loc.pos) < float(loc.radius) + 14.0:
 			return false
-	for r in roads.size():
-		var road := roads[r]
-		for i in road.size() - 1:
-			var c := Geometry2D.get_closest_point_to_segment(at, road[i], road[i + 1])
-			if at.distance_to(c) < (6.5 if r == own else 11.0):
-				return false
+	for k in [-1.0, -0.5, 0.0, 0.5, 1.0]:
+		var q: Vector2 = at + dir * DITCH_LENGTH * 0.5 * k
+		for r in roads.size():
+			var road := roads[r]
+			var along := 0.0
+			for i in road.size() - 1:
+				var c := Geometry2D.get_closest_point_to_segment(q, road[i], road[i + 1])
+				var beside := r == own and absf(along + road[i].distance_to(c) - s) < 20.0
+				if q.distance_to(c) < (Terrain.ROAD_HALF_WIDTH + DITCH_WIDTH - 0.1 if beside else 11.0):
+					return false
+				along += road[i].distance_to(road[i + 1])
 	return true
 
 

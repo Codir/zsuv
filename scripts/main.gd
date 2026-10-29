@@ -117,7 +117,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		hud.toggle_help()
 	elif event.is_action_pressed("toggle_map"):
 		_toggle_map()
-	elif event is InputEventKey and event.pressed and (event as InputEventKey).physical_keycode == KEY_ESCAPE:
+	elif event is InputEventKey and event.pressed and not event.echo and (event as InputEventKey).physical_keycode == KEY_ESCAPE:
 		if map_screen.visible:
 			_toggle_map()
 		elif leave.get_connections().is_empty():
