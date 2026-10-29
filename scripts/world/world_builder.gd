@@ -616,9 +616,13 @@ func _build_fish_farm(loc: Dictionary) -> void:
 	for i in 3:  # boats by the ponds, back from the road that leaves past them
 		var p := _at(-4.2 + i * 2.2, -11.0)
 		_piece(Vector3(1.2, 0.5, 3.4), p, Vector3(0.0, 0.5, 0.0), _yaw(0.3 * i), Color(0.5, 0.36, 0.22))
-	for i in 5:
+	for i in 5:  # a net fence, post to post as the ground rises off the shore
 		_piece(Vector3(0.12, 2.0, 0.12), _at(-14.0, -12.0 + i * 3.0), Vector3(0.0, 1.0, 0.0), _yaw(0.0), Color(0.36, 0.3, 0.22))
-	_piece(Vector3(0.04, 1.2, 12.0), _at(-14.0, -6.0), Vector3(0.0, 1.4, 0.0), _yaw(0.0), Color(0.6, 0.6, 0.55))
+		if i > 0:
+			var a := _at(-14.0, -15.0 + i * 3.0)
+			var b := _at(-14.0, -12.0 + i * 3.0)
+			var net := Psx.box(self, Vector3(0.04, 1.2, a.distance_to(b)), (a + b) * 0.5 + Vector3(0.0, 1.4, 0.0), Color(0.6, 0.6, 0.55))
+			net.rotation = Vector3(-atan2(b.y - a.y, 3.0), _yaw(0.0), 0.0)
 	_sign(_at(-8.0, 6.0) + Vector3(0.0, 6.5, 0.0), loc.name.to_upper())
 
 

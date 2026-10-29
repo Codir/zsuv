@@ -135,8 +135,9 @@ func offer(key: String, kind: String) -> Dictionary:
 
 ## Takes job o: on with the cargo, a full tank, the clock from zero. A job in hand is dropped.
 func take(o: Dictionary) -> void:
+	var dropped := ""  # said with what is loaded, as the HUD shows one message at a time
 	if not job.is_empty():
-		message.emit("Dropped: %s for %s" % [job.cargo, job.name])
+		dropped = "Dropped: %s. " % job.cargo
 		_end_job()
 	job = o
 	board_open = false
@@ -146,7 +147,7 @@ func take(o: Dictionary) -> void:
 	_velocities.clear()
 	if o.kind == "stuck":
 		_spawn_car(o.ditch)
-		message.emit("A car slid into %s. Winch it back onto the road" % o.name)
+		message.emit(dropped + "A car slid into %s: winch it out" % o.name)
 		_update_markers()
 		return
 	vehicle.set_cargo(true, o.kind)
@@ -158,7 +159,7 @@ func take(o: Dictionary) -> void:
 			text += ". Fragile: go gently"
 		"heavy":
 			text += ". Heavy: low range on the hills"
-	message.emit(text)
+	message.emit(dropped + text)
 	_update_markers()
 
 

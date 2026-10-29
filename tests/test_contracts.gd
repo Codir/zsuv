@@ -51,7 +51,7 @@ func test_a_new_job_at_the_depot_drops_the_one_in_hand(t: TCase) -> void:
 	var car: StuckCar = c._car
 	c.take(c.offer("farm", "heavy"))
 	t.ok(c.job.kind == "heavy" and v.has_cargo, "the new job is not loaded")
-	t.ok(got.any(func(m: String) -> bool: return m.begins_with("Dropped: pull a car out for the ditch near")), "messages: %s" % [got])
+	t.eq(got[-1], "Dropped: pull a car out. Loaded: groceries. Head for Khutir. Heavy: low range on the hills", "the message")
 	t.ok(not v.winch.bodies.has(car), "the dropped job's car is still there to winch")
 	await t.ticks(200)
 	t.ok(not is_instance_valid(car), "the dropped job's car does not drive off")

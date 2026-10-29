@@ -24,7 +24,7 @@ var rim := 30.0  # how high the land climbs at the map's edge
 var features: Array[Dictionary] = []
 
 # Places: key -> {name, pos, radius, kind (what the world builder puts there), cargo, reward;
-# offroad: no road goes there}.
+# offroad: no road goes there; below: metres its flat is dug in under the ground there}.
 var locations := {}
 var roads: Array[PackedVector2Array] = []
 var road_smooth := 0.0  # metres a road's profile is averaged over (0: it keeps to the ground)
@@ -243,7 +243,7 @@ static func polissia() -> Valley:
 	v.locations = {
 		"depot": {"name": "Old Farm", "pos": Vector2(-85, -80), "radius": 14.0, "kind": "yard"},
 		"fish": {"name": "Fish Farm", "pos": Vector2(62, -22), "radius": 10.0, "kind": "fish_farm",
-			"cargo": "fish feed", "reward": 300},
+			"cargo": "fish feed", "reward": 300, "below": 2.4},  # down on the shore, a gentle way up off the ice
 		"peat": {"name": "Peat Works", "pos": Vector2(-40, 72), "radius": 10.0, "kind": "peat_works",
 			"cargo": "excavator parts", "reward": 350},
 		"village": {"name": "Village", "pos": Vector2(66, 82), "radius": 12.0, "kind": "village_church",

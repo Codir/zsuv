@@ -61,7 +61,7 @@ func generate(v: Valley) -> void:
 
 	var flats: Array = v.locations.values()
 	for f in flats:
-		f.height = base_height(f.pos)
+		f.height = base_height(f.pos) - float(f.get("below", 0.0))
 	var lakes: Array[Dictionary] = []
 	var ditches: Array[Dictionary] = []
 	for ft in v.features:
@@ -97,7 +97,9 @@ func generate(v: Valley) -> void:
 			for l in lakes:
 				var r: float = l.radius
 				var d := p.distance_to(l.pos)
-				h = lerpf(h, l.height, 1.0 - smoothstep(r * 0.8, r + float(l.get("shore", 8.0)), d))
+				var shore := 1.0 - smoothstep(r * 0.8, r + float(l.get("shore", 8.0)), d)
+				h = lerpf(h, l.height, shore)
+				b = lerpf(b, l.height, shore)  # the ground a ramp off a place has to reach
 				if l.get("ice", false):
 					ice = maxf(ice, 1.0 - smoothstep(r * 0.82, r * 0.92, d))
 			# The rim at the map's edge goes on after the flats, so a long ramp off a location
@@ -287,7 +289,7 @@ func _dig(ditches: Array[Dictionary]) -> void:
 		var half: Vector2 = dt.dir * float(dt.length) * 0.5
 		var w: float = dt.width
 		var reach := half.length() + w + DITCH_BANK
-		var road := roads[dt.road]
+		var road := _beside(roads[dt.road], dt.pos, reach + 2.0)
 		for z in range(maxi(0, int(dt.pos.y + HALF - reach)), mini(N, int(dt.pos.y + HALF + reach) + 2)):
 			for x in range(maxi(0, int(dt.pos.x + HALF - reach)), mini(N, int(dt.pos.x + HALF + reach) + 2)):
 				var p := Vector2(x - HALF, z - HALF)
@@ -303,6 +305,32 @@ func _dig(ditches: Array[Dictionary]) -> void:
 						c = q
 				var level := _bilinear(built, c.x, c.y) - float(dt.depth) * _bump(d / w)
 				heights[z * N + x] = lerpf(heights[z * N + x], level, 1.0 - smoothstep(w, w + DITCH_BANK, d))
+
+
+## The stretch of road beside p, reach metres along it either way from its point nearest p: a
+## ditch's level comes from there, not from another leg of the road nearer its far bank.
+static func _beside(road: PackedVector2Array, p: Vector2, reach: float) -> PackedVector2Array:
+	var s0 := 0.0
+	var best := INF
+	var along := 0.0
+	for i in road.size() - 1:
+		var q := Geometry2D.get_closest_point_to_segment(p, road[i], road[i + 1])
+		if p.distance_to(q) < best:
+			best = p.distance_to(q)
+			s0 = along + road[i].distance_to(q)
+		along += road[i].distance_to(road[i + 1])
+	var out := PackedVector2Array()
+	along = 0.0
+	for i in road.size() - 1:
+		var l := road[i].distance_to(road[i + 1])
+		var a := maxf(s0 - reach, along)
+		var b := minf(s0 + reach, along + l)
+		if a < b:
+			if out.is_empty():
+				out.append(road[i].lerp(road[i + 1], (a - along) / l))
+			out.append(road[i].lerp(road[i + 1], (b - along) / l))
+		along += l
+	return out
 
 
 ## How high the road is at its nearest point to p: the ground there, or its smoothed profile.

@@ -57,8 +57,15 @@ its reward times the valley's pay (1, 1.2, 1.4, 1.7, 2.4), and by kind:
 A road is a shelf level across. In the hills (Zakarpattia, the steppe, the pass) its profile is
 averaged over 14-24 m and kept to 20-22% (or what a climb needs, never a step), cut into the
 slope above and filled below, except for 14 m at each end where it crosses a place; two roads
-blend where they meet; hairpins are U turns at the ends of legs that climb across the slope.
-Every road of every valley drives both ways in 4x4 (`tests/test_valleys.gd`).
+blend where they meet; hairpins are U turns at the ends of legs that climb across the slope,
+and the ground between two legs is held to all of the road about as near, so it has no step. A
+lake's shore goes in before the places, so a place on it stays level; the Polissia fish farm sits
+down on its shore, so the road climbs gently off the ice into it. No road climbs more than 0.5 m
+a metre (`tests/test_terrain_shape.gd`), and every road of every valley drives both ways in 4x4
+(`tests/test_valleys.gd`).
+
+A valley's ground is built in 0.4-0.7 s native (a browser takes some 3-5 times that): the road
+nearest each metre is looked up only among the stretches of road listed for its 4 m square.
 
 ## Saved
 
