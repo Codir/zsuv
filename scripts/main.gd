@@ -3,7 +3,10 @@ extends Node3D
 
 const POST_SHADER := preload("res://shaders/post_dither.gdshader")
 
+signal leave  # Esc: back to the valleys (scripts/game.gd)
+
 var valley: Valley  # set before the scene enters the tree; the khutir valley if not
+var profile: Profile  # the same; a profile in memory if not
 var terrain: Terrain
 var vehicle: Vehicle
 var camera_rig: CameraRig
@@ -57,6 +60,8 @@ func _ready() -> void:
 	contracts.spawn_pos = spawn
 	contracts.spawn_yaw = spawn_yaw
 	add_child(contracts)
+	if profile:
+		contracts.profile = profile
 	contracts.setup(vehicle, terrain, locations)
 
 	_setup_post()
@@ -115,8 +120,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and (event as InputEventKey).physical_keycode == KEY_ESCAPE:
 		if map_screen.visible:
 			_toggle_map()
-		else:
+		elif leave.get_connections().is_empty():
 			get_tree().quit()
+		else:
+			leave.emit()
 
 
 func _toggle_map() -> void:

@@ -9,7 +9,13 @@ const RECOVER_COST := 100
 
 var vehicle: Vehicle
 var terrain: Terrain
-var money := 0
+var profile := Profile.new()  # the player's, saved; one kept in memory when there is none
+var money: int:
+	get:
+		return profile.money
+	set(value):
+		profile.money = value
+		profile.save()
 var prompt := ""
 var spawn_pos := Vector3.ZERO
 var spawn_yaw := 0.0

@@ -22,7 +22,7 @@ F     winch, Shift - reel in
 M     map
 T     tow back to depot
 RMB   camera, wheel - zoom
-F1    hide help"""
+F1    hide help  ESC valleys"""
 
 var vehicle: Vehicle
 var contracts: Contracts
