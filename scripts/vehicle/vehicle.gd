@@ -215,7 +215,12 @@ func _process(delta: float) -> void:
 		if spraying:
 			w.spray.global_position = w.point + up * 0.15
 			w.spray.direction = Vector3(0.0, 1.0, 1.2 * signf(w.request))
-			w.spray.color = Color(0.3, 0.22, 0.15) if w.surface.mud > w.surface.snow else Color(0.9, 0.93, 1.0)
+			w.spray.color = Color(0.3, 0.22, 0.15) if w.surface.mud > w.surface.snow else _layer_spray()
+
+
+## What flies off a spinning wheel that is not mud: snow, sand or dust, as the valley has it.
+func _layer_spray() -> Color:
+	return terrain.valley.layer_color.lightened(0.15) if terrain else Color(0.9, 0.93, 1.0)
 
 
 func _read_input() -> void:
@@ -269,9 +274,17 @@ func _autodrive_input() -> void:
 	steer_input = clampf(-angle * 1.6, -1.0, 1.0)
 
 	var v := autodrive_speed
-	if not last:  # ease off before a sharp bend
+	if not last:  # ease off before a sharp bend: how far the road turns over the next 15 m
 		var from := path[_autodrive_index - 1] if _autodrive_index > 0 else _autodrive_from
-		var bend := absf((wp - from).angle_to(path[_autodrive_index + 1] - wp))
+		var ahead := wp
+		var left := 15.0
+		for i in range(_autodrive_index + 1, path.size()):
+			var step := path[i - 1].distance_to(path[i])
+			ahead = path[i - 1].lerp(path[i], minf(left / maxf(step, 0.001), 1.0))
+			left -= step
+			if left <= 0.0:
+				break
+		var bend := absf((wp - from).angle_to(ahead - wp))
 		var bend_v := lerpf(autodrive_speed, 4.0, clampf(bend / 1.2, 0.0, 1.0))
 		v = lerpf(bend_v, v, clampf((to_wp - 6.0) / 25.0, 0.0, 1.0))
 	else:

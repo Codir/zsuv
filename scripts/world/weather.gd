@@ -47,7 +47,7 @@ static func make(kind: Kind, v: Valley) -> Weather:
 		Kind.SUN:
 			w.sky = Color(0.58, 0.72, 0.92) if not winter else Color(0.62, 0.74, 0.9)
 			w.fog = Color(0.78, 0.82, 0.88)
-			w.fog_density = 0.007
+			w.fog_density = 0.005
 			w.ambient = Color(0.72, 0.74, 0.78)
 			w.ambient_energy = 0.7
 			w.sun = Color(1.0, 0.94, 0.82)

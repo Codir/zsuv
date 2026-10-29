@@ -34,6 +34,9 @@ var roads: Array[PackedVector2Array] = []
 var _track_dirty := false
 var _track_timer := 0.0
 var _base: FastNoiseLite
+var _profiles: Array[Dictionary] = []  # per road: {at: cumulative length at each point, h: heights every PROFILE_STEP}
+
+const PROFILE_STEP := 2.0
 
 
 func generate(v: Valley) -> void:
@@ -60,6 +63,10 @@ func generate(v: Valley) -> void:
 			"sea":
 				sea = ft
 
+	_profiles.clear()
+	for road in roads:
+		_profiles.append(_profile(road, v.road_smooth))
+
 	heights.resize(N * N)
 	snow_img = Image.create_empty(N, N, false, Image.FORMAT_RGBA8)
 	for z in N:
@@ -69,10 +76,12 @@ func generate(v: Valley) -> void:
 			var h := b + detail.get_noise_2d(p.x, p.y) * v.detail
 			# A road is a shelf: as high as the ground at its centre line, level across.
 			var near := _road_closest(p)
-			var rd := near.x
+			var rd: float = near.x
 			var road_t := 1.0 - smoothstep(ROAD_HALF_WIDTH, ROAD_HALF_WIDTH + 4.0, rd)
-			if road_t > 0.0:
-				h = lerpf(h, base_height(Vector2(near.y, near.z)), road_t)
+			# A smoothed road is laid after the ramps off the places, which it was smoothed over.
+			var road_last := v.road_smooth > 0.0
+			if road_t > 0.0 and not road_last:
+				h = lerpf(h, _road_height(near), road_t)
 			# The rim at the map's edge goes on after the flats, so a long ramp off a location
 			# near the edge cannot drag the rim down with it. No rim on the sea's side.
 			var rim := _rim(p, sea) * 30.0 * (1.0 - road_t)
@@ -82,15 +91,19 @@ func generate(v: Valley) -> void:
 				var d := p.distance_to(f.pos)
 				# The higher the step down to the ground around, the longer the ramp off the
 				# flat, so the roads out of a location stay drivable.
-				var ramp := maxf(10.0, absf(b - f.height) * 5.0)
+				var ramp := clampf(absf(b - f.height) * 5.0, 10.0, v.ramp_max)
 				h = lerpf(h, f.height, 1.0 - smoothstep(r, r + ramp, d))
 				rim *= smoothstep(r, r + 10.0, d)
 				flat_t = maxf(flat_t, 1.0 - smoothstep(r - 3.0, r, d))
+			if road_t > 0.0 and road_last:
+				h = lerpf(h, _road_height(near), road_t)
+				for f in flats:  # a place stays level where the road arrives in it
+					h = lerpf(h, f.height, 1.0 - smoothstep(f.radius - 3.0, f.radius, p.distance_to(f.pos)))
 			var ice := 0.0
 			for l in lakes:
 				var r: float = l.radius
 				var d := p.distance_to(l.pos)
-				h = lerpf(h, l.height, 1.0 - smoothstep(r * 0.8, r + 8.0, d))
+				h = lerpf(h, l.height, 1.0 - smoothstep(r * 0.8, r + float(l.get("shore", 8.0)), d))
 				if l.get("ice", false):
 					ice = maxf(ice, 1.0 - smoothstep(r * 0.82, r * 0.92, d))
 			h += rim
@@ -108,6 +121,8 @@ func generate(v: Valley) -> void:
 			if v.layer_from > -INF:
 				snow *= smoothstep(v.layer_from, v.layer_from + 4.0, h)
 			var mud := smoothstep(v.mud_from, v.mud_from + 0.2, mud_noise.get_noise_2d(p.x, p.y)) * (1.0 - maxf(on_road, flat_t))
+			if v.mud_below < INF:
+				mud *= 1.0 - smoothstep(v.mud_below, v.mud_below + 4.0, h)
 			for pd in v.puddles:
 				var pr: float = pd.radius
 				mud = maxf(mud, 1.0 - smoothstep(pr * 0.5, pr, p.distance_to(pd.pos)))
@@ -135,6 +150,16 @@ func base_height(p: Vector2) -> float:
 				for i in pts.size() - 1:
 					best = minf(best, p.distance_to(Geometry2D.get_closest_point_to_segment(p, pts[i], pts[i + 1])))
 				h -= float(ft.depth) * _bump(best / float(ft.width))
+	return h
+
+
+## The ground at p with the places' flats and their ramps cut in, as the terrain has them.
+func _ramped(p: Vector2) -> float:
+	var b := base_height(p)
+	var h := b
+	for f in valley.locations.values():
+		var ramp := clampf(absf(b - f.height) * 5.0, 10.0, valley.ramp_max)
+		h = lerpf(h, f.height, 1.0 - smoothstep(f.radius, f.radius + ramp, p.distance_to(f.pos)))
 	return h
 
 
@@ -171,22 +196,81 @@ func _side(side: String) -> Vector2:
 	return Vector2(1, 1)  # south
 
 
-## The distance to the nearest road and the nearest point of it: (distance, x, z).
-func _road_closest(p: Vector2) -> Vector3:
+## The nearest road to p: {x: distance, at: its nearest point, road: index, s: metres along it}.
+func _road_closest(p: Vector2) -> Dictionary:
 	var best := INF
-	var at := p
-	for road in roads:
+	var out := {"x": INF, "at": p, "road": -1, "s": 0.0}
+	for r in roads.size():
+		var road := roads[r]
+		var along := 0.0
 		for i in road.size() - 1:
 			var c := Geometry2D.get_closest_point_to_segment(p, road[i], road[i + 1])
 			var d := p.distance_squared_to(c)
 			if d < best:
 				best = d
-				at = c
-	return Vector3(sqrt(best), at.x, at.y)
+				out = {"x": 0.0, "at": c, "road": r, "s": along + road[i].distance_to(c)}
+			along += road[i].distance_to(road[i + 1])
+	out.x = sqrt(best)
+	return out
 
 
 func road_distance(p: Vector2) -> float:
 	return _road_closest(p).x
+
+
+## How high the road is at its nearest point: the ground there, or its smoothed profile.
+func _road_height(near: Dictionary) -> float:
+	var prof: Dictionary = _profiles[near.road]
+	if prof.is_empty():
+		return base_height(near.at)
+	var hs: PackedFloat32Array = prof.h
+	var k := clampf(float(near.s) / PROFILE_STEP, 0.0, hs.size() - 1.001)
+	var i := int(k)
+	return lerpf(hs[i], hs[i + 1], k - i)
+
+
+## A road's heights every PROFILE_STEP metres, averaged over smooth metres either way so it cuts
+## through bumps and fills hollows, but the ground's own height at both ends, where it meets a
+## place or another road. Empty when smooth is 0: the road keeps to the ground.
+func _profile(road: PackedVector2Array, smooth: float) -> Dictionary:
+	if smooth <= 0.0:
+		return {}
+	var raw := PackedFloat32Array()
+	var total := 0.0
+	for i in road.size() - 1:
+		total += road[i].distance_to(road[i + 1])
+	var seg := 0
+	var seg_start := 0.0
+	var s := 0.0
+	while s <= total + PROFILE_STEP:
+		var at := minf(s, total)
+		while seg < road.size() - 2 and at > seg_start + road[seg].distance_to(road[seg + 1]):
+			seg_start += road[seg].distance_to(road[seg + 1])
+			seg += 1
+		var t := (at - seg_start) / maxf(road[seg].distance_to(road[seg + 1]), 0.001)
+		raw.append(_ramped(road[seg].lerp(road[seg + 1], clampf(t, 0.0, 1.0))))
+		s += PROFILE_STEP
+	var w := int(smooth / PROFILE_STEP)
+	var hs := PackedFloat32Array()
+	hs.resize(raw.size())
+	for k in raw.size():
+		var sum := 0.0
+		var n := 0
+		for j in range(maxi(k - w, 0), mini(k + w, raw.size() - 1) + 1):
+			sum += raw[j]
+			n += 1
+		var end_t := smoothstep(0.0, smooth, minf(k * PROFILE_STEP, total - k * PROFILE_STEP))
+		hs[k] = lerpf(raw[k], sum / n, end_t)
+	# No steeper than the valley's grade, both ways: the road cuts into the slope above it and
+	# is filled below, as a hairpin turning up a mountainside has to be.
+	var rise := valley.road_grade * PROFILE_STEP
+	if rise > 0.0:
+		for round in 4:  # the ends stay where the places are
+			for k in range(1, hs.size() - 1):
+				hs[k] = clampf(hs[k], hs[k - 1] - rise, hs[k - 1] + rise)
+			for k in range(hs.size() - 2, 0, -1):
+				hs[k] = clampf(hs[k], hs[k + 1] - rise, hs[k + 1] + rise)
+	return {"h": hs}
 
 
 func get_height(x: float, z: float) -> float:
