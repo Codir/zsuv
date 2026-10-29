@@ -22,13 +22,12 @@ All four picked on 2026-10-28; the throttle fix (smokeyai) shipped in 0.1.1, the
 and the sound (Philip) in 0.1.2. Next: the maps and challenges in 0.2.0.
 
 - [x] **More maps and challenges** (Philip, jam). A release of its own, 0.2.0. The owner's plan
-  (2026-10-29): three valleys of the same size, each with its own locations, time of day and
-  weather, picked on a valley screen: today's khutir valley, a spring thaw in Polissia (mud, bog,
-  ice on a lake) and a Carpathian pass (switchbacks, deep snow, a ridge). The next valley opens
-  for money earned in the one before (about $1500), saved, in the browser too. New jobs beside
-  the plain delivery: against the clock with gold / silver / bronze and a record per job; fragile
-  cargo that hard knocks and landings break, paying less; heavy cargo that sits the truck low,
-  sinks it deeper and drinks more fuel; a stuck car to winch out of a ditch back onto the road.
+  (2026-10-29, `docs/valleys.md`): six valleys picked on a start screen with a preview of each,
+  from the khutir valley's winter dusk to a sunny steppe, Zakarpattia in spring, a foggy Polissia
+  thaw, the Oleshky Sands in summer and a Carpathian pass at night in a blizzard; each bought for
+  more than the last ($1500 to $8500), its weather switchable, the progress saved. A job board
+  at the depot: against the clock (gold / silver / bronze, records), fragile, heavy, and a stuck
+  car to winch out of a ditch.
 
 ## Comments
 
