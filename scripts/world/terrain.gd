@@ -35,9 +35,20 @@ var _track_dirty := false
 var _track_timer := 0.0
 var _base: FastNoiseLite
 var _profiles: Array[Dictionary] = []  # per road: {at: cumulative length at each point, h: heights every PROFILE_STEP}
+var _seg_road := PackedInt32Array()  # every segment of every road in order: its road,
+var _seg_a := PackedVector2Array()  # its ends,
+var _seg_b := PackedVector2Array()
+var _seg_along := PackedFloat64Array()  # and the metres along its road where it starts
+var _all_segs := PackedInt32Array()
+var _grid: Array[PackedInt32Array] = []  # per GRID_CELL square of the map: the segments within NEAR m of it
 
 const PROFILE_STEP := 2.0
+const DITCH_BANK := 2.4  # how far past its edge a ditch blends back into the ground
 const PIN := 14.0  # a smoothed road keeps to the ground this far from its ends: across the place there
+const NEAR := 12.0  # the ground looks at the roads this near it: their shelves and where two blend
+const GRID_CELL := 4.0
+const GRID := int(SIZE / GRID_CELL) + 1  # squares a side, one past the map's far edge
+const NO_ROAD := {"x": INF}  # _road_near where no road is that near
 
 
 func generate(v: Valley) -> void:
@@ -50,7 +61,7 @@ func generate(v: Valley) -> void:
 
 	var flats: Array = v.locations.values()
 	for f in flats:
-		f.height = base_height(f.pos)
+		f.height = base_height(f.pos) - float(f.get("below", 0.0))
 	var lakes: Array[Dictionary] = []
 	var ditches: Array[Dictionary] = []
 	for ft in v.features:
@@ -64,6 +75,7 @@ func generate(v: Valley) -> void:
 	_profiles.clear()
 	for road in roads:
 		_profiles.append(_profile(road, v.road_smooth))
+	_index_roads()
 
 	heights.resize(N * N)
 	snow_img = Image.create_empty(N, N, false, Image.FORMAT_RGBA8)
@@ -73,13 +85,23 @@ func generate(v: Valley) -> void:
 			var b := base_height(p)
 			var h := b + detail.get_noise_2d(p.x, p.y) * v.detail
 			# A road is a shelf: as high as the ground at its centre line, level across.
-			var near := _road_closest(p)
+			var near := _road_near(p)
 			var rd: float = near.x
 			var road_t := 1.0 - smoothstep(ROAD_HALF_WIDTH, ROAD_HALF_WIDTH + 4.0, rd)
 			# A smoothed road is laid after the ramps off the places, which it was smoothed over.
 			var road_last := v.road_smooth > 0.0
 			if road_t > 0.0 and not road_last:
-				h = lerpf(h, _road_height(near), road_t)
+				h = lerpf(h, _road_height(p, near), road_t)
+			# A lake and its shore go in before the flats, so a place on the shore stays level.
+			var ice := 0.0
+			for l in lakes:
+				var r: float = l.radius
+				var d := p.distance_to(l.pos)
+				var shore := 1.0 - smoothstep(r * 0.8, r + float(l.get("shore", 8.0)), d)
+				h = lerpf(h, l.height, shore)
+				b = lerpf(b, l.height, shore)  # the ground a ramp off a place has to reach
+				if l.get("ice", false):
+					ice = maxf(ice, 1.0 - smoothstep(r * 0.82, r * 0.92, d))
 			# The rim at the map's edge goes on after the flats, so a long ramp off a location
 			# near the edge cannot drag the rim down with it.
 			var rim := smoothstep(100.0, 126.0, maxf(absf(p.x), absf(p.y))) * v.rim * (1.0 - road_t)
@@ -96,21 +118,10 @@ func generate(v: Valley) -> void:
 			for f in flats:  # a place's own flat wins over another place's long ramp
 				h = lerpf(h, f.height, 1.0 - smoothstep(f.radius - 3.0, f.radius, p.distance_to(f.pos)))
 			if road_t > 0.0 and road_last:
-				h = lerpf(h, _road_height(near), road_t)
+				h = lerpf(h, _road_height(p, near), road_t)
 				for f in flats:  # a place stays level where the road arrives in it
 					h = lerpf(h, f.height, 1.0 - smoothstep(f.radius - 3.0, f.radius, p.distance_to(f.pos)))
-			var ice := 0.0
-			for l in lakes:
-				var r: float = l.radius
-				var d := p.distance_to(l.pos)
-				h = lerpf(h, l.height, 1.0 - smoothstep(r * 0.8, r + float(l.get("shore", 8.0)), d))
-				if l.get("ice", false):
-					ice = maxf(ice, 1.0 - smoothstep(r * 0.82, r * 0.92, d))
 			h += rim
-			for dt in ditches:
-				var half: Vector2 = dt.dir * float(dt.length) * 0.5
-				var d := p.distance_to(Geometry2D.get_closest_point_to_segment(p, dt.pos - half, dt.pos + half))
-				h -= float(dt.depth) * _bump(d / float(dt.width))
 			heights[z * N + x] = h
 
 			var on_road := 1.0 - smoothstep(ROAD_HALF_WIDTH - 0.5, ROAD_HALF_WIDTH + 1.0, rd)
@@ -127,6 +138,7 @@ func generate(v: Valley) -> void:
 			snow *= 1.0 - ice
 			mud *= 1.0 - ice
 			snow_img.set_pixel(x, z, Color(snow, mud, on_road, 1.0 - ice))
+	_dig(ditches)
 
 	_build_visuals()
 	_build_collision()
@@ -171,36 +183,185 @@ func _bump(t: float) -> float:
 ## The nearest road to p: {x: distance, at: its nearest point, road: index, s: metres along it},
 ## and the nearest other road the same way under "other" (empty when there is no other).
 func _road_closest(p: Vector2) -> Dictionary:
+	return _road_scan(p, _all_segs)
+
+
+## _road_closest, but of the roads within NEAR m of p only (only x, INF, when there is none, and
+## other is empty when there is no other that near): it looks only at the segments listed in p's square.
+func _road_near(p: Vector2) -> Dictionary:
+	var segs := _segs_at(p)
+	if segs.is_empty():
+		return NO_ROAD
+	var near := _road_scan(p, segs)
+	if near.x >= NEAR:
+		return NO_ROAD
+	var other: Dictionary = near.other
+	if not other.is_empty() and other.x >= NEAR:
+		near.other = {}
+	return near
+
+
+## The segments listed in p's square of the grid, all those within NEAR m of it; off the grid, all.
+func _segs_at(p: Vector2) -> PackedInt32Array:
+	var gx := floori((p.x + HALF) / GRID_CELL)
+	var gz := floori((p.y + HALF) / GRID_CELL)
+	return _grid[gz * GRID + gx] if gx >= 0 and gz >= 0 and gx < GRID and gz < GRID else _all_segs
+
+
+## The nearest road to p over the segments segs (in order, as _seg_road lists them), as _road_closest.
+func _road_scan(p: Vector2, segs: PackedInt32Array) -> Dictionary:
 	var best := {"x": INF, "at": p, "road": -1, "s": 0.0}
 	var other := {}
-	for r in roads.size():
-		var road := roads[r]
-		var along := 0.0
-		var mine := {"x": INF}
-		for i in road.size() - 1:
-			var c := Geometry2D.get_closest_point_to_segment(p, road[i], road[i + 1])
+	var k := 0
+	while k < segs.size():
+		var r := _seg_road[segs[k]]
+		var x := INF
+		var at := p
+		var s := 0.0
+		while k < segs.size() and _seg_road[segs[k]] == r:
+			var g := segs[k]
+			var c := Geometry2D.get_closest_point_to_segment(p, _seg_a[g], _seg_b[g])
 			var d := p.distance_to(c)
-			if d < mine.x:
-				mine = {"x": d, "at": c, "road": r, "s": along + road[i].distance_to(c)}
-			along += road[i].distance_to(road[i + 1])
-		if mine.x < best.x:
+			if d < x:
+				x = d
+				at = c
+				s = _seg_along[g] + _seg_a[g].distance_to(c)
+			k += 1
+		var mine := {"x": x, "at": at, "road": r, "s": s}
+		if x < best.x:
 			other = best if best.road >= 0 else {}
 			best = mine
-		elif other.is_empty() or mine.x < other.x:
+		elif other.is_empty() or x < other.x:
 			other = mine
 	best.other = other
 	return best
 
 
+## Lists the roads' segments, and in each square of the grid the ones that come within NEAR m of
+## any point in it, so a point of the ground looks at a few segments, not every one.
+func _index_roads() -> void:
+	_seg_road.clear()
+	_seg_a.clear()
+	_seg_b.clear()
+	_seg_along.clear()
+	for r in roads.size():
+		var road := roads[r]
+		var along := 0.0
+		for i in road.size() - 1:
+			_seg_road.append(r)
+			_seg_a.append(road[i])
+			_seg_b.append(road[i + 1])
+			_seg_along.append(along)
+			along += road[i].distance_to(road[i + 1])
+	_all_segs = PackedInt32Array(range(_seg_road.size()))
+	var cells: Array[PackedInt32Array] = []
+	cells.resize(GRID * GRID)
+	var reach := NEAR + GRID_CELL * sqrt(0.5) + 0.5  # from a square's middle, and some to spare
+	for g in _seg_road.size():
+		var lo := (_seg_a[g].min(_seg_b[g]) + Vector2(HALF - reach, HALF - reach)) / GRID_CELL
+		var hi := (_seg_a[g].max(_seg_b[g]) + Vector2(HALF + reach, HALF + reach)) / GRID_CELL
+		for gz in range(maxi(floori(lo.y), 0), mini(floori(hi.y), GRID - 1) + 1):
+			for gx in range(maxi(floori(lo.x), 0), mini(floori(hi.x), GRID - 1) + 1):
+				var centre := Vector2((gx + 0.5) * GRID_CELL - HALF, (gz + 0.5) * GRID_CELL - HALF)
+				if centre.distance_to(Geometry2D.get_closest_point_to_segment(centre, _seg_a[g], _seg_b[g])) < reach:
+					var cell := cells[gz * GRID + gx]
+					cell.append(g)
+					cells[gz * GRID + gx] = cell
+	_grid = cells
+
+
 func road_distance(p: Vector2) -> float:
-	return _road_closest(p).x
+	var near := _road_near(p)
+	return near.x if near.x < INF else _road_closest(p).x
 
 
-## How high the road is at its nearest point: the ground there, or its smoothed profile. Where
-## two smoothed roads meet, their profiles blend over the 4 m where both are about as near, so
-## a junction has no step in it.
-func _road_height(near: Dictionary) -> float:
+## The ground on the road's centre line at its point nearest p, as built.
+func road_height(p: Vector2) -> float:
+	var at: Vector2 = _road_closest(p).at
+	return get_height(at.x, at.y)
+
+
+## Digs the ditches into the finished ground: each a trench at the level of the road beside it, cut
+## into a slope above the road or banked up on one below it, so a car slid in stays in.
+func _dig(ditches: Array[Dictionary]) -> void:
+	var built := heights.duplicate()
+	for dt in ditches:
+		var half: Vector2 = dt.dir * float(dt.length) * 0.5
+		var w: float = dt.width
+		var reach := half.length() + w + DITCH_BANK
+		var road := _beside(roads[dt.road], dt.pos, reach + 2.0)
+		for z in range(maxi(0, int(dt.pos.y + HALF - reach)), mini(N, int(dt.pos.y + HALF + reach) + 2)):
+			for x in range(maxi(0, int(dt.pos.x + HALF - reach)), mini(N, int(dt.pos.x + HALF + reach) + 2)):
+				var p := Vector2(x - HALF, z - HALF)
+				var d := p.distance_to(Geometry2D.get_closest_point_to_segment(p, dt.pos - half, dt.pos + half))
+				if d >= w + DITCH_BANK:
+					continue
+				var c := Vector2.ZERO
+				var best := INF
+				for i in road.size() - 1:
+					var q := Geometry2D.get_closest_point_to_segment(p, road[i], road[i + 1])
+					if p.distance_to(q) < best:
+						best = p.distance_to(q)
+						c = q
+				var level := _bilinear(built, c.x, c.y) - float(dt.depth) * _bump(d / w)
+				heights[z * N + x] = lerpf(heights[z * N + x], level, 1.0 - smoothstep(w, w + DITCH_BANK, d))
+
+
+## The stretch of road beside p, reach metres along it either way from its point nearest p: a
+## ditch's level comes from there, not from another leg of the road nearer its far bank.
+static func _beside(road: PackedVector2Array, p: Vector2, reach: float) -> PackedVector2Array:
+	var s0 := 0.0
+	var best := INF
+	var along := 0.0
+	for i in road.size() - 1:
+		var q := Geometry2D.get_closest_point_to_segment(p, road[i], road[i + 1])
+		if p.distance_to(q) < best:
+			best = p.distance_to(q)
+			s0 = along + road[i].distance_to(q)
+		along += road[i].distance_to(road[i + 1])
+	var out := PackedVector2Array()
+	along = 0.0
+	for i in road.size() - 1:
+		var l := road[i].distance_to(road[i + 1])
+		var a := maxf(s0 - reach, along)
+		var b := minf(s0 + reach, along + l)
+		if a < b:
+			if out.is_empty():
+				out.append(road[i].lerp(road[i + 1], (a - along) / l))
+			out.append(road[i].lerp(road[i + 1], (b - along) / l))
+		along += l
+	return out
+
+
+## How high the road is at its nearest point to p: the ground there, or its smoothed profile.
+## Where two smoothed roads meet, their profiles blend over the 4 m where both are about as near,
+## so a junction has no step in it. Beside a smoothed road, where a stretch of it farther along
+## comes about as near (the other leg of a hairpin), the profile is averaged over all of the road
+## about as near, every PROFILE_STEP weighed by how near, so where the nearest point jumps from
+## one leg to the other the ground does not step.
+func _road_height(p: Vector2, near: Dictionary) -> float:
 	var h := _profile_height(near)
+	var off := smoothstep(ROAD_HALF_WIDTH, ROAD_HALF_WIDTH + 1.0, near.x)  # on the road, its own profile
+	if off > 0.0 and not _profiles[near.road].is_empty():
+		var sum := 0.0
+		var weights := 0.0
+		var far := 0.0  # how near a stretch more than 4-8 m along the road comes
+		for g in _segs_at(p):
+			if _seg_road[g] != near.road:
+				continue
+			var a := _seg_a[g]
+			var along := _seg_along[g]
+			var length := a.distance_to(_seg_b[g])
+			var s := ceilf(along / PROFILE_STEP) * PROFILE_STEP
+			while s < along + length:
+				var w := 1.0 - smoothstep(0.0, 4.0, p.distance_to(a.lerp(_seg_b[g], (s - along) / length)) - near.x)
+				if w > 0.0:
+					sum += w * _profile_at(near.road, s)
+					weights += w
+					far = maxf(far, w * smoothstep(4.0, 8.0, absf(s - float(near.s))))
+				s += PROFILE_STEP
+		if weights > 0.0:
+			h = lerpf(h, sum / weights, off * far)
 	var other: Dictionary = near.other
 	if valley.road_smooth > 0.0 and not other.is_empty() and other.x - near.x < 4.0:
 		h = lerpf(h, _profile_height(other), 0.5 * (1.0 - smoothstep(0.0, 4.0, other.x - near.x)))
@@ -208,11 +369,15 @@ func _road_height(near: Dictionary) -> float:
 
 
 func _profile_height(near: Dictionary) -> float:
-	var prof: Dictionary = _profiles[near.road]
-	if prof.is_empty():
+	if _profiles[near.road].is_empty():
 		return base_height(near.at)
-	var hs: PackedFloat32Array = prof.h
-	var k := clampf(float(near.s) / PROFILE_STEP, 0.0, hs.size() - 1.001)
+	return _profile_at(near.road, near.s)
+
+
+## Road r's smoothed profile s metres along it.
+func _profile_at(r: int, s: float) -> float:
+	var hs: PackedFloat32Array = _profiles[r].h
+	var k := clampf(s / PROFILE_STEP, 0.0, hs.size() - 1.001)
 	var i := int(k)
 	return lerpf(hs[i], hs[i + 1], k - i)
 
@@ -269,6 +434,10 @@ func _profile(road: PackedVector2Array, smooth: float) -> Dictionary:
 
 
 func get_height(x: float, z: float) -> float:
+	return _bilinear(heights, x, z)
+
+
+static func _bilinear(hs: PackedFloat32Array, x: float, z: float) -> float:
 	var fx := clampf(x + HALF, 0.0, SIZE - 0.001)
 	var fz := clampf(z + HALF, 0.0, SIZE - 0.001)
 	var ix := int(fx)
@@ -276,7 +445,7 @@ func get_height(x: float, z: float) -> float:
 	var tx := fx - ix
 	var tz := fz - iz
 	var i := iz * N + ix
-	return lerpf(lerpf(heights[i], heights[i + 1], tx), lerpf(heights[i + N], heights[i + N + 1], tx), tz)
+	return lerpf(lerpf(hs[i], hs[i + 1], tx), lerpf(hs[i + N], hs[i + N + 1], tx), tz)
 
 
 func sample(pos: Vector3) -> Surface:

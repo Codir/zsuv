@@ -19,11 +19,12 @@ The owner's account is **Codirs**: a post by Codirs is an answer.
 Changes players asked for. `[x]` is in the plan for the next release (the owner's pick), `[ ]` is
 not yet. When a picked one ships, its CHANGELOG line names who asked, and it leaves this list.
 All four picked on 2026-10-28 have shipped: the throttle fix (smokeyai) in 0.1.1, the controls
-hint and the sound (Philip) in 0.1.2, the maps and challenges (Philip) in 0.2.0, five valleys and
-a job board (`docs/valleys.md`).
+hint and the sound (Philip) in 0.1.2, the maps and challenges (Philip) in 0.2.2, five valleys and
+a job board (`docs/valleys.md`); 0.1.2 had no build of its own, so 0.2.2 is the first players get
+of the last three.
 
 - [ ] **Different trucks for different loads, and trailers, as in SnowRunner** (the owner,
-  2026-10-29, for 0.3.0 after 0.2.0 ships). Bought in a garage at the depot and kept for every
+  2026-10-29, for 0.3.0 after 0.2.2 ships). Bought in a garage at the depot and kept for every
   valley: a heavy 6x6 truck, a tractor unit with a semi-trailer for long loads (logs, pipes,
   turbine blades), a tractor with a trailer for bog and deep snow, and a trailer for the pickup.
   Heavy loads only go on the heavy ones; the board says what a job needs.

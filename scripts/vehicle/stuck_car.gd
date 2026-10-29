@@ -1,7 +1,8 @@
 class_name StuckCar
 extends RigidBody3D
 ## A car slid into a ditch, its hazard lights blinking, waiting for a winch: a boxy little sedan
-## of 1100 kg that slides when pulled. Its towing eye is at the front.
+## of 1100 kg that slides when pulled, heavy low down so a pull up the bank does not roll it. Its
+## towing eye is at the front.
 
 const HOOK := Vector3(0.0, 0.45, -2.1)
 const COLOURS := [Color(0.82, 0.76, 0.6), Color(0.55, 0.12, 0.1), Color(0.4, 0.46, 0.52), Color(0.25, 0.4, 0.3)]
@@ -12,6 +13,9 @@ var _t := 0.0
 
 func _init(colour := 0) -> void:
 	mass = 1100.0
+	center_of_mass_mode = CENTER_OF_MASS_MODE_CUSTOM
+	center_of_mass = Vector3(0.0, 0.3, 0.0)
+	angular_damp = 1.0
 	can_sleep = false
 	var m := PhysicsMaterial.new()
 	m.friction = 0.45
@@ -31,15 +35,35 @@ func _init(colour := 0) -> void:
 	Psx.box(self, Vector3(0.12, 0.12, 0.2), HOOK, Color(0.3, 0.3, 0.32))
 
 
+## In ditch d (a valley's, by road d.pos), nose up towards the road and a little along it, so a
+## pull from the road brings it up the bank head first.
+func slide_into(d: Dictionary, terrain: Terrain) -> void:
+	var at: Vector2 = d.at
+	var out: Vector2 = ((d.pos as Vector2) - at).normalized()
+	var nose: Vector2 = (out * 0.9 + (d.dir as Vector2) * 0.35).normalized()
+	global_transform = Transform3D(Basis(Vector3.UP, atan2(-nose.x, -nose.y)) * Basis(Vector3.FORWARD, 0.25),
+		Vector3(at.x, terrain.get_height(at.x, at.y) + 0.7, at.y))
+
+
 func hook_point() -> Vector3:
 	return global_transform * HOOK
 
 
-## Back on the road: its middle on the road or its shoulder, upright, at rest.
+## Back on the road: out of the ditch, up by the road's edge at the road's level (a truck in the
+## middle of the road reels it in that far), at rest. On its roof counts too.
 func on_road(terrain: Terrain) -> bool:
-	var p := global_position
-	return terrain.road_distance(Vector2(p.x, p.z)) < Terrain.ROAD_HALF_WIDTH + 1.5 \
-		and global_transform.basis.y.y > 0.85 and linear_velocity.length() < 1.5
+	var p := Vector2(global_position.x, global_position.z)
+	return terrain.road_distance(p) < Terrain.ROAD_HALF_WIDTH + 2.5 \
+		and terrain.get_height(p.x, p.y) > terrain.road_height(p) - 0.6 and linear_velocity.length() < 1.5
+
+
+func upright() -> bool:
+	return global_transform.basis.y.y > 0.7
+
+
+## Drives off after the given seconds (gone with the valley if that goes first).
+func drive_off(after: float) -> void:
+	create_tween().tween_callback(queue_free).set_delay(after)
 
 
 func _process(delta: float) -> void:

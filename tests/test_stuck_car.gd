@@ -1,7 +1,7 @@
 extends RefCounted
-## A car in a ditch: every valley digs one beside each road with room around it; the board's job
-## puts a car in it; the winch hooks the car, the truck holds while it pulls, and the car back on
-## the road pays.
+## A car in a ditch: every valley digs one beside each road with room around it, clear of the
+## road (on a bend too); the board's job puts a car in it; the winch hooks the car, the truck holds
+## while it pulls, and the car back on the road pays, but not one that got there by itself.
 
 
 func test_every_road_has_a_ditch_with_room(t: TCase) -> void:
@@ -9,6 +9,16 @@ func test_every_road_has_a_ditch_with_room(t: TCase) -> void:
 		t.ok(v.ditches.size() >= v.roads.size() - 1, "%s: %d ditches for %d roads" % [v.id, v.ditches.size(), v.roads.size()])
 		for d in v.ditches:
 			t.ok(absf((d.pos as Vector2).distance_to(d.at) - 7.0) < 0.01, "%s: a ditch off its road" % v.id)
+		for ft in v.features:
+			if ft.type != "ditch":
+				continue
+			for k in 11:
+				var q: Vector2 = ft.pos + (ft.dir as Vector2) * Valley.DITCH_LENGTH * (k / 10.0 - 0.5)
+				var near := INF
+				for road in v.roads:
+					for i in road.size() - 1:
+						near = minf(near, q.distance_to(Geometry2D.get_closest_point_to_segment(q, road[i], road[i + 1])))
+				t.ok(near > Terrain.ROAD_HALF_WIDTH + Valley.DITCH_WIDTH - 0.2, "%s: the ditch at %s cuts into a road" % [v.id, ft.pos])
 	var close := 0
 	for d in t.world.valley.ditches:
 		for p in t.world.builder.tree_points:
@@ -17,12 +27,26 @@ func test_every_road_has_a_ditch_with_room(t: TCase) -> void:
 	t.eq(close, 0, "trees by the khutir valley's ditches")
 
 
+func test_a_car_on_the_road_by_itself_is_not_paid(t: TCase) -> void:
+	var c: Contracts = t.world.contracts
+	var v: Vehicle = t.world.vehicle
+	c.call("_end_job")
+	c.money = 0
+	var o := c.offer_stuck(1)
+	c.take(o)
+	var car: StuckCar = c._car
+	var p: Vector2 = o.ditch.pos
+	car.global_transform = Transform3D(Basis(), Vector3(p.x, t.world.terrain.get_height(p.x, p.y) + 0.8, p.y))
+	await t.ticks(120)
+	t.ok(car.on_road(t.world.terrain), "the car is not on the road")
+	t.ok(not c.job.is_empty() and c.money == 0, "paid for a car the winch never had")
+	c.call("_end_job")
+
+
 func test_the_winch_pulls_the_car_back_onto_the_road(t: TCase) -> void:
 	var c: Contracts = t.world.contracts
 	var v: Vehicle = t.world.vehicle
-	c.job = {}
-	c.board_open = false
-	v.set_cargo(false)
+	c.call("_end_job")
 	c.money = 0
 	var o := c.offer_stuck(0)
 	t.eq(o.reward, 300, "a stuck car pays in the khutir valley")

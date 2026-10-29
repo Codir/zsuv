@@ -60,6 +60,7 @@ var _velocities: Array[Vector3] = []  # the last JOLT_TICKS
 var _teleports := 0
 var _jolt_wait := 0.0
 var _car: StuckCar  # the stuck job's car, while there is one
+var _pulled := false  # the winch has had hold of it
 
 
 func setup(v: Vehicle, t: Terrain, locations: Dictionary) -> void:
@@ -132,8 +133,12 @@ func offer(key: String, kind: String) -> Dictionary:
 	return o
 
 
-## Takes job o: on with the cargo, a full tank, the clock from zero.
+## Takes job o: on with the cargo, a full tank, the clock from zero. A job in hand is dropped.
 func take(o: Dictionary) -> void:
+	var dropped := ""  # said with what is loaded, as the HUD shows one message at a time
+	if not job.is_empty():
+		dropped = "Dropped: %s. " % job.cargo
+		_end_job()
 	job = o
 	board_open = false
 	clock = 0.0
@@ -142,7 +147,7 @@ func take(o: Dictionary) -> void:
 	_velocities.clear()
 	if o.kind == "stuck":
 		_spawn_car(o.ditch)
-		message.emit("A car slid into %s. Winch it back onto the road" % o.name)
+		message.emit(dropped + "A car slid into %s: winch it out" % o.name)
 		_update_markers()
 		return
 	vehicle.set_cargo(true, o.kind)
@@ -154,7 +159,7 @@ func take(o: Dictionary) -> void:
 			text += ". Fragile: go gently"
 		"heavy":
 			text += ". Heavy: low range on the hills"
-	message.emit(text)
+	message.emit(dropped + text)
 	_update_markers()
 
 
@@ -184,13 +189,16 @@ func objective_text() -> String:
 
 ## The board as the HUD shows it (the prompt under it says which keys take a job).
 func board_text() -> String:
-	var lines := PackedStringArray(["JOB BOARD - %s" % _depot.name.to_upper(), ""])
+	var title := "JOB BOARD - %s" % _depot.name.to_upper()
+	if not job.is_empty():
+		title += "   (a new job drops %s)" % job.cargo
+	var lines := PackedStringArray([title, ""])
 	for i in offers.size():
 		var o := offers[i]
 		var extra := ""
 		if o.kind == "timed":
 			extra = "  gold %s" % clock_text(o.medals[0])
-			var best: Dictionary = profile.records.get(o.record, {})
+			var best := profile.record(o.record)
 			if not best.is_empty():
 				extra += "  best %s" % clock_text(best.time)
 		lines.append("%d  %-8s %s -> %s  %d m  $%d%s" % [i + 1, o.kind.to_upper(), o.cargo, o.name, o.route, o.reward, extra])
@@ -234,29 +242,36 @@ func _process(_delta: float) -> void:
 		board_open = false
 	if board_open:
 		prompt = "[1] [2] [3] take a job   [E] close"
-	elif not job.is_empty() and job.kind == "stuck":
-		pass  # near the car the winch says what to do
-	elif not job.is_empty() and _near(job.loc):
+	elif not job.is_empty() and job.kind != "stuck" and _near(job.loc):
 		prompt = "[E] Unload" if slow else "Stop to unload"
 	elif _near(_depot):
-		if job.is_empty():
-			prompt = "[E] Job board" if slow else "Stop at the depot"
-		elif vehicle.fuel < Vehicle.FUEL_CAPACITY - 0.5:
-			prompt = "[E] Refuel" if slow else "Stop to refuel"
+		if not slow:
+			prompt = "Stop at the depot"
+		elif not job.is_empty() and vehicle.fuel < Vehicle.FUEL_CAPACITY - 0.5:
+			prompt = "[E] Refuel, job board"
+		else:
+			prompt = "[E] Job board"
 	elif vehicle.fuel <= 0.0:
 		prompt = "Out of fuel! [T] Tow to depot (-$%d)" % RECOVER_COST
+	# Otherwise, near the stuck car, the winch says what to do.
 
 
 func _physics_process(delta: float) -> void:
 	if vehicle == null or job.is_empty():
 		return
 	clock += delta
-	if job.kind == "stuck" and _car and _car.on_road(terrain):
-		var paid: int = job.reward
-		money += paid
-		message.emit("Back on the road! The driver waves. +$%d" % paid)
-		_drop()
-		return
+	if job.kind == "stuck" and _car:
+		# Paid once the winch has pulled it out, not for a car that rolled out by itself.
+		_pulled = _pulled or vehicle.winch.anchor_body == _car
+		if _pulled and _car.on_road(terrain):
+			var paid: int = job.reward
+			money += paid
+			if _car.upright():
+				message.emit("Back on the road! The driver waves. +$%d" % paid)
+			else:
+				message.emit("On the road, wheels up. The tow can take it from here. +$%d" % paid)
+			_drop()
+			return
 	if job.kind == "fragile":
 		# A jolt: how sharply the truck's velocity changed over 50 ms, landings and knocks alike
 		# (one tick alone has spikes in it that no load would feel).
@@ -309,11 +324,10 @@ func _interact() -> void:
 	if not job.is_empty() and job.kind != "stuck" and _near(job.loc):
 		_deliver()
 	elif _near(_depot):
-		if job.is_empty():
-			board_open = not board_open
-		else:
+		if not job.is_empty() and vehicle.fuel < Vehicle.FUEL_CAPACITY - 0.5:
 			vehicle.fuel = Vehicle.FUEL_CAPACITY
 			message.emit("Tank is full")
+		board_open = not board_open
 
 
 func _deliver() -> void:
@@ -324,7 +338,7 @@ func _deliver() -> void:
 			var m := _medal(clock)
 			pay *= MEDAL_PAY[m] if m < MEDALS.size() else NO_MEDAL_PAY
 			text += " %s in %s." % [MEDALS[m].capitalize() if m < MEDALS.size() else "No medal", clock_text(clock)]
-			var best: Dictionary = profile.records.get(job.record, {})
+			var best := profile.record(job.record)
 			if best.is_empty() or clock < float(best.time):
 				profile.records[job.record] = {"time": clock, "medal": m}
 				profile.save()
@@ -338,20 +352,21 @@ func _deliver() -> void:
 	_drop()
 
 
-## The job is over, delivered or broken: off with the cargo, new jobs on the board. A car pulled
-## out drives off a moment later.
+## The job is over, delivered or broken: off with the cargo, new jobs on the board.
 func _drop() -> void:
+	_end_job()
+	roll_offers()
+	_update_markers()
+
+
+## Off with the cargo; a stuck car lets go of the winch and drives off a moment later.
+func _end_job() -> void:
 	job = {}
 	vehicle.set_cargo(false)
 	if _car:
-		var car := _car
+		vehicle.winch.forget(_car)
+		_car.drive_off(3.0)
 		_car = null
-		vehicle.winch.forget(car)
-		get_tree().create_timer(3.0).timeout.connect(func() -> void:
-			if is_instance_valid(car):
-				car.queue_free())
-	roll_offers()
-	_update_markers()
 
 
 ## The best medal a time still earns: 0 gold, 1 silver, 2 bronze, 3 none.
@@ -368,17 +383,12 @@ func _update_markers() -> void:
 		_markers[key].visible = not job.is_empty() and job.key == key
 
 
-## The stuck job's car in ditch d, nose up towards the road, slid in half sideways.
+## The stuck job's car, in ditch d.
 func _spawn_car(d: Dictionary) -> void:
-	if _car:
-		_car.queue_free()
 	_car = StuckCar.new(rng.randi())
 	add_child(_car)
-	var at: Vector2 = d.at
-	var out: Vector2 = ((d.pos as Vector2) - at).normalized()
-	var nose: Vector2 = (out * 0.6 + (d.dir as Vector2) * 0.8).normalized()
-	_car.global_transform = Transform3D(Basis(Vector3.UP, atan2(-nose.x, -nose.y)) * Basis(Vector3.FORWARD, 0.25),
-		Vector3(at.x, terrain.get_height(at.x, at.y) + 0.7, at.y))
+	_car.slide_into(d, terrain)
+	_pulled = false
 	vehicle.winch.bodies.append(_car)
 
 

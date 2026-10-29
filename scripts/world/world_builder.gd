@@ -37,6 +37,9 @@ func _is_clear(p: Vector2, locations: Dictionary, margin: float) -> bool:
 	for d in valley.ditches:  # room for a stuck car and the truck winching it
 		if p.distance_to(d.at) < 8.0 + margin:
 			return false
+	for ft in valley.features:  # nothing grows on a lake or its ice
+		if ft.type == "lake" and p.distance_to(ft.pos) < float(ft.radius) + margin:
+			return false
 	return true
 
 
@@ -191,23 +194,37 @@ func _ground(x: float, z: float) -> Vector3:
 	return Vector3(x, terrain.get_height(x, z) - 0.3, z)
 
 
+## How far the ground under a footprint of size at pos, turned by yaw, falls below the ground at
+## base: a piece standing at base's height reaches down that much further, so it does not float.
+func _fall(base: Vector3, pos: Vector3, yaw: float, size: Vector3) -> float:
+	var low := INF
+	for i in 3:
+		for k in 3:
+			var p := pos + Basis(Vector3.UP, yaw) * Vector3((i - 1) * size.x * 0.5, 0.0, (k - 1) * size.z * 0.5)
+			low = minf(low, terrain.get_height(p.x, p.z))
+	return maxf(0.0, terrain.get_height(base.x, base.z) - low)
+
+
 func _house(pos: Vector3, yaw: float, size: Vector3, wall: Color, roof: Color, lit := true) -> StaticBody3D:
 	var root := StaticBody3D.new()
 	root.position = pos
 	root.rotation.y = yaw
 	add_child(root)
+	# The walls reach down to the lowest ground under them; the roof, door and window stay.
+	var drop := _fall(pos, pos, yaw, size)
+	var walls := Vector3(size.x, size.y + drop, size.z)
 	var shape := BoxShape3D.new()
-	shape.size = size
+	shape.size = walls
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
-	cs.position = Vector3(0.0, size.y * 0.5, 0.0)
+	cs.position = Vector3(0.0, (size.y - drop) * 0.5, 0.0)
 	root.add_child(cs)
-	Psx.box(root, size, Vector3(0.0, size.y * 0.5, 0.0), wall)
+	Psx.box(root, walls, Vector3(0.0, (size.y - drop) * 0.5, 0.0), wall)
 	var prism := PrismMesh.new()
 	prism.size = Vector3(size.x + 0.6, size.y * 0.5, size.z + 0.6)
 	Psx.mesh(root, prism, Vector3(0.0, size.y * 1.25, 0.0), roof)
 	var front := size.z * 0.5 + 0.05
-	Psx.box(root, Vector3(1.1, 2.0, 0.1), Vector3(-size.x * 0.25, 1.0, front), Color(0.25, 0.16, 0.1))
+	Psx.box(root, Vector3(1.1, 2.0 + drop, 0.1), Vector3(-size.x * 0.25, 1.0 - drop * 0.5, front), Color(0.25, 0.16, 0.1))
 	Psx.box(root, Vector3(1.2, 0.9, 0.1), Vector3(size.x * 0.2, size.y * 0.55, front), WARM_LIGHT, 1.5)
 	if lit:
 		var l := OmniLight3D.new()
@@ -267,13 +284,7 @@ func _frame(loc: Dictionary, ref := Vector2.RIGHT) -> void:
 func _out_dir(loc: Dictionary) -> Vector2:
 	if loc.has("out"):
 		return (loc.out as Vector2).normalized()
-	var c: Vector2 = loc.pos
-	var angles: Array[float] = []
-	for road in terrain.roads:
-		if road[0].distance_to(c) < 1.0:
-			angles.append((road[1] - c).angle())
-		if road[road.size() - 1].distance_to(c) < 1.0:
-			angles.append((road[road.size() - 2] - c).angle())
+	var angles := _ways(loc)
 	if angles.is_empty():
 		return Vector2.RIGHT
 	if angles.size() == 1:
@@ -290,6 +301,18 @@ func _out_dir(loc: Dictionary) -> Vector2:
 	return -Vector2.from_angle(back)
 
 
+## The angles of the roads out of loc.
+func _ways(loc: Dictionary) -> Array[float]:
+	var c: Vector2 = loc.pos
+	var angles: Array[float] = []
+	for road in terrain.roads:
+		if road[0].distance_to(c) < 1.0:
+			angles.append((road[1] - c).angle())
+		if road[road.size() - 1].distance_to(c) < 1.0:
+			angles.append((road[road.size() - 2] - c).angle())
+	return angles
+
+
 ## A point of the layout, on the ground.
 func _at(x: float, z: float) -> Vector3:
 	var p := _c + Vector2(x, z).rotated(_rot)
@@ -301,42 +324,50 @@ func _yaw(y: float) -> float:
 	return y - _rot
 
 
-## A box at offset from base, both turned by yaw; no collision.
+## A box at offset from base, both turned by yaw; no collision. One that stands on the ground
+## (its bottom no higher than the ground at base) reaches down to the lowest ground under it.
 func _piece(size: Vector3, base: Vector3, offset: Vector3, yaw: float, color: Color, emission := 0.0) -> MeshInstance3D:
-	var m := Psx.box(self, size, base + Basis(Vector3.UP, yaw) * offset, color, emission)
+	var at := base + Basis(Vector3.UP, yaw) * offset
+	var drop := 0.0
+	if at.y - size.y * 0.5 <= terrain.get_height(base.x, base.z) + 0.15:
+		drop = _fall(base, at, yaw, size)
+	var m := Psx.box(self, size + Vector3(0.0, drop, 0.0), at - Vector3(0.0, drop * 0.5, 0.0), color, emission)
 	m.rotation.y = yaw
 	return m
 
 
-## A box the truck runs into, standing on the ground at pos.
+## A box the truck runs into, standing on the ground at pos (down to the lowest ground under it).
 func _solid(pos: Vector3, yaw: float, size: Vector3, color: Color) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.position = pos
 	body.rotation.y = yaw
 	add_child(body)
+	var drop := _fall(pos, pos, yaw, size)
+	var box := Vector3(size.x, size.y + drop, size.z)
 	var shape := BoxShape3D.new()
-	shape.size = size
+	shape.size = box
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
-	cs.position = Vector3(0.0, size.y * 0.5, 0.0)
+	cs.position = Vector3(0.0, (size.y - drop) * 0.5, 0.0)
 	body.add_child(cs)
-	Psx.box(body, size, Vector3(0.0, size.y * 0.5, 0.0), color)
+	Psx.box(body, box, Vector3(0.0, (size.y - drop) * 0.5, 0.0), color)
 	return body
 
 
-## A round post or tower the truck runs into.
+## A round post or tower the truck runs into, down to the lowest ground under it.
 func _column(pos: Vector3, radius: float, height: float, color: Color, top := -1.0) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.position = pos
 	add_child(body)
+	var drop := _fall(pos, pos, 0.0, Vector3(radius * 2.0, height, radius * 2.0))
 	var shape := CylinderShape3D.new()
 	shape.radius = radius
-	shape.height = height
+	shape.height = height + drop
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
-	cs.position = Vector3(0.0, height * 0.5, 0.0)
+	cs.position = Vector3(0.0, (height - drop) * 0.5, 0.0)
 	body.add_child(cs)
-	Psx.mesh(body, Psx.cylinder(radius if top < 0.0 else top, radius, height, 8), Vector3(0.0, height * 0.5, 0.0), color)
+	Psx.mesh(body, Psx.cylinder(radius if top < 0.0 else top, radius, height + drop, 8), Vector3(0.0, (height - drop) * 0.5, 0.0), color)
 	return body
 
 
@@ -372,15 +403,19 @@ func _build_khutir(loc: Dictionary) -> void:
 
 
 func _build_sawmill(loc: Dictionary) -> void:
-	var c: Vector2 = loc.pos
-	_house(_ground(c.x, c.y + 6.0), PI, Vector3(9.0, 4.0, 6.0), Color(0.42, 0.28, 0.16), Color(0.85, 0.88, 0.95))
+	# Laid out for the khutir valley's road, which leaves its sawmill to the north; another valley's
+	# sawmill is turned to its own roads.
+	_frame(loc, Vector2(3, -33).normalized())
+	_house(_at(0.0, 6.0), _yaw(PI), Vector3(9.0, 4.0, 6.0), Color(0.42, 0.28, 0.16), Color(0.85, 0.88, 0.95))
+	# The log pile beside the road in, or beside the house where a second road leaves past it.
+	var pile := _at(7.0, -4.0) if _ways(loc).size() < 2 else _at(8.5, 5.0)
 	var logs := Psx.cylinder(0.35, 0.35, 6.0, 7)
 	for row in 3:
 		for i in 4 - row:
-			var p := _ground(c.x + 7.0, c.y - 4.0) + Vector3(0.0, 0.35 + row * 0.62, -1.1 + i * 0.72 + row * 0.36)
+			var p := pile + Basis(Vector3.UP, _yaw(0.0)) * Vector3(0.0, 0.35 + row * 0.62, -1.1 + i * 0.72 + row * 0.36)
 			var m := Psx.mesh(self, logs, p, Color(0.5, 0.33, 0.2))
-			m.rotation.z = PI * 0.5
-	_sign(_ground(c.x, c.y + 6.0) + Vector3(0.0, 7.5, 0.0), loc.name.to_upper())
+			m.rotation = Vector3(0.0, _yaw(0.0), PI * 0.5)
+	_sign(_at(0.0, 6.0) + Vector3(0.0, 7.5, 0.0), loc.name.to_upper())
 
 
 func _build_radio_tower(loc: Dictionary) -> void:
@@ -445,10 +480,14 @@ func _build_yard(loc: Dictionary) -> void:
 func _build_station(loc: Dictionary) -> void:
 	_build_yard(loc)
 	_frame(loc)
-	# A narrow-gauge line behind the yard, and its little green engine.
-	for side in [-0.45, 0.45]:
-		_piece(Vector3(30.0, 0.12, 0.08), _at(-4.0, -15.0), Vector3(0.0, 0.35, side), _yaw(0.0), Color(0.3, 0.3, 0.32))
+	# A narrow-gauge line behind the yard, and its little green engine. The line runs off the flat,
+	# so each rail is laid in pieces over a sleeper each, tilted to the ground under them.
 	for i in 15:
+		for side in [-0.45, 0.45]:
+			var a := _at(-19.0 + i * 2.0, -15.0 + side)
+			var b := _at(-17.0 + i * 2.0, -15.0 + side)
+			var rail := Psx.box(self, Vector3(a.distance_to(b), 0.12, 0.08), (a + b) * 0.5 + Vector3(0.0, 0.35, 0.0), Color(0.3, 0.3, 0.32))
+			rail.rotation = Vector3(0.0, _yaw(0.0), atan2(b.y - a.y, 2.0))
 		_piece(Vector3(0.25, 0.1, 1.4), _at(-18.0 + i * 2.0, -15.0), Vector3(0.0, 0.28, 0.0), _yaw(0.0), Color(0.3, 0.22, 0.15))
 	var engine := _at(-8.0, -15.0)
 	_solid(engine + Vector3(0.0, 0.4, 0.0), _yaw(0.0), Vector3(4.0, 1.4, 1.6), Color(0.15, 0.42, 0.25))
@@ -470,14 +509,18 @@ func _build_elevator(loc: Dictionary) -> void:
 func _build_sheepfold(loc: Dictionary) -> void:
 	_frame(loc)
 	_house(_at(-8.0, 0.0), _yaw(PI * 0.5), Vector3(16.0, 3.0, 6.0), Color(0.66, 0.6, 0.5), Color(0.45, 0.38, 0.3), false)
-	# The pen and its flock.
-	for i in 7:
-		_piece(Vector3(0.15, 1.1, 0.15), _at(-3.0 + i * 1.6, 7.0), Vector3(0.0, 0.55, 0.0), _yaw(0.0), Color(0.4, 0.3, 0.2))
-		_piece(Vector3(0.15, 1.1, 0.15), _at(-3.0 + i * 1.6, 13.0), Vector3(0.0, 0.55, 0.0), _yaw(0.0), Color(0.4, 0.3, 0.2))
-	_piece(Vector3(9.6, 0.1, 0.1), _at(1.8, 7.0), Vector3(0.0, 0.9, 0.0), _yaw(0.0), Color(0.4, 0.3, 0.2))
-	_piece(Vector3(9.6, 0.1, 0.1), _at(1.8, 13.0), Vector3(0.0, 0.9, 0.0), _yaw(0.0), Color(0.4, 0.3, 0.2))
+	# The pen and its flock beside the house, back from the yard where the roads leave it; the rails
+	# run from post to post as the ground rises and falls.
+	for z in [-9.0, -15.0]:
+		for i in 7:
+			_piece(Vector3(0.15, 1.1, 0.15), _at(-10.6 + i * 1.6, z), Vector3(0.0, 0.55, 0.0), _yaw(0.0), Color(0.4, 0.3, 0.2))
+			if i > 0:
+				var a := _at(-12.2 + i * 1.6, z)
+				var b := _at(-10.6 + i * 1.6, z)
+				var rail := Psx.box(self, Vector3(a.distance_to(b), 0.1, 0.1), (a + b) * 0.5 + Vector3(0.0, 0.9, 0.0), Color(0.4, 0.3, 0.2))
+				rail.rotation = Vector3(0.0, _yaw(0.0), atan2(b.y - a.y, 1.6))
 	for i in 9:
-		var p := _at(-2.0 + (i % 3) * 3.1 + _rng.randf() * 0.8, 8.4 + (i / 3) * 1.6)
+		var p := _at(-9.6 + (i % 3) * 3.1 + _rng.randf() * 0.8, -10.4 - (i / 3) * 1.6)
 		var yaw := _rng.randf() * TAU
 		_piece(Vector3(0.9, 0.55, 0.5), p, Vector3(0.0, 0.7, 0.0), yaw, Color(0.9, 0.88, 0.82))
 		_piece(Vector3(0.3, 0.3, 0.3), p, Vector3(0.55, 0.9, 0.0), yaw, Color(0.2, 0.18, 0.16))
@@ -507,23 +550,28 @@ func _build_wind_farm(loc: Dictionary) -> void:
 
 func _build_winery(loc: Dictionary) -> void:
 	_frame(loc)
-	_house(_at(-8.0, 0.0), _yaw(PI * 0.5), Vector3(10.0, 5.5, 7.0), Color(0.9, 0.84, 0.68), Color(0.7, 0.3, 0.18))
+	# The hall stands back between the two roads either side of it, its barrels along its side.
+	_house(_at(-11.8, 0.0), _yaw(PI * 0.5), Vector3(10.0, 5.5, 7.0), Color(0.9, 0.84, 0.68), Color(0.7, 0.3, 0.18))
 	for i in 5:
-		var b := Psx.mesh(self, Psx.cylinder(0.55, 0.55, 1.2, 8), _at(-2.0, 6.0 + i * 1.3) + Vector3(0.0, 0.85, 0.0), Color(0.46, 0.3, 0.16))
-		b.rotation.x = PI * 0.5
-	# Vine rows on the slope around it.
+		var b := Psx.mesh(self, Psx.cylinder(0.55, 0.55, 1.2, 8), _at(-9.6 - i * 1.3, 5.85) + Vector3(0.0, 0.85, 0.0), Color(0.46, 0.3, 0.16))
+		b.rotation = Vector3(PI * 0.5, _yaw(PI * 0.5), 0.0)
+	# Vine rows on the slope around it, clear of the yard and the hall.
 	for row in 8:
 		for k in 7:
 			var x := -24.0 + k * 3.0
 			var z := -26.0 + row * 3.2
-			if Vector2(x, z).length() < float(loc.radius) + 4.0:
+			if Vector2(x, z).length() < float(loc.radius) + 4.0 or (x > -17.0 and absf(z) < 5.6):
 				continue
 			var p := _at(x, z)
 			if terrain.road_distance(Vector2(p.x, p.z)) < Terrain.ROAD_HALF_WIDTH + 2.0:
 				continue
-			_piece(Vector3(2.6, 0.9, 0.5), p, Vector3(0.0, 0.75, 0.0), _yaw(0.0), Color(0.24, 0.42, 0.14))
-			_piece(Vector3(0.1, 1.4, 0.1), p, Vector3(1.3, 0.7, 0.0), _yaw(0.0), Color(0.36, 0.28, 0.18))
-	_sign(_at(-8.0, 0.0) + Vector3(0.0, 9.5, 0.0), loc.name.to_upper())
+			# A row runs from end to end tilted to the slope, its post at one end.
+			var a := _at(x - 1.3, z)
+			var b := _at(x + 1.3, z)
+			var vine := Psx.box(self, Vector3(a.distance_to(b), 0.9, 0.5), (a + b) * 0.5 + Vector3(0.0, 0.75, 0.0), Color(0.24, 0.42, 0.14))
+			vine.rotation = Vector3(0.0, _yaw(0.0), atan2(b.y - a.y, 2.6))
+			_piece(Vector3(0.1, 1.4, 0.1), b, Vector3(0.0, 0.7, 0.0), _yaw(0.0), Color(0.36, 0.28, 0.18))
+	_sign(_at(-11.8, 0.0) + Vector3(0.0, 9.5, 0.0), loc.name.to_upper())
 
 
 func _build_castle(loc: Dictionary) -> void:
@@ -565,12 +613,16 @@ func _build_fish_farm(loc: Dictionary) -> void:
 	_house(_at(-8.0, 6.0), _yaw(PI * 0.5), Vector3(8.0, 3.2, 5.0), Color(0.5, 0.6, 0.64), Color(0.3, 0.32, 0.34))
 	for i in 2:
 		_piece(Vector3(5.0, 0.05, 3.5), _at(-8.0, -6.0 - i * 4.5), Vector3(0.0, 0.32, 0.0), _yaw(0.0), Color(0.24, 0.32, 0.36))
-	for i in 3:
-		var p := _at(-2.0 + i * 2.4, -10.0)
+	for i in 3:  # boats by the ponds, back from the road that leaves past them
+		var p := _at(-4.2 + i * 2.2, -11.0)
 		_piece(Vector3(1.2, 0.5, 3.4), p, Vector3(0.0, 0.5, 0.0), _yaw(0.3 * i), Color(0.5, 0.36, 0.22))
-	for i in 5:
+	for i in 5:  # a net fence, post to post as the ground rises off the shore
 		_piece(Vector3(0.12, 2.0, 0.12), _at(-14.0, -12.0 + i * 3.0), Vector3(0.0, 1.0, 0.0), _yaw(0.0), Color(0.36, 0.3, 0.22))
-	_piece(Vector3(0.04, 1.2, 12.0), _at(-14.0, -6.0), Vector3(0.0, 1.4, 0.0), _yaw(0.0), Color(0.6, 0.6, 0.55))
+		if i > 0:
+			var a := _at(-14.0, -15.0 + i * 3.0)
+			var b := _at(-14.0, -12.0 + i * 3.0)
+			var net := Psx.box(self, Vector3(0.04, 1.2, a.distance_to(b)), (a + b) * 0.5 + Vector3(0.0, 1.4, 0.0), Color(0.6, 0.6, 0.55))
+			net.rotation = Vector3(-atan2(b.y - a.y, 3.0), _yaw(0.0), 0.0)
 	_sign(_at(-8.0, 6.0) + Vector3(0.0, 6.5, 0.0), loc.name.to_upper())
 
 
@@ -686,14 +738,14 @@ func _build_rescue_base(loc: Dictionary) -> void:
 	_frame(loc)
 	_house(_at(-8.0, 6.0), _yaw(PI * 0.5), Vector3(9.0, 4.0, 6.0), Color(0.78, 0.16, 0.12), Color(0.86, 0.9, 0.98))
 	_piece(Vector3(0.1, 2.6, 3.0), _at(-8.0, 6.0), Vector3(3.05, 1.3, 0.0), _yaw(PI * 0.5), Color(0.85, 0.85, 0.82))
-	var pad := _at(-6.0, -9.0)
+	var pad := _at(8.5, 3.0)  # on the flat across the yard from the house, off the road through it
 	Psx.mesh(self, Psx.cylinder(3.5, 3.5, 0.12, 12), pad + Vector3(0.0, 0.36, 0.0), Color(0.24, 0.24, 0.26))
 	_piece(Vector3(0.4, 0.05, 2.4), pad, Vector3(-0.7, 0.44, 0.0), _yaw(0.0), Color(0.95, 0.95, 0.95), 0.8)
 	_piece(Vector3(0.4, 0.05, 2.4), pad, Vector3(0.7, 0.44, 0.0), _yaw(0.0), Color(0.95, 0.95, 0.95), 0.8)
 	_piece(Vector3(1.0, 0.05, 0.4), pad, Vector3(0.0, 0.44, 0.0), _yaw(0.0), Color(0.95, 0.95, 0.95), 0.8)
 	_column(_at(-14.0, -2.0), 0.08, 8.0, Color(0.7, 0.7, 0.72))
 	_piece(Vector3(0.05, 1.0, 1.6), _at(-14.0, -2.0), Vector3(0.0, 7.4, 0.8), _yaw(0.0), Color(0.85, 0.12, 0.1), 0.4)
-	_lamp(_at(-2.0, 4.0))
+	_lamp(_at(-5.0, -1.0))  # by the house, off the road through the yard
 	_sign(_at(-8.0, 6.0) + Vector3(0.0, 8.0, 0.0), loc.name.to_upper())
 
 

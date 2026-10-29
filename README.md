@@ -32,7 +32,7 @@ itch.io: https://codirs.itch.io/psxrunner
 | G | low range |
 | H | headlights |
 | E | the job board at the depot, unload at a delivery point, refuel (stopped) |
-| 1 / 2 / 3 | take a job from the board |
+| 1 / 2 / 3 | take a job from the board (a job in hand is dropped) |
 | F | winch to the tree, rock or stuck car ahead; hold Shift to reel in |
 | M | paper map |
 | T | tow back to the depot ($100) |

@@ -1,7 +1,7 @@
-# Valleys and jobs (0.2.0)
+# Valleys and jobs (0.2.2)
 
 Philip asked in AI Browser Game Jam 5 for "more maps and challenges" (`media/comments.md`). The
-owner's decisions, 2026-10-29, built for 0.2.0: `scripts/world/valley.gd` (the valleys as data),
+owner's decisions, 2026-10-29, built for 0.2.2 (the v0.2.0 and v0.2.1 tags went onto earlier commits by mistake and were never built): `scripts/world/valley.gd` (the valleys as data),
 `scripts/world/weather.gd` (the skies), `scripts/ui/start_screen.gd` and `scripts/ui/icons.gd`
 (the valleys screen), `scripts/systems/profile.gd` (what is saved), `scripts/systems/contracts.gd`
 (the jobs), `scripts/vehicle/stuck_car.gd`.
@@ -30,8 +30,9 @@ one first.
 ## Jobs
 
 E at the depot opens a board of three jobs, each to a different place and of a different kind,
-with what it pays; 1, 2 or 3 takes one, loads it and fills the tank. A place pays its reward
-times the valley's pay (1, 1.2, 1.4, 1.7, 2.4), and by kind:
+with what it pays; 1, 2 or 3 takes one, loads it and fills the tank. With a job in hand, E there
+fills the tank and opens the board too, and a new job taken drops the one in hand. A place pays
+its reward times the valley's pay (1, 1.2, 1.4, 1.7, 2.4), and by kind:
 
 - **Plain:** as it is.
 - **Against the clock:** gold, silver and bronze for 30, 22 and 15 km/h along the shortest way
@@ -43,18 +44,28 @@ times the valley's pay (1, 1.2, 1.4, 1.7, 2.4), and by kind:
   left; at nothing left it is gone.
 - **Heavy:** 1800 kg of concrete rings instead of 900 kg of crates: the truck sits lower, drags
   deeper and burns 1.5 times the fuel; pays 1.6 times.
-- **A stuck car:** a car slid into the ditch beside one of the roads (each road has one, dug 7 m
-  off its middle, clear of trees); F hooks the winch on its towing eye, Shift reels it, and the
-  truck holds on its brake while the car comes. Upright and at rest on the road or its shoulder,
-  it pays $300 times the valley's pay.
+- **A stuck car:** a car slid nose first into the ditch beside one of the roads (each road has
+  one, 7 m off its middle, clear of the road on a bend, of its other legs and of trees: a trench
+  1.4 m below the road beside it, cut into a slope above the road or banked up on one below, so
+  the car stays put until it is pulled). F hooks the winch on its towing eye, Shift reels it right
+  up to the bumper, and the truck holds on its brake while the car comes. Out of the ditch at the
+  road's level and at rest (on its roof counts), it pays $300 times the valley's pay; a car the
+  winch never had pays nothing.
 
 ## Roads in the hills
 
 A road is a shelf level across. In the hills (Zakarpattia, the steppe, the pass) its profile is
 averaged over 14-24 m and kept to 20-22% (or what a climb needs, never a step), cut into the
 slope above and filled below, except for 14 m at each end where it crosses a place; two roads
-blend where they meet; hairpins are U turns at the ends of legs that climb across the slope.
-Every road of every valley drives both ways in 4x4 (`tests/test_valleys.gd`).
+blend where they meet; hairpins are U turns at the ends of legs that climb across the slope,
+and the ground between two legs is held to all of the road about as near, so it has no step. A
+lake's shore goes in before the places, so a place on it stays level; the Polissia fish farm sits
+down on its shore, so the road climbs gently off the ice into it. No road climbs more than 0.5 m
+a metre (`tests/test_terrain_shape.gd`), and every road of every valley drives both ways in 4x4
+(`tests/test_valleys.gd`).
+
+A valley's ground is built in 0.4-0.7 s native (a browser takes some 3-5 times that): the road
+nearest each metre is looked up only among the stretches of road listed for its 4 m square.
 
 ## Saved
 

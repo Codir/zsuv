@@ -27,6 +27,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # A tag on the wrong commit stops here, before the release and the deploy: the version it
+      # names must be the one in project.godot and the top entry of the CHANGELOG.
+      - name: The tag is the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          grep -q "^config/version=\"$v\"$" project.godot || { echo "project.godot is not at $v: $(grep '^config/version=' project.godot)"; exit 1; }
+          top="$(grep -m 1 '^## ' CHANGELOG.md)"
+          case "$top" in "## $v "*) ;; *) echo "the top CHANGELOG entry is not $v: $top"; exit 1;; esac
+
       - name: Import project
         run: godot --headless --path . --import
 

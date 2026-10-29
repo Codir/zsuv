@@ -1,6 +1,7 @@
 extends RefCounted
-## The valleys screen and what it keeps: the profile saves and loads, valleys open in order for
-## money, the screen buys and drives in, Esc in a valley comes back to the screen.
+## The valleys screen and what it keeps: the profile saves and loads (a bad file too), valleys
+## open in order for money, the screen buys and drives in, Esc in a valley comes back to the
+## screen (a held Esc only once), and a key let go outside the window on the screen is let go.
 
 const TEST_PATH := "user://test_profile.cfg"
 
@@ -23,6 +24,24 @@ func test_the_profile_saves_and_loads(t: TCase) -> void:
 	t.eq(q.sky("khutir"), Weather.Kind.OWN, "the khutir valley's sky")
 	t.eq(q.records.get("steppe:elevator:timed", {}).get("time", 0.0), 42.5, "a record")
 	t.eq(q.last, "steppe", "the last valley")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_PATH))
+
+
+func test_a_bad_profile_file_loads_as_defaults(t: TCase) -> void:
+	var f := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	f.store_string('[progress]\nmoney=1500.0\nowned="steppe"\nlast=2\nskies={"steppe": 9, "polissia": "night"}\nrecords={"a": 5, "b": {"medal": 1}}\n')
+	f.close()
+	var p := Profile.open(TEST_PATH)
+	t.ok(p != null, "a bad file gives no profile")
+	if p == null:
+		return
+	t.eq(p.money, 1500, "money as a float")
+	t.eq(p.owned, PackedStringArray(["khutir"]), "owned as a string")
+	t.eq(p.last, "khutir", "last as a number")
+	t.eq(p.sky("steppe"), Weather.Kind.OWN, "a sky out of range")
+	t.eq(p.sky("polissia"), Weather.Kind.OWN, "a sky as a string")
+	t.eq(p.record("a"), {}, "a record as a number")
+	t.eq(p.record("b"), {}, "a record with no time")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_PATH))
 
 
@@ -77,8 +96,18 @@ func test_esc_leaves_the_valley_for_the_screen(t: TCase) -> void:
 	var esc := InputEventKey.new()
 	esc.physical_keycode = KEY_ESCAPE
 	esc.pressed = true
+	esc.echo = true
+	game.world._unhandled_input(esc)
+	await t.ticks(2)
+	t.ok(game.world != null, "a held Esc (its key repeat) leaves the valley")
+	esc.echo = false
 	game.world._unhandled_input(esc)
 	await t.ticks(2)
 	t.ok(game.screen != null and game.world == null, "Esc does not leave the valley for the screen")
+	# W held on the screen and let go outside the window: the next valley does not drive off.
+	Input.action_press(&"accelerate")
+	game.notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	t.ok(not Input.is_action_pressed(&"accelerate"), "a key let go outside the window stays pressed on the screen")
+	Input.action_release(&"accelerate")
 	vp.free()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_PATH))

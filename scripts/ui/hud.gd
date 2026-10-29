@@ -48,7 +48,8 @@ func setup(v: Vehicle, c: Contracts) -> void:
 	_objective = _make_label(Vector2(0, size.y - 34), Vector2(size.x, 12), HORIZONTAL_ALIGNMENT_CENTER)
 	_prompt = _make_label(Vector2(0, size.y - 18), Vector2(size.x, 12), HORIZONTAL_ALIGNMENT_CENTER)
 	_prompt.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
-	_message = _make_label(Vector2(0, 60), Vector2(size.x, 12), HORIZONTAL_ALIGNMENT_CENTER)
+	_message = _make_label(Vector2(20, 60), Vector2(size.x - 40, 24), HORIZONTAL_ALIGNMENT_CENTER)
+	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # a long one takes two lines
 	_board_bg = ColorRect.new()
 	_board_bg.color = Color(0.0, 0.0, 0.0, 0.72)
 	_board_bg.position = Vector2(20, 78)

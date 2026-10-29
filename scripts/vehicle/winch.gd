@@ -9,6 +9,7 @@ const STIFFNESS := 60000.0
 const DAMPING := 6000.0
 const REEL_SPEED := 1.4
 const MIN_LENGTH := 2.0
+const CAR_MIN_LENGTH := 0.6  # a car comes right up to the bumper
 const MOUNT := Vector3(0.0, 0.25, -2.4)
 const SEGMENTS := 10
 
@@ -99,7 +100,7 @@ func _physics_process(delta: float) -> void:
 	var d := to.length()
 	reeling = (auto_reel or Input.is_action_pressed("winch_reel")) and vehicle.fuel > 0.0
 	if reeling:
-		length = maxf(length - REEL_SPEED * delta, MIN_LENGTH)
+		length = maxf(length - REEL_SPEED * delta, CAR_MIN_LENGTH if anchor_body else MIN_LENGTH)
 		vehicle.fuel = maxf(vehicle.fuel - 0.15 * delta, 0.0)
 	length = minf(length, d)  # ratchet: slack is taken up by itself
 	var stretch := d - length

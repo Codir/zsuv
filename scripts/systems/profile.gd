@@ -20,14 +20,28 @@ static func open(at := PATH) -> Profile:
 	var cfg := ConfigFile.new()
 	if cfg.load(at) != OK:
 		return p
-	p.money = cfg.get_value("progress", "money", 0)
-	p.owned = cfg.get_value("progress", "owned", p.owned)
-	p.last = cfg.get_value("progress", "last", "khutir")
-	p.skies = cfg.get_value("progress", "skies", {})
-	p.records = cfg.get_value("progress", "records", {})
+	# A value of the wrong type (a hand edit, another build's file) is left at its default, so a
+	# bad file never stops the game.
+	var money: Variant = cfg.get_value("progress", "money", p.money)
+	if typeof(money) in [TYPE_INT, TYPE_FLOAT]:
+		p.money = int(money)
+	var owned: Variant = cfg.get_value("progress", "owned", p.owned)
+	if typeof(owned) in [TYPE_PACKED_STRING_ARRAY, TYPE_ARRAY]:
+		p.owned = PackedStringArray()
+		for id in owned:
+			if typeof(id) in [TYPE_STRING, TYPE_STRING_NAME] and not str(id) in p.owned:
+				p.owned.append(str(id))
+	p.last = _value(cfg, "last", TYPE_STRING, p.last)
+	p.skies = _value(cfg, "skies", TYPE_DICTIONARY, p.skies)
+	p.records = _value(cfg, "records", TYPE_DICTIONARY, p.records)
 	if not "khutir" in p.owned:
 		p.owned.append("khutir")
 	return p
+
+
+static func _value(cfg: ConfigFile, key: String, type: int, default: Variant) -> Variant:
+	var value: Variant = cfg.get_value("progress", key, default)
+	return value if typeof(value) == type else default
 
 
 func save() -> void:
@@ -71,8 +85,19 @@ func buy(v: Valley) -> bool:
 	return true
 
 
+## The best time of job key: {time, medal}, or empty when there is none.
+func record(key: String) -> Dictionary:
+	var best: Variant = records.get(key, {})
+	if typeof(best) != TYPE_DICTIONARY or typeof(best.get("time")) not in [TYPE_INT, TYPE_FLOAT]:
+		return {}
+	return best
+
+
 func sky(valley_id: String) -> Weather.Kind:
-	return skies.get(valley_id, Weather.Kind.OWN)
+	var kind: Variant = skies.get(valley_id, Weather.Kind.OWN)
+	if typeof(kind) != TYPE_INT or kind < 0 or kind >= Weather.Kind.size():
+		return Weather.Kind.OWN
+	return kind
 
 
 func set_sky(valley_id: String, kind: Weather.Kind) -> void:
