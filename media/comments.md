@@ -18,15 +18,9 @@ The owner's account is **Codirs**: a post by Codirs is an answer.
 
 Changes players asked for. `[x]` is in the plan for the next release (the owner's pick), `[ ]` is
 not yet. When a picked one ships, its CHANGELOG line names who asked, and it leaves this list.
-All four picked on 2026-10-28; the throttle fix (smokeyai) shipped in 0.1.1. The owner's order:
-the hint and the sound in 0.1.2, then the maps and challenges in 0.2.0.
+All four picked on 2026-10-28; the throttle fix (smokeyai) shipped in 0.1.1, the controls hint
+and the sound (Philip) in 0.1.2. Next: the maps and challenges in 0.2.0.
 
-- [x] **The controls on screen, but not over it** (Philip, jam). The help card is 190x150 of the
-  480x270 frame, top right, until F1 hides it. A one-line key hint instead, the full card on F1.
-  An hour.
-- [x] **Sound: the engine labouring through the gears, the tyres in the snow** (Philip, jam). The
-  game has no sound at all. A CC0 diesel loop pitched by revs and load (low range lower and
-  harder), a snow crunch and a mud squelch by wheel slip. A day.
 - [x] **More maps and challenges** (Philip, jam). A release of its own, 0.2.0. The owner's plan
   (2026-10-29): three valleys of the same size, each with its own locations, time of day and
   weather, picked on a valley screen: today's khutir valley, a spring thaw in Polissia (mud, bog,

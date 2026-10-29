@@ -6,8 +6,8 @@ in the snow" (`media/comments.md`). The owner chose real CC0 recordings over syn
 
 Built: the recordings below sit in `sounds/source/` (a `.gdignore` keeps Godot from importing
 them: they never ship); `tools/make_sounds.py` cuts them into the 27 sounds in `sounds/`;
-`scripts/vehicle/truck_audio.gd` plays them; `tests/test_sound.gd` checks it. Left: the owner
-listens (`./godot.sh soundcheck`, or the game), then release 0.1.2 (the last section).
+`scripts/vehicle/truck_audio.gd` plays them; `tests/test_sound.gd` checks it. Released in
+0.1.2 (2026-10-29).
 
 ## Sources (all "CC0 (public domain)", checked on each page on 2026-10-29)
 
@@ -117,8 +117,7 @@ it quits: a sound still playing at exit leaks its stream.
 
 ## Release 0.1.2
 
-`release-itch`: the CHANGELOG and the devlog name Philip (the hint and the sound) and the sound
-authors (Joseph SARDIN of BigSoundBank, rubberduck of OpenGameArt). The itch.io page: the AI
-disclosure keeps "no Sounds", its reason no longer "the game has none" but CC0 recordings; a
-line for the sound in the description. Then answer Philip (`player-comments`) about the hint
-and the sound.
+The CHANGELOG and the devlog (`media/devlog/0.1.2.md`) name Philip and the sound authors; the
+itch.io page copy (`media/itch-page.md`) keeps "no Sounds" in the AI disclosure, now because
+they are CC0 recordings, and has a line for the sound. Left: answer Philip (`player-comments`)
+about the hint and the sound.

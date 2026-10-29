@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.2 — 2026-10-29 — Hear it work
+
+- The truck is heard, as Philip asked in AI Browser Game Jam 5: the diesel climbs through its
+  gears and drops at each shift, more revs for the speed in low range; held at full throttle
+  where it can't move, it growls; a spinning wheel flares the revs. The tyres crunch snow and
+  squelch mud as they roll, louder the deeper it is; the winch motor whines, lower under the
+  strain; on an empty tank the engine dies. Real CC0 recordings: a diesel truck, footsteps in
+  snow and an electric winch by Joseph SARDIN (BigSoundBank), mud squelches by rubberduck
+  (OpenGameArt).
+- The controls stay on screen without covering it, as Philip asked in the jam: a three-line hint
+  of the keys a drive needs in the top right corner instead of the full card; F1 steps to the
+  card of every key, then to nothing.
+- Tests for the sound, and `./godot.sh soundcheck`, which records the game's mix on a scripted
+  drive and prints how loud each part was.
+
 ## 0.1.1 — 2026-10-28 — Hands off
 
 - In the browser, W let go after a click outside the game's frame no longer leaves the truck on

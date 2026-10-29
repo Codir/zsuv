@@ -11,7 +11,8 @@ the file is `media/trailer/khutir-road-trailer.mp4`) · **GIF for the descriptio
 **Classification:** Game · **Release status:** In development · **Genre:** Simulation ·
 **Tags:** driving, off-road, psx, low-poly, snow, delivery, truck, retro, atmospheric, physics
 
-**AI generation disclosure:** Yes: Graphics, Text & Dialog, Code (no Sounds: the game has none)
+**AI generation disclosure:** Yes: Graphics, Text & Dialog, Code (no Sounds: they are CC0
+recordings by people, `docs/sound.md`)
 
 **Browser build:** kind of project "HTML", the `html5` channel upload marked "This file will be
 played in the browser", viewport 960 x 540 (the game scales to any size), "Fullscreen button" on.
@@ -31,6 +32,7 @@ radio tower on the hill.
   moment.
 - **The winch:** stuck? Hook the nearest pine or rock and reel yourself out.
 - **A paper map** with contour lines and the trail you have driven.
+- **Hear it work:** the diesel labours through its gears, the tyres crunch snow and squelch mud.
 - **Watch the fuel**, or pay for the tow back to the depot.
 - 480x270, wobbly vertices, dithering and fog, like it fell out of 1998.
 
