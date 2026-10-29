@@ -10,13 +10,15 @@ extends Node3D
 ##   fragile  1.3 times what is left of it: every hard knock or landing breaks some, and at
 ##            nothing left it is gone
 ##   heavy    1800 kg instead of 900: the truck sits low, drags deeper and drinks more; 1.6 times
+##   stuck    no cargo: a car in a ditch by a road, to winch back onto it; STUCK_REWARD
 
 signal message(text: String)
 
 const INTERACT_RADIUS := 12.0
 const RECOVER_COST := 100
 const KINDS := ["plain", "timed", "fragile", "heavy"]
-const PAY := {"plain": 1.0, "timed": 1.0, "fragile": 1.3, "heavy": 1.6}
+const PAY := {"plain": 1.0, "timed": 1.0, "fragile": 1.3, "heavy": 1.6, "stuck": 1.0}
+const STUCK_REWARD := 300
 const MEDALS := ["gold", "silver", "bronze"]
 const MEDAL_KMH := [30.0, 22.0, 15.0]
 const MEDAL_PAY := [1.5, 1.25, 1.0]
@@ -57,6 +59,7 @@ var _markers := {}  # key (or "depot") -> marker pole
 var _velocities: Array[Vector3] = []  # the last JOLT_TICKS
 var _teleports := 0
 var _jolt_wait := 0.0
+var _car: StuckCar  # the stuck job's car, while there is one
 
 
 func setup(v: Vehicle, t: Terrain, locations: Dictionary) -> void:
@@ -81,15 +84,37 @@ func setup(v: Vehicle, t: Terrain, locations: Dictionary) -> void:
 	_update_markers()
 
 
-## Three new jobs on the board: each place once, each with its own kind.
+## Three new jobs on the board, each of its own kind (a stuck car among them where the valley
+## has ditches), each place once.
 func roll_offers() -> void:
 	var keys: Array = _places.keys()
 	var kinds: Array = KINDS.duplicate()
+	if not terrain.valley.ditches.is_empty():
+		kinds.append("stuck")
 	_shuffle(keys)
 	_shuffle(kinds)
 	offers.clear()
 	for i in mini(3, keys.size()):
-		offers.append(offer(keys[i], kinds[i]))
+		if kinds[i] == "stuck":
+			offers.append(offer_stuck(rng.randi() % terrain.valley.ditches.size()))
+		else:
+			offers.append(offer(keys[i], kinds[i]))
+
+
+## A car stuck in the valley's ditch i, to winch out.
+func offer_stuck(i: int) -> Dictionary:
+	var d: Dictionary = terrain.valley.ditches[i]
+	var near := ""
+	var best := INF
+	for key in _places:
+		var dist: float = (_places[key].pos as Vector2).distance_to(d.pos)
+		if dist < best:
+			best = dist
+			near = _places[key].name
+	var loc := {"name": "the ditch near %s" % near, "pos": d.pos, "radius": 10.0}
+	return {"key": "ditch%d" % i, "kind": "stuck", "loc": loc, "name": loc.name, "cargo": "pull a car out",
+		"route": _depot.pos.distance_to(d.pos) * OFFROAD, "reward": _round(STUCK_REWARD * terrain.valley.pay),
+		"record": "", "ditch": d}
 
 
 ## A job to place key, of kind.
@@ -114,8 +139,13 @@ func take(o: Dictionary) -> void:
 	clock = 0.0
 	integrity = 1.0
 	vehicle.fuel = Vehicle.FUEL_CAPACITY
-	vehicle.set_cargo(true, o.kind)
 	_velocities.clear()
+	if o.kind == "stuck":
+		_spawn_car(o.ditch)
+		message.emit("A car slid into %s. Winch it back onto the road" % o.name)
+		_update_markers()
+		return
+	vehicle.set_cargo(true, o.kind)
 	var text := "Loaded: %s. Head for %s" % [o.cargo, o.name]
 	match o.kind:
 		"timed":
@@ -147,6 +177,8 @@ func objective_text() -> String:
 			return "FRAGILE %d%%: %s  +$%d" % [roundi(integrity * 100.0), where, _round(job.reward * integrity)]
 		"heavy":
 			return "HEAVY: %s  +$%d" % [where, job.reward]
+		"stuck":
+			return "STUCK CAR in %s: winch it onto the road  %d m  +$%d" % [job.name, _distance_to(job.loc), job.reward]
 	return "DELIVER: %s  +$%d" % [where, job.reward]
 
 
@@ -176,6 +208,8 @@ func cargo_text() -> String:
 			return "HEAVY"
 		"timed":
 			return "CARGO %s" % clock_text(clock)
+		"stuck":
+			return ""
 	return "CARGO"
 
 
@@ -200,6 +234,8 @@ func _process(_delta: float) -> void:
 		board_open = false
 	if board_open:
 		prompt = "[1] [2] [3] take a job   [E] close"
+	elif not job.is_empty() and job.kind == "stuck":
+		pass  # near the car the winch says what to do
 	elif not job.is_empty() and _near(job.loc):
 		prompt = "[E] Unload" if slow else "Stop to unload"
 	elif _near(_depot):
@@ -215,6 +251,12 @@ func _physics_process(delta: float) -> void:
 	if vehicle == null or job.is_empty():
 		return
 	clock += delta
+	if job.kind == "stuck" and _car and _car.on_road(terrain):
+		var paid: int = job.reward
+		money += paid
+		message.emit("Back on the road! The driver waves. +$%d" % paid)
+		_drop()
+		return
 	if job.kind == "fragile":
 		# A jolt: how sharply the truck's velocity changed over 50 ms, landings and knocks alike
 		# (one tick alone has spikes in it that no load would feel).
@@ -264,7 +306,7 @@ func recover() -> void:
 func _interact() -> void:
 	if absf(vehicle.forward_speed) >= 2.0:
 		return
-	if not job.is_empty() and _near(job.loc):
+	if not job.is_empty() and job.kind != "stuck" and _near(job.loc):
 		_deliver()
 	elif _near(_depot):
 		if job.is_empty():
@@ -296,10 +338,18 @@ func _deliver() -> void:
 	_drop()
 
 
-## The job is over, delivered or broken: off with the cargo, new jobs on the board.
+## The job is over, delivered or broken: off with the cargo, new jobs on the board. A car pulled
+## out drives off a moment later.
 func _drop() -> void:
 	job = {}
 	vehicle.set_cargo(false)
+	if _car:
+		var car := _car
+		_car = null
+		vehicle.winch.forget(car)
+		get_tree().create_timer(3.0).timeout.connect(func() -> void:
+			if is_instance_valid(car):
+				car.queue_free())
 	roll_offers()
 	_update_markers()
 
@@ -316,6 +366,20 @@ func _update_markers() -> void:
 	_markers.depot.visible = job.is_empty()
 	for key in _places:
 		_markers[key].visible = not job.is_empty() and job.key == key
+
+
+## The stuck job's car in ditch d, nose up towards the road, slid in half sideways.
+func _spawn_car(d: Dictionary) -> void:
+	if _car:
+		_car.queue_free()
+	_car = StuckCar.new(rng.randi())
+	add_child(_car)
+	var at: Vector2 = d.at
+	var out: Vector2 = ((d.pos as Vector2) - at).normalized()
+	var nose: Vector2 = (out * 0.6 + (d.dir as Vector2) * 0.8).normalized()
+	_car.global_transform = Transform3D(Basis(Vector3.UP, atan2(-nose.x, -nose.y)) * Basis(Vector3.FORWARD, 0.25),
+		Vector3(at.x, terrain.get_height(at.x, at.y) + 0.7, at.y))
+	vehicle.winch.bodies.append(_car)
 
 
 ## Metres by road from a to the place loc: the shortest way along the roads (they join where an

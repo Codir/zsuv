@@ -168,8 +168,8 @@ func _physics_process(delta: float) -> void:
 			brake = 1.0
 		else:
 			drive = throttle_input
-	elif absf(forward_speed) < 0.8 and not winch.reeling:
-		brake = 1.0  # hold on a slope, but let the winch pull
+	elif absf(forward_speed) < 0.8 and not (winch.reeling and winch.anchor_body == null):
+		brake = 1.0  # hold on a slope; let the winch pull the truck, but hold it while it pulls a car
 	if fuel <= 0.0:
 		drive = 0.0
 

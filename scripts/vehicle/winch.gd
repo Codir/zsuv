@@ -1,6 +1,6 @@
 class_name Winch
 extends Node3D
-## Winch: hooks onto the nearest tree or rock ahead.
+## Winch: hooks onto the nearest tree or rock ahead, or a stuck car (pulling the car, not the truck).
 ## The cable takes up its own slack (a ratchet); Shift reels it in.
 
 const RANGE := 16.0
@@ -14,8 +14,10 @@ const SEGMENTS := 10
 
 var vehicle: Vehicle
 var anchors := PackedVector3Array()
+var bodies: Array[StuckCar] = []  # cars that can be hooked; candidates after the anchors
 var attached := false
 var anchor := Vector3.ZERO
+var anchor_body: StuckCar  # the car hooked, or null for a tree or a rock
 var length := 0.0
 var tension := 0.0
 var reeling := false
@@ -46,21 +48,39 @@ func toggle() -> void:
 	if attached:
 		detach()
 	elif candidate >= 0:
-		anchor = anchors[candidate]
+		anchor_body = bodies[candidate - anchors.size()] if candidate >= anchors.size() else null
+		anchor = anchor_body.hook_point() if anchor_body else anchors[candidate]
 		length = mount_position().distance_to(anchor)
 		attached = true
 
 
 func detach() -> void:
 	attached = false
+	anchor_body = null
 	tension = 0.0
+
+
+func candidate_point() -> Vector3:
+	if candidate < anchors.size():
+		return anchors[candidate]
+	var k := candidate - anchors.size()
+	return bodies[k].hook_point() if k < bodies.size() and is_instance_valid(bodies[k]) else mount_position()
+
+
+## Lets go of car if it is hooked or the next to be, as it drives off.
+func forget(car: StuckCar) -> void:
+	if anchor_body == car:
+		detach()
+	bodies.erase(car)
+	candidate = -1
 
 
 func prompt() -> String:
 	if attached:
 		return "[Shift] reel in  [F] unhook"
 	if candidate >= 0:
-		return "[F] Winch to anchor (%d m)" % roundi(mount_position().distance_to(anchors[candidate]))
+		var what := "the car" if candidate >= anchors.size() else "anchor"
+		return "[F] Winch to %s (%d m)" % [what, roundi(mount_position().distance_to(candidate_point()))]
 	return ""
 
 
@@ -69,6 +89,11 @@ func _physics_process(delta: float) -> void:
 		candidate = _find_candidate()
 		reeling = false
 		return
+	if anchor_body and not is_instance_valid(anchor_body):
+		detach()
+		return
+	if anchor_body:
+		anchor = anchor_body.hook_point()
 	var m := mount_position()
 	var to := anchor - m
 	var d := to.length()
@@ -82,14 +107,19 @@ func _physics_process(delta: float) -> void:
 	if stretch > 0.0 and d > 0.01:
 		var dir := to / d
 		var v_away := -vehicle.point_velocity(m).dot(dir)
+		if anchor_body:
+			var c := anchor_body.global_transform * anchor_body.center_of_mass
+			v_away += (anchor_body.linear_velocity + anchor_body.angular_velocity.cross(anchor - c)).dot(dir)
 		tension = clampf(STIFFNESS * stretch + DAMPING * v_away, 0.0, MAX_FORCE)
 		vehicle.apply_force(dir * tension, m - vehicle.global_position)
+		if anchor_body:
+			anchor_body.apply_force(-dir * tension, anchor - anchor_body.global_position)
 
 
 func _process(_delta: float) -> void:
 	_marker.visible = not attached and candidate >= 0
 	if _marker.visible:
-		_marker.global_position = anchors[candidate] + Vector3(0.0, 0.3 + sin(Time.get_ticks_msec() / 200.0) * 0.1, 0.0)
+		_marker.global_position = candidate_point() + Vector3(0.0, 0.3 + sin(Time.get_ticks_msec() / 200.0) * 0.1, 0.0)
 
 	for seg in _segments:
 		seg.visible = attached
@@ -123,4 +153,15 @@ func _find_candidate() -> int:
 		if score < best_score:
 			best_score = score
 			best = i
+	for k in bodies.size():  # a stuck car before any tree: it is what the winch is for here
+		if not is_instance_valid(bodies[k]):
+			continue
+		var to := bodies[k].hook_point() - m
+		var d := to.length()
+		if d > RANGE or d < 1.5:
+			continue
+		var score := d - to.normalized().dot(fwd) * 6.0 - 8.0
+		if score < best_score:
+			best_score = score
+			best = anchors.size() + k
 	return best
