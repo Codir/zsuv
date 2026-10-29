@@ -11,6 +11,7 @@ var price := 0
 var stars := 1  # how hard, 1..5
 var season := "winter"  # winter | spring | summer | autumn: snow or rain, the trees
 var pay := 1.0  # jobs here pay this many times the khutir valley's
+var own: Weather  # its own sky; the start screen can switch it (Weather.Kind)
 
 # Ground: noise relief, then features: {type: hill | ridge | lake | gully | ditch | sea, ...}.
 var seed := 1337
@@ -68,6 +69,7 @@ static func khutir() -> Valley:
 	v.id = "khutir"
 	v.title = "The Khutir Valley"
 	v.blurb = "Winter dusk. Snow on every road, mud in the hollows."
+	v.own = Weather.dusk()
 	v.locations = {
 		"depot": {"name": "Depot", "pos": Vector2(-95, -95), "radius": 14.0, "kind": "depot"},
 		"farm": {"name": "Khutir", "pos": Vector2(-72, 92), "radius": 10.0, "kind": "khutir",
