@@ -1,7 +1,7 @@
-# Valleys and jobs (0.2.1)
+# Valleys and jobs (0.2.2)
 
 Philip asked in AI Browser Game Jam 5 for "more maps and challenges" (`media/comments.md`). The
-owner's decisions, 2026-10-29, built for 0.2.1 (0.2.0 was a tag on 0.1.2 by mistake, never built): `scripts/world/valley.gd` (the valleys as data),
+owner's decisions, 2026-10-29, built for 0.2.2 (the v0.2.0 and v0.2.1 tags went onto earlier commits by mistake and were never built): `scripts/world/valley.gd` (the valleys as data),
 `scripts/world/weather.gd` (the skies), `scripts/ui/start_screen.gd` and `scripts/ui/icons.gd`
 (the valleys screen), `scripts/systems/profile.gd` (what is saved), `scripts/systems/contracts.gd`
 (the jobs), `scripts/vehicle/stuck_car.gd`.

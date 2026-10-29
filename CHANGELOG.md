@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.1 — 2026-10-29 — Five valleys
+## 0.2.2 — 2026-10-29 — Five valleys
 
 - Four new valleys beside the khutir valley, as Philip asked in AI Browser Game Jam 5 for more
   maps: a sunny autumn steppe of dry dirt roads, gullies, a hill of wind turbines and a dig on a
@@ -25,12 +25,18 @@
 - The first build with 0.1.2's sound and controls hint in it: 0.1.2 never had one of its own.
 - Tests for the valleys (each builds, nothing on a road, every road drives both ways), the
   skies, the valleys screen and the profile, the jobs and the stuck car; `./godot.sh previews`
-  renders the screen's pictures.
+  renders the screen's pictures. A tag whose version is not the one in project.godot and the
+  CHANGELOG fails in CI before anything is released.
+
+## 0.2.1 — 2026-10-29 — Tagged by mistake
+
+- The v0.2.1 tag went onto the five valleys' first merge, before the fixes from their review
+  were merged; its build was stopped before its tests. What 0.2.1 was to be shipped as 0.2.2.
 
 ## 0.2.0 — 2026-10-29 — Tagged by mistake
 
 - The v0.2.0 tag went onto 0.1.2's commit before the five valleys were merged; its build was
-  stopped before it reached itch.io. What 0.2.0 was to be shipped as 0.2.1.
+  stopped before it reached itch.io. What 0.2.0 was to be shipped as 0.2.2.
 
 ## 0.1.2 — 2026-10-29 — Hear it work
 

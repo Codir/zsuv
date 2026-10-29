@@ -20,7 +20,9 @@ their file to the release. Tag runs use no artifacts. Nothing else deploys.
 - `gh` may not be logged in, so CI status may not be visible from the shell. Give the author the
   Actions URL.
 - The version lives in two places that must equal the tag: the top entry of `CHANGELOG.md` and
-  `project.godot` `config/version`.
+  `project.godot` `config/version`. The Tests job checks both first on a tag ("The tag is the
+  version") and fails before the release and the deploy when either differs: a tag pushed onto
+  the wrong commit (v0.2.0 and v0.2.1 were) stops there.
 - Asking for this skill is the go-ahead for the tag push; the tag is the deploy.
 
 ## Procedure
