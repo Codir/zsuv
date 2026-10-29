@@ -18,16 +18,9 @@ The owner's account is **Codirs**: a post by Codirs is an answer.
 
 Changes players asked for. `[x]` is in the plan for the next release (the owner's pick), `[ ]` is
 not yet. When a picked one ships, its CHANGELOG line names who asked, and it leaves this list.
-All four picked on 2026-10-28; the throttle fix (smokeyai) shipped in 0.1.1, the controls hint
-and the sound (Philip) in 0.1.2. Next: the maps and challenges in 0.2.0.
-
-- [x] **More maps and challenges** (Philip, jam). A release of its own, 0.2.0. The owner's plan
-  (2026-10-29, `docs/valleys.md`): six valleys picked on a start screen with a preview of each,
-  from the khutir valley's winter dusk to a sunny steppe, Zakarpattia in spring, a foggy Polissia
-  thaw, the Oleshky Sands in summer and a Carpathian pass at night in a blizzard; each bought for
-  more than the last ($1500 to $8500), its weather switchable, the progress saved. A job board
-  at the depot: against the clock (gold / silver / bronze, records), fragile, heavy, and a stuck
-  car to winch out of a ditch.
+All four picked on 2026-10-28 have shipped: the throttle fix (smokeyai) in 0.1.1, the controls
+hint and the sound (Philip) in 0.1.2, the maps and challenges (Philip) in 0.2.0, five valleys and
+a job board (`docs/valleys.md`).
 
 - [ ] **Different trucks for different loads, and trailers, as in SnowRunner** (the owner,
   2026-10-29, for 0.3.0 after 0.2.0 ships). Bought in a garage at the depot and kept for every
