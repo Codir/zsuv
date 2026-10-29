@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 — 2026-10-29 — Five valleys
+## 0.2.1 — 2026-10-29 — Five valleys
 
 - Four new valleys beside the khutir valley, as Philip asked in AI Browser Game Jam 5 for more
   maps: a sunny autumn steppe of dry dirt roads, gullies, a hill of wind turbines and a dig on a
@@ -17,12 +17,20 @@
 - A job board at the depot, as Philip asked for challenges: three jobs at a time, plain, against
   the clock (gold, silver, bronze and a record each), fragile (it breaks on hard knocks and
   landings and pays for what is whole), heavy (concrete rings that sit the truck low and drink
-  fuel, for more pay), and a car stuck in a ditch to winch back onto the road.
-- The winch hooks a stuck car and pulls it while the truck holds; the test autopilot slows for
-  the bend ahead.
+  fuel, for more pay), and a car stuck in a ditch to winch back onto the road. A new job taken at
+  the depot drops the one in hand.
+- The winch hooks a stuck car and pulls it right up to the bumper while the truck holds; the
+  car pays once the winch has pulled it out of the ditch. The test autopilot slows for the bend
+  ahead.
+- The first build with 0.1.2's sound and controls hint in it: 0.1.2 never had one of its own.
 - Tests for the valleys (each builds, nothing on a road, every road drives both ways), the
   skies, the valleys screen and the profile, the jobs and the stuck car; `./godot.sh previews`
   renders the screen's pictures.
+
+## 0.2.0 — 2026-10-29 — Tagged by mistake
+
+- The v0.2.0 tag went onto 0.1.2's commit before the five valleys were merged; its build was
+  stopped before it reached itch.io. What 0.2.0 was to be shipped as 0.2.1.
 
 ## 0.1.2 — 2026-10-29 — Hear it work
 
