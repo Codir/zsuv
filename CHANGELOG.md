@@ -11,7 +11,8 @@
   $2500, the 6x6 $3500, the semi truck with its semi-trailer $5000, bought once from the wallet
   the valleys are bought from and kept in every valley; a truck bought is driven from any depot.
 - Trailers wait beside the depot: back up to one and press C to hitch it, C again to leave it.
-  It follows on a hitch that turns and pitches, brakes with the truck, and comes along on the tow.
+  It follows on a hitch that turns and pitches, brakes with the truck, and waits by the depot
+  when the tow truck takes you back.
 - The board offers five jobs, at least two for the truck in play; the others say what they need.
   The heavy load is the 6x6's now, 3500 kg of rings paying twice; new loads: a double load on the
   pickup and its trailer (1.5 times), grain, peat or hay in the farm trailer (1.8), logs or pipes

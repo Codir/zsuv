@@ -132,6 +132,23 @@ func behind(hitch: Transform3D) -> Transform3D:
 	return Transform3D(b, hitch.origin - b * spec.coupler)
 
 
+## Whether it would stand at xf without running into anything but the ground and the truck.
+func fits(xf: Transform3D, truck_too: Node = null) -> bool:
+	var space := get_world_3d().direct_space_state
+	for c in get_children():
+		var cs := c as CollisionShape3D
+		if cs == null:
+			continue
+		var q := PhysicsShapeQueryParameters3D.new()
+		q.shape = cs.shape
+		q.transform = xf * cs.transform
+		q.exclude = [get_rid(), truck_too.get_rid()] if truck_too is CollisionObject3D else [get_rid()]
+		for hit in space.intersect_shape(q, 8):
+			if not (hit.collider is StaticBody3D and hit.collider.get_parent() is Terrain):
+				return false
+	return true
+
+
 ## Moves it to xf at the next physics step, moving at velocity, not turning (a teleport, as
 ## Vehicle.teleport: a rigid body's transform set between steps does not always reach the physics).
 func place(xf: Transform3D, velocity := Vector3.ZERO) -> void:

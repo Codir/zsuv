@@ -22,6 +22,7 @@ extends Node3D
 signal message(text: String)
 signal truck_wanted(spec: TruckSpec)  # the garage: drive this one (scripts/main.gd puts it at the depot)
 signal rigs_changed  # the garage sold a rig: its trailer, if any, waits at the depot
+signal towing  # T: the truck is about to be set down at the depot (main.gd sees to its trailer)
 
 const INTERACT_RADIUS := 12.0
 const RECOVER_COST := 100
@@ -295,14 +296,14 @@ func board_text() -> String:
 	for i in offers.size():
 		var o := offers[i]
 		var extra := ""
-		if o.kind == "timed":
+		var tag := need(o.kind)
+		if tag != "":
+			extra = "  [%s]" % tag  # what it needs, not its times: the line is full
+		elif o.kind == "timed":
 			extra = "  gold %s" % clock_text(o.medals[0])
 			var best := profile.record(o.record)
 			if not best.is_empty():
 				extra += "  best %s" % clock_text(best.time)
-		var tag := need(o.kind)
-		if tag != "":
-			extra += "  [%s]" % tag
 		lines.append("%d  %-8s %s -> %s  %d m  $%d%s" % [i + 1, o.kind.to_upper(), o.cargo, o.name, o.route, o.reward, extra])
 	return "\n".join(lines)
 
@@ -489,6 +490,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func recover() -> void:
 	money -= RECOVER_COST
 	vehicle.fuel = maxf(vehicle.fuel, vehicle.spec.fuel_capacity * 0.5)
+	towing.emit()
 	vehicle.teleport(spawn_pos, spawn_yaw)
 	message.emit("The tow truck dragged you back to the depot. -$%d" % RECOVER_COST)
 

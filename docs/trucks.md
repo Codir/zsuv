@@ -66,8 +66,9 @@ its rings only in the full mud below the Polissia forestry.
   hitch; `Trailer` with brakes that follow the truck's, a stand, and the hold of a parked trailer.
 - The hitch (C, in reach of a trailer's coupler, slow) is a 6DOF joint at the truck's hitch: it
   turns 85 degrees either way, pitches 30, rolls 10; the trailer is swung onto the hitch first so
-  nothing jerks; the two do not collide while hitched. The tow (T) and setting upright (R) carry a
-  hitched trailer along, straight behind.
+  nothing jerks; the two do not collide while hitched. Setting upright (R) carries a hitched
+  trailer along, straight behind, or lets it go where it stands if a building or a tree is in the
+  way there; the tow (T) unhitches it and parks it by the depot, beside the truck.
 - `scripts/systems/garage.gd`: what the garage sells and what a job needs. `Profile` keeps the
   rigs bought and the truck picked; `Contracts` tags the jobs, sells, and swaps the truck through
   `scripts/main.gd`, which also parks the trailers bought on level, clear ground by the depot.

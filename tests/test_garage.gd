@@ -83,6 +83,37 @@ func test_a_truck_bought_is_driven_from_the_depot(t: TCase) -> void:
 	_sell_back(t)
 
 
+func test_trailers_park_off_the_roads_and_off_the_spawn(t: TCase) -> void:
+	var c: Contracts = t.world.contracts
+	c.call("_end_job")
+	c.money = 9000
+	c.garage_pick(1)  # the trailer
+	c.garage_pick(2)  # the tractor and its farm trailer: driven
+	await t.ticks(5)
+	c.garage_pick(4)  # the semi truck and its semi-trailer: driven
+	await t.ticks(5)
+	t.eq(c.trailers.size(), 3, "trailers at the depot")
+	var terrain: Terrain = t.world.terrain
+	for tr in c.trailers:
+		var on_road := 0
+		for x in [-1.0, 0.0, 1.0]:
+			for z in range(-6, 7, 2):
+				var p: Vector3 = tr.global_transform * Vector3(x, 0.0, float(z) * 0.5)
+				if terrain.road_distance(Vector2(p.x, p.z)) < Terrain.ROAD_HALF_WIDTH:
+					on_road += 1
+		t.eq(on_road, 0, "points of the %s on a road" % tr.spec.id)
+	# The semi-trailer left over the spawn: driving another truck from the garage moves it off.
+	var semi_trailer := c._trailer("semi_trailer")
+	semi_trailer.stand_on(Vector2(c.spawn_pos.x, c.spawn_pos.z), t.world.valley.spawn_yaw)
+	await t.ticks(30)
+	c.garage_pick(0)
+	await t.ticks(60)
+	var v: Vehicle = t.world.vehicle
+	t.ok(v.spec.id == "pickup" and v.global_transform.basis.y.y > 0.95, "the pickup is not upright on the spawn")
+	t.ok(Vector2(semi_trailer.global_position.x, semi_trailer.global_position.z).distance_to(Vector2(c.spawn_pos.x, c.spawn_pos.z)) > 6.0, "the semi-trailer still stands on the spawn")
+	_sell_back(t)
+
+
 func test_a_job_goes_only_where_its_rig_gets_to(t: TCase) -> void:
 	var c: Contracts = t.world.contracts
 	var places: Dictionary = c._places

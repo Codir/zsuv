@@ -3,7 +3,8 @@ extends RefCounted
 ## wheels on the ground; the pickup backs up to its trailer and C hitches it with no jerk; it pulls
 ## it down the road at 30 km/h without sway, turns at full lock without jackknifing into the truck,
 ## holds it on a slope; C unhitches it standing; a load adds its weight; the tow (T) takes both to
-## the depot, still hitched and upright.
+## the depot, the trailer to a spot of its own; R lets the trailer go when there is no room for it
+## straight behind.
 
 
 func test_each_trailer_stands_still(t: TCase) -> void:
@@ -237,13 +238,44 @@ func test_the_tow_takes_both_to_the_depot(t: TCase) -> void:
 	c.money = money
 	await t.ticks(180)
 	var from := Vector2(v.global_position.x - c.spawn_pos.x, v.global_position.z - c.spawn_pos.z).length()
+	var depot: Vector2 = t.world.locations.depot.pos
+	var at := Vector2(tr.global_position.x, tr.global_position.z)
 	var ok_wheels := tr.wheels.all(func(w: Chassis.Wheel) -> bool: return w.contact)
-	t.note = "%.1f m from the depot's spot, the trailer %.0f deg off straight behind" % [from, absf(_angle(v, tr))]
+	t.note = "the truck %.1f m from the depot's spot, the trailer %.0f m from the depot" % [from, at.distance_to(depot)]
 	t.ok(from < 2.0, "the truck is %.1f m from the depot's spot" % from)
-	t.ok(v.trailer == tr and _gap(v, tr) < 0.05, "the trailer did not come along hitched")
-	t.ok(absf(_angle(v, tr)) < 10.0, "the trailer %.0f deg off straight behind" % absf(_angle(v, tr)))
+	t.ok(v.trailer == null and tr.truck == null, "the trailer is still hitched")
+	t.ok(at.distance_to(depot) < 45.0, "the trailer is %.0f m from the depot" % at.distance_to(depot))
+	t.ok(t.world.terrain.road_distance(at) > Terrain.ROAD_HALF_WIDTH, "the trailer stands on a road")
 	t.ok(v.global_transform.basis.y.y > 0.95 and tr.global_transform.basis.y.y > 0.95, "not upright")
 	t.ok(ok_wheels, "the trailer's wheels off the ground")
+	_free(t, [tr])
+
+
+func test_r_lets_the_trailer_go_where_there_is_no_room_behind(t: TCase) -> void:
+	var v: Vehicle = t.world.vehicle
+	var tr := await _hitched(t)
+	# The truck sent 25 m ahead, with a wall where the trailer would go straight behind it there.
+	var terrain: Terrain = t.world.terrain
+	var yaw := v.global_rotation.y
+	var to := v.global_position - v.global_transform.basis.z * 25.0
+	to.y = terrain.get_height(to.x, to.z) + 2.0
+	var there := Transform3D(Basis(Vector3.UP, yaw), to)
+	var wall := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(4.0, 4.0, 1.0)
+	cs.shape = box
+	wall.add_child(cs)
+	t.world.add_child(wall)
+	wall.global_transform = Transform3D(there.basis, there * v.spec.hitch + there.basis.z * 2.0)
+	var stood := tr.global_position
+	await t.ticks(2)
+	v.teleport(to, yaw)
+	await t.ticks(60)
+	t.ok(v.trailer == null and tr.truck == null, "the trailer was hitched into a wall")
+	t.ok(v.global_position.distance_to(to) < 3.0, "the truck is %.1f m from where it was sent" % v.global_position.distance_to(to))
+	t.ok(tr.global_position.distance_to(stood) < 1.0, "the trailer moved %.1f m" % tr.global_position.distance_to(stood))
+	wall.free()
 	_free(t, [tr])
 
 

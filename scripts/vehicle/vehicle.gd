@@ -97,13 +97,19 @@ func set_lights(on: bool) -> void:
 
 
 ## Moves the truck to pos facing yaw at the next physics step, standing still; a hitched trailer
-## goes with it, straight behind and still hitched.
+## goes with it, straight behind and still hitched, if there is room for it there.
 func teleport(pos: Vector3, yaw: float) -> void:
 	winch.detach()
 	_reset_transform = Transform3D(Basis(Vector3.UP, yaw), pos)
 	_reset_requested = true
 	if trailer:
-		trailer.place(trailer.behind(Transform3D(_reset_transform.basis, _reset_transform * spec.hitch)))
+		# The trailer comes along straight behind, if there is room for it there; if a building or
+		# a tree stands there, it is let go where it is.
+		var behind := trailer.behind(Transform3D(_reset_transform.basis, _reset_transform * spec.hitch))
+		if trailer.fits(behind, self):
+			trailer.place(behind)
+		else:
+			unhitch()
 
 
 func reset_upright() -> void:

@@ -7,7 +7,7 @@ extends SceneTree
 ## function without failing anything by itself); one logged while the world is built fails the run.
 ## A watchdog ends a run that stops making progress.
 
-const WATCHDOG_S := 1500.0  # game time; the whole suite takes about 700 s of it
+const WATCHDOG_S := 2400.0  # game time; the whole suite takes about 1260 s of it
 
 var _errors := ErrorTrap.new()
 var _current := "building the world"

@@ -62,6 +62,7 @@ func _ready() -> void:
 	contracts.setup(vehicle, terrain, locations)
 	contracts.truck_wanted.connect(set_truck)
 	contracts.rigs_changed.connect(_park_trailers)
+	contracts.towing.connect(_towing)
 
 	_setup_post()
 	hud = Hud.new()
@@ -106,6 +107,7 @@ func set_truck(spec: TruckSpec) -> void:
 	old.unhitch()
 	remove_child(old)
 	old.queue_free()
+	_clear_spawn()
 	vehicle = _truck(spec)
 	camera_rig.target = vehicle
 	camera_rig.snap_to_target()
@@ -117,6 +119,7 @@ func set_truck(spec: TruckSpec) -> void:
 ## The player's trailers wait beside the truck's spawn, facing the way it faces; one bought here
 ## joins them.
 func _park_trailers() -> void:
+	_parked.clear()
 	for spec in TrailerSpec.all():
 		if not profile.has_rig(spec.id) or contracts._trailer(spec.id) != null:
 			continue
@@ -125,14 +128,45 @@ func _park_trailers() -> void:
 		t.spec = spec
 		t.terrain = terrain
 		add_child(t)
-		var p := _parking(spec)
-		t.stand_on(Vector2(p.x, p.z), valley.spawn_yaw)
+		_park(t)
 		contracts.trailers.append(t)
 
 
-## A spot for a trailer of spec beside the depot: on level ground with nothing standing on it, clear
-## of the truck's spawn and of the trailers parked already, the nearest of a few rows to either side.
-func _parking(spec: TrailerSpec) -> Vector3:
+## Stands trailer t on a free spot by the depot (it moves at the next physics step).
+func _park(t: Trailer) -> void:
+	var p := _parking(t.spec, t)
+	t.stand_on(Vector2(p.x, p.z), valley.spawn_yaw)
+
+
+## The tow (T) is on its way: the truck's trailer comes along to a spot by the depot of its own,
+## and a trailer left standing where the truck is to be set down is moved off it.
+func _towing() -> void:
+	var t := vehicle.trailer
+	vehicle.unhitch()
+	_parked.clear()
+	_clear_spawn()
+	if t:
+		_park(t)
+
+
+## Moves any trailer standing where a truck is set down at the spawn (a long one left there, say)
+## to a free spot by the depot.
+func _clear_spawn() -> void:
+	var box := BoxShape3D.new()
+	box.size = Vector3(4.0, 3.0, 10.0)
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = box
+	q.transform = Transform3D(Basis(Vector3.UP, valley.spawn_yaw), _spawn() + Vector3(0.0, 0.5, 0.0))
+	for hit in get_world_3d().direct_space_state.intersect_shape(q, 8):
+		var t := hit.collider as Trailer
+		if t and t.truck == null:
+			_park(t)
+
+
+## A spot for a trailer of spec beside the depot: on level ground off the roads with nothing
+## standing on it (but moving, the trailer itself), clear of the truck's spawn and of the spots
+## given out already, the nearest of a few rows to either side.
+func _parking(spec: TrailerSpec, moving: Trailer = null) -> Vector3:
 	var turn := Basis(Vector3.UP, valley.spawn_yaw)
 	var lo := Vector3(-1.5, 0.0, spec.coupler.z)
 	var hi := Vector3(1.5, 2.5, spec.coupler.z)
@@ -159,12 +193,16 @@ func _parking(spec: TrailerSpec) -> Vector3:
 				if spread > 0.6 or middle.distance_to(_spawn()) < 6.0:
 					continue
 				var free := true
+				for c in [Vector3(lo.x, 0.0, lo.z), Vector3(hi.x, 0.0, lo.z), Vector3(lo.x, 0.0, hi.z), Vector3(hi.x, 0.0, hi.z), (lo + hi) * 0.5]:
+					var at: Vector3 = p + turn * c
+					free = free and terrain.road_distance(Vector2(at.x, at.z)) > Terrain.ROAD_HALF_WIDTH + 0.5
 				for taken in _parked:
 					free = free and middle.distance_to(taken) > 6.0
 				var q := PhysicsShapeQueryParameters3D.new()
 				q.shape = box
-				q.transform = Transform3D(turn, middle + Vector3(0.0, box.size.y * 0.5 + 0.4, 0.0))
-				for hit in space.intersect_shape(q, 4):
+				q.transform = Transform3D(turn, middle + Vector3(0.0, 0.3, 0.0))
+				q.exclude = [moving.get_rid()] if moving else []
+				for hit in space.intersect_shape(q, 8):
 					free = free and hit.collider.get_parent() == terrain
 				if free:
 					_parked.append(middle)
