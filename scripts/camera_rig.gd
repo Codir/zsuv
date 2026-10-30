@@ -54,12 +54,14 @@ func _process(delta: float) -> void:
 	_orbit_cooldown -= delta
 	if not _orbiting and _orbit_cooldown <= 0.0 and target.forward_speed > 1.5:
 		yaw = lerp_angle(yaw, target.global_rotation.y, 1.0 - exp(-delta * 1.5))
-	var cam_pos := global_position + Basis.from_euler(Vector3(pitch, yaw, 0.0)) * Vector3(0.0, 0.0, distance)
+	# A trailer behind the truck: back by half its length again, so the rig is in view.
+	var back := distance + (absf(target.trailer.spec.coupler.z) if target.trailer else 0.0)
+	var cam_pos := global_position + Basis.from_euler(Vector3(pitch, yaw, 0.0)) * Vector3(0.0, 0.0, back)
 	if terrain:
 		cam_pos.y = maxf(cam_pos.y, terrain.get_height(cam_pos.x, cam_pos.z) + 1.2)
-	# A hill or a tree between the truck and the camera: pull the camera in.
+	# A hill or a tree between the truck and the camera: pull the camera in (not for its trailer).
 	var q := PhysicsRayQueryParameters3D.create(global_position, cam_pos)
-	q.exclude = [target.get_rid()]
+	q.exclude = [target.get_rid(), target.trailer.get_rid()] if target.trailer else [target.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	if not hit.is_empty():
 		cam_pos = hit.position + (global_position - cam_pos).normalized() * 0.4

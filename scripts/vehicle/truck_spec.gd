@@ -188,7 +188,7 @@ static func tractor() -> TruckSpec:
 	s.cargo_mass = {}
 	s.tows = ["farm"]
 	s.winch_mount = Vector3(0.0, -0.25, -2.45)
-	s.hitch = Vector3(0.0, -0.5, 2.0)
+	s.hitch = Vector3(0.0, -0.22, 2.0)  # as high as the farm trailer's drawbar eye stands
 	s.hitch_kind = "pin"
 	s.lights = [Vector3(-0.25, 0.42, -2.2), Vector3(0.25, 0.42, -2.2)]
 	s.camera_distance = 11.0

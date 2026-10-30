@@ -546,8 +546,8 @@ func _build_tractor() -> void:
 	for side in [-1.0, 1.0]:
 		Psx.box(gfx, Vector3(0.07, 0.07, 0.75), Vector3(0.35 * side, -0.42, 1.75), DARK)
 	Psx.box(gfx, Vector3(0.07, 0.07, 0.55), Vector3(0.0, 0.12, 1.62), DARK)
-	Psx.box(gfx, Vector3(0.14, 0.06, 0.8), Vector3(0.0, -0.53, 1.65), DARK)
-	Psx.mesh(gfx, Psx.cylinder(0.035, 0.035, 0.22, 6), Vector3(0.0, -0.47, spec.hitch.z - 0.04), Color(0.6, 0.6, 0.62))
+	Psx.box(gfx, Vector3(0.14, 0.06, 0.8), Vector3(0.0, spec.hitch.y - 0.03, 1.65), DARK)
+	Psx.mesh(gfx, Psx.cylinder(0.035, 0.035, 0.22, 6), Vector3(0.0, spec.hitch.y + 0.03, spec.hitch.z - 0.04), Color(0.6, 0.6, 0.62))
 
 
 ## The semi truck's look (TruckSpec.body "semi"): a tall blue cab over the engine under a white

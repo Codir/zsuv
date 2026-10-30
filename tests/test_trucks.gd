@@ -254,14 +254,14 @@ func _check_wheels(t: TCase, s: TruckSpec) -> void:
 	t.ok(steers and drives, "%s: nothing steers or nothing drives in 2WD" % s.id)
 
 
-## Its hitch where its trailer couples: a towbar or a drawbar pin behind its last axle, as high as
-## the pickup's or lower; a fifth wheel over its rear axles, 1.2-1.4 m off the ground.
+## Its hitch where its trailer couples: a towbar or a drawbar pin behind its last axle, about as
+## high as its trailer's coupler stands; a fifth wheel over its rear axles, 1.2-1.4 m off the ground.
 func _check_hitch(t: TCase, v: Vehicle) -> void:
 	var s := v.spec
 	var p := v.global_transform * s.hitch
 	var over := p.y - (t.world.terrain as Terrain).get_height(p.x, p.z)
 	var last: float = s.wheels[s.wheels.size() - 1].mount.z
-	var heights := {"ball": Vector2(0.5, 0.9), "pin": Vector2(0.3, 0.7), "fifth": Vector2(1.2, 1.4)}
+	var heights := {"ball": Vector2(0.5, 0.9), "pin": Vector2(0.55, 0.9), "fifth": Vector2(1.2, 1.4)}
 	t.ok(heights.has(s.hitch_kind), "%s: a hitch of no kind (%s)" % [s.id, s.hitch_kind])
 	if not heights.has(s.hitch_kind):
 		return

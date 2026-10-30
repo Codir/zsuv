@@ -31,8 +31,11 @@ const OFFERS := 5
 const DOABLE := 2  # of them the rig in play can take, at least
 const BULK := {"elevator": "grain", "khutir": "hay", "sheepfold": "hay", "peat_works": "peat", "apiary": "hay",
 	"village_church": "grain", "forestry": "sawdust", "winery": "grape marc", "fish_farm": "fish feed"}
-const LONG := {"sawmill": "logs", "forestry": "logs", "wind_farm": "a turbine blade", "radio_tower": "mast sections",
+const LONG := {"sawmill": "logs", "forestry": "logs", "wind_farm": "tower sections", "radio_tower": "mast sections",
 	"weather_station": "mast sections", "castle": "scaffolding"}
+## How a trailer's load looks, by what it is (Trailer's loads; the kind's own look otherwise).
+const LOOKS := {"peat": "bulk_peat", "hay": "bulk_hay", "pipes": "long_pipes", "tower sections": "long_pipes",
+	"mast sections": "long_pipes", "scaffolding": "long_pipes"}
 const SHORT := {"pickup": "PICKUP", "six": "6X6", "tractor": "TRACTOR", "semi": "SEMI", "trailer": "TRAILER"}
 const STUCK_REWARD := 300
 const MEDALS := ["gold", "silver", "bronze"]
@@ -220,7 +223,7 @@ func take(o: Dictionary) -> void:
 		vehicle.set_cargo(true, bed)
 	var trailer := _trailer(Garage.trailer_for(o.kind))
 	if trailer:
-		trailer.set_load(o.kind)
+		trailer.set_load(o.kind, LOOKS.get(o.cargo, ""))
 	var text := "Loaded: %s. Head for %s" % [o.cargo, o.name]
 	match o.kind:
 		"timed":

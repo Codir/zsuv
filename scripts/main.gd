@@ -19,6 +19,7 @@ var roads: Array[PackedVector2Array] = []
 var weather: Weather  # set before the scene enters the tree; the valley's own if not
 var _env: Environment
 var _sun: DirectionalLight3D
+var _parked: Array[Vector3] = []  # the middles of the spots the trailers were parked on
 var _fall: CPUParticles3D
 
 
@@ -102,8 +103,7 @@ func _truck(spec: TruckSpec) -> Vehicle:
 ## The garage put spec at the depot: the truck in play is replaced by it, at the spawn.
 func set_truck(spec: TruckSpec) -> void:
 	var old := vehicle
-	if old.trailer and old.has_method("unhitch"):
-		old.call("unhitch")
+	old.unhitch()
 	remove_child(old)
 	old.queue_free()
 	vehicle = _truck(spec)
@@ -114,25 +114,62 @@ func set_truck(spec: TruckSpec) -> void:
 	contracts.set_vehicle(vehicle)
 
 
-## The player's trailers wait side by side beside the truck's spawn, facing the way it faces; one
-## bought here joins them.
+## The player's trailers wait beside the truck's spawn, facing the way it faces; one bought here
+## joins them.
 func _park_trailers() -> void:
-	var yaw := valley.spawn_yaw
-	var right := Basis(Vector3.UP, yaw) * Vector3.RIGHT
-	var k := contracts.trailers.size()
 	for spec in TrailerSpec.all():
 		if not profile.has_rig(spec.id) or contracts._trailer(spec.id) != null:
 			continue
-		k += 1
-		var p := _spawn() + right * 5.0 * k
 		var t := Trailer.new()
 		t.name = "Trailer_%s" % spec.id
 		t.spec = spec
 		t.terrain = terrain
-		t.position = Vector3(p.x, terrain.get_height(p.x, p.z) + 1.0, p.z)
-		t.rotation.y = yaw
 		add_child(t)
+		var p := _parking(spec)
+		t.stand_on(Vector2(p.x, p.z), valley.spawn_yaw)
 		contracts.trailers.append(t)
+
+
+## A spot for a trailer of spec beside the depot: on level ground with nothing standing on it, clear
+## of the truck's spawn and of the trailers parked already, the nearest of a few rows to either side.
+func _parking(spec: TrailerSpec) -> Vector3:
+	var turn := Basis(Vector3.UP, valley.spawn_yaw)
+	var lo := Vector3(-1.5, 0.0, spec.coupler.z)
+	var hi := Vector3(1.5, 2.5, spec.coupler.z)
+	for b in spec.shapes:
+		lo = lo.min(b.pos - b.size * 0.5)
+		hi = hi.max(b.pos + b.size * 0.5)
+	var box := BoxShape3D.new()
+	box.size = hi - lo + Vector3(1.0, 0.0, 1.0)
+	var space := get_world_3d().direct_space_state
+	for row in [0.0, 6.0, -6.0, 12.0, -12.0]:
+		for step in range(1, 8):
+			for side in [1.0, -1.0]:
+				var p := _spawn() + turn * Vector3(side * 4.5 * step, 0.0, row)
+				p.y = terrain.get_height(p.x, p.z)
+				var middle := p + turn * ((lo + hi) * 0.5)
+				var heights := PackedFloat32Array()
+				for c in [Vector3(lo.x, 0.0, lo.z), Vector3(hi.x, 0.0, lo.z), Vector3(lo.x, 0.0, hi.z), Vector3(hi.x, 0.0, hi.z)]:
+					var corner: Vector3 = p + turn * c
+					heights.append(terrain.get_height(corner.x, corner.z))
+				var level := heights[heights.size() - 1]
+				var spread := 0.0
+				for h in heights:
+					spread = maxf(spread, absf(h - level))
+				if spread > 0.6 or middle.distance_to(_spawn()) < 6.0:
+					continue
+				var free := true
+				for taken in _parked:
+					free = free and middle.distance_to(taken) > 6.0
+				var q := PhysicsShapeQueryParameters3D.new()
+				q.shape = box
+				q.transform = Transform3D(turn, middle + Vector3(0.0, box.size.y * 0.5 + 0.4, 0.0))
+				for hit in space.intersect_shape(q, 4):
+					free = free and hit.collider.get_parent() == terrain
+				if free:
+					_parked.append(middle)
+					return p
+	return _spawn() + turn * Vector3(9.0, 0.0, 0.0)
 
 
 ## Store-page capture (scripts/capture/director.gd): --capture=trailer --out=<dir>.

@@ -36,6 +36,7 @@ func test_a_bought_trailer_waits_at_the_depot_and_carries_a_double_load(t: TCase
 	var trailer := c._trailer("trailer")
 	if not t.ok(trailer != null, "no trailer at the depot"):
 		return
+	await t.ticks(2)  # it is set down on the next physics tick
 	t.ok(trailer.global_position.distance_to(c.spawn_pos) < 20.0, "the trailer is %.0f m from the depot" % trailer.global_position.distance_to(c.spawn_pos))
 	t.ok(c.board_text().contains("TRAILER") and c.board_text().contains("at the depot"), "garage: " + c.board_text())
 	t.eq(c.need("double"), "", "a double load with the trailer bought")
