@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0 — 2026-10-30 — Trucks and trailers
+
+- Four new rigs beside the pickup, as in SnowRunner: a trailer for the pickup; a heavy 6x6 (an
+  army truck with big lugged tyres, through deep snow and mud where the pickup bogs); a farm
+  tractor with a tipper trailer, slow and sure through bog; a semi truck with a 12 m flatbed
+  semi-trailer, fast on a road and hard work in a hairpin. Each looks, pulls, turns and sounds its
+  own way.
+- A garage at the depot: Tab on the job board. The trailer $800, the tractor with its trailer
+  $2500, the 6x6 $3500, the semi truck with its semi-trailer $5000, bought once from the wallet
+  the valleys are bought from and kept in every valley; a truck bought is driven from any depot.
+- Trailers wait beside the depot: back up to one and press C to hitch it, C again to leave it.
+  It follows on a hitch that turns and pitches, brakes with the truck, and comes along on the tow.
+- The board offers five jobs, at least two for the truck in play; the others say what they need.
+  The heavy load is the 6x6's now, 3500 kg of rings paying twice; new loads: a double load on the
+  pickup and its trailer (1.5 times), grain, peat or hay in the farm trailer (1.8), logs or pipes
+  on the semi-trailer (2.5).
+- The dashboard names the drive by wheels (4x2, 6x6); the camera stands back for a trailer.
+- Tests for the trucks (each drives, the 6x6 and the tractor through snow and mud, the 6x6
+  loaded up the steepest road), the trailers and the hitch (standing, hitching, pulling, braking,
+  turning, the tow), the garage and the jobs by rig.
+
 ## 0.2.2 — 2026-10-29 — Five valleys
 
 - Four new valleys beside the khutir valley, as Philip asked in AI Browser Game Jam 5 for more

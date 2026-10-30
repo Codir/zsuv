@@ -19,24 +19,38 @@ SnowRunner (`media/comments.md`). The owner's decisions, 2026-10-30, all in one 
 
 ## The rigs
 
-| Rig | Price | Wheels | Mass | Top speed | Carries | Note |
-|---|---|---|---|---|---|---|
-| Pickup (today's truck) | owned | 4, 4x2 / 4x4 | 2000 kg | 65 km/h | plain, timed, fragile; tows the trailer | |
-| Trailer | $800 | 2 (one axle) | 400 kg | | a double load | hitched to the pickup (or the 6x6) |
-| 6x6 | $3500 | 6, 6x4 / 6x6 | 6500 kg | 50 km/h | plain, timed, fragile, heavy | big tyres, deep snow and mud, thirsty |
-| Tractor + trailer | $2500 | 4 (big rear) + 4 | 4000 + 1500 kg | 30 km/h | bulk, in the trailer | bog and deep snow, the slowest |
-| Semi truck + semi-trailer | $5000 | 6 + 6 | 7000 + 3000 kg | 70 km/h | long, on the semi-trailer | turns wide: a hairpin is hard work |
+Speeds as measured on the flat (the specs' rated top speeds are higher: all lose about a fifth to
+drag and rolling), turning circles at full lock, as built (`tests/test_trucks.gd`,
+`tests/test_trailer.gd`).
+
+| Rig | Price | Wheels | Mass | Top speed | Turns in | Carries | Its way |
+|---|---|---|---|---|---|---|---|
+| Pickup | owned | 4: 4x2 / 4x4 | 2000 kg | 48 km/h | 5.3 m | plain, timed, fragile (900 kg); tows the trailer | bogs in deep snow in 4x2 |
+| Trailer | $800 | 2, one axle | 400 kg | | | a double load: 900 kg in it, 900 on the bed | behind the pickup or the 6x6 |
+| Heavy 6x6 | $3500 | 6: 6x4 / 6x6, big lugged tyres | 6500 kg | 40 km/h | 6.8 m | the pickup's loads and the heavy one (3500 kg of rings) | through deep snow and mud; 150 L, burns 1.8 times |
+| Tractor | $2500 | 4: big lugged rears, 4x2 / 4x4 | 4000 kg | 25 km/h | 5.0 m | nothing itself: bulk in its trailer | crawls through bog and deep snow in 4x2 |
+| Farm trailer | with the tractor | 4, tandem | 1500 kg | | | bulk: 4000 kg of grain, peat or hay | |
+| Semi truck | $5000 | 6: 6x4, twin rear tyres | 7000 kg | 54 km/h | 9.9 m | nothing itself: long loads on its semi-trailer | fast on a road; sinks in mud; a hairpin is hard work |
+| Semi-trailer | with the semi truck | 6, three axles | 3000 kg | | | long: 8000 kg of logs or pipes | 12 m; 37% of it on the fifth wheel |
+
+The hitches meet: a towbar at 0.62-0.70 m and the trailer's ball at 0.64; the tractor's pin and
+the farm trailer's eye at 0.72; the fifth wheel at 1.30 m and the kingpin, standing on its legs,
+at 1.33.
 
 ## How it is built
 
-- `scripts/vehicle/truck_spec.gd`: a rig as data, as `Valley` is a valley: its wheels (mount,
-  radius, steered, driven in 2WD), springs, engine, top speeds, fuel, mass, where a load sits,
-  its hitch, the look its body is built from, what it carries, the camera's distance and the
-  engine's pitch. `TruckSpec.all()` lists them; `TrailerSpec` the same for the trailers.
+- `scripts/vehicle/truck_spec.gd`: a truck as data, as `Valley` is a valley: its wheels (mount,
+  radius, steered, driven in 2WD, tread), springs, engine, top speeds, fuel, mass, the loads it
+  carries, its winch and hitch, the look its body is built from, the camera's distance and the
+  engine's pitch and place. `TruckSpec.all()` lists them; `TrailerSpec` the same for the trailers.
 - `scripts/vehicle/chassis.gd`: the raycast wheels shared by trucks and trailers (suspension,
-  anti-roll per axle, tyres on snow, mud and ice, wheel spin and spray). `Vehicle` extends it with
-  the engine, the drive train and the winch; `Trailer` with brakes that follow the truck's.
-- The hitch is a joint between the truck's hitch point and the trailer's coupler, free to turn
-  and to pitch, held in roll, with the two bodies not colliding with each other.
-- `Profile` keeps the rigs bought and the truck picked; `Contracts` asks a job's rig of the truck
-  in play and its hitched trailer.
+  anti-roll per axle, tyres on snow, mud and ice, how much a tyre sinks and how its tread bites,
+  wheel spin and spray). `Vehicle` extends it with the engine, the drive train, the winch and the
+  hitch; `Trailer` with brakes that follow the truck's, a stand, and the hold of a parked trailer.
+- The hitch (C, in reach of a trailer's coupler, slow) is a 6DOF joint at the truck's hitch: it
+  turns 85 degrees either way, pitches 30, rolls 10; the trailer is swung onto the hitch first so
+  nothing jerks; the two do not collide while hitched. The tow (T) and setting upright (R) carry a
+  hitched trailer along, straight behind.
+- `scripts/systems/garage.gd`: what the garage sells and what a job needs. `Profile` keeps the
+  rigs bought and the truck picked; `Contracts` tags the jobs, sells, and swaps the truck through
+  `scripts/main.gd`, which also parks the trailers bought on level, clear ground by the depot.
