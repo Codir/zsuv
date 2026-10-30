@@ -167,8 +167,9 @@ func test_the_rigs_are_saved(t: TCase) -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
-## Every trailer in world parked well: upright, off the roads all along it, clear of buildings,
-## trees and the other trailers, and off the spot where a truck is set down.
+## Every trailer in world parked well: on the map, standing still upright on its wheels, off the
+## roads all along it, clear of buildings, trees and the other trailers, off the spot where a truck
+## is set down, and with 5 m ahead of its coupler clear for a truck to back up to it.
 func _parked_well(t: TCase, world: Node, label: String) -> void:
 	var c: Contracts = world.contracts
 	var terrain: Terrain = world.terrain
@@ -178,6 +179,8 @@ func _parked_well(t: TCase, world: Node, label: String) -> void:
 		var p: Vector3 = c.spawn_pos + turn * k
 		spawn.append(Vector2(p.x, p.z))
 	var feet: Array[PackedVector2Array] = []
+	var lanes: Array[PackedVector2Array] = []
+	var space: PhysicsDirectSpaceState3D = world.get_world_3d().direct_space_state
 	for tr in c.trailers:
 		var box := tr.spec.extent()
 		var corners := PackedVector2Array()
@@ -191,6 +194,24 @@ func _parked_well(t: TCase, world: Node, label: String) -> void:
 					corners.append(Vector2(p.x, p.z))
 		corners = PackedVector2Array([corners[0], corners[1], corners[3], corners[2]])
 		feet.append(corners)
+		var lane := PackedVector2Array()
+		for k in [Vector3(0.0, 0.0, -5.0), Vector3(box.size.x, 0.0, -5.0), Vector3(box.size.x, 0.0, 0.0), Vector3(0.0, 0.0, 0.0)]:
+			var p: Vector3 = tr.global_transform * (box.position + k)
+			lane.append(Vector2(p.x, p.z))
+		lanes.append(lane)
+		var q := PhysicsShapeQueryParameters3D.new()
+		var lane_box := BoxShape3D.new()
+		lane_box.size = Vector3(box.size.x, 1.5, 5.0)
+		q.shape = lane_box
+		q.transform = tr.global_transform * Transform3D(Basis.IDENTITY, box.position + Vector3(box.size.x * 0.5, 0.75, -2.5))
+		q.exclude = [tr.get_rid(), terrain.body.get_rid(), world.vehicle.get_rid()]
+		t.ok(space.intersect_shape(q, 1).is_empty(), "%s: something stands ahead of the %s's coupler" % [label, tr.spec.id])
+		var edge := 0.0
+		for p in corners:
+			edge = maxf(edge, maxf(absf(p.x), absf(p.y)))
+		t.ok(edge < Terrain.HALF - 2.0, "%s: the %s is %.0f m out, off the map" % [label, tr.spec.id, edge])
+		var standing := tr.wheels.all(func(w: Chassis.Wheel) -> bool: return w.contact)
+		t.ok(standing and tr.linear_velocity.length() < 0.3, "%s: the %s is not standing on its wheels (%.1f m/s)" % [label, tr.spec.id, tr.linear_velocity.length()])
 		t.eq(on_road, 0, "%s: points of the %s on a road" % [label, tr.spec.id])
 		t.ok(tr.global_transform.basis.y.y > 0.95, "%s: the %s tipped (up %.2f)" % [label, tr.spec.id, tr.global_transform.basis.y.y])
 		t.ok(tr.fits(tr.global_transform), "%s: the %s stands in a building, a tree or another trailer" % [label, tr.spec.id])
@@ -198,6 +219,10 @@ func _parked_well(t: TCase, world: Node, label: String) -> void:
 	for i in feet.size():
 		for j in range(i + 1, feet.size()):
 			t.ok(Geometry2D.intersect_polygons(feet[i], feet[j]).is_empty(), "%s: the %s and the %s overlap" % [label, c.trailers[i].spec.id, c.trailers[j].spec.id])
+	for i in lanes.size():
+		for j in feet.size():
+			if i != j:
+				t.ok(Geometry2D.intersect_polygons(lanes[i], feet[j]).is_empty(), "%s: the %s stands ahead of the %s's coupler" % [label, c.trailers[j].spec.id, c.trailers[i].spec.id])
 
 
 ## Undoes what the garage sold in the shared world: the pickup, no trailers, no rigs.

@@ -99,7 +99,7 @@ func set_lights(on: bool) -> void:
 ## Moves the truck to pos facing yaw at the next physics step, standing still; a hitched trailer
 ## goes with it, still hitched, straight behind or else swung as it is now, if there is room for it
 ## there. If a building or a tree is in the way of both, the trailer is let go where it is and the
-## truck set down clear of it.
+## truck set down clear of it and of anything else there.
 func teleport(pos: Vector3, yaw: float) -> void:
 	winch.detach()
 	_reset_transform = Transform3D(Basis(Vector3.UP, yaw), pos)
@@ -119,8 +119,9 @@ func teleport(pos: Vector3, yaw: float) -> void:
 	_reset_transform = _clear_of(t, _reset_transform)
 
 
-## xf, or as far ahead of it as the truck must stand to come down clear of trailer t (a
-## semi-trailer's deck reaches over the truck it is let go from).
+## xf, or else the nearest spot ahead of it or to either side where the truck comes down clear of
+## trailer t (a semi-trailer's deck reaches over the truck it is let go from) and of anything else
+## standing there; xf if there is none within 20 m.
 func _clear_of(t: Trailer, xf: Transform3D) -> Transform3D:
 	var lo := Vector3.INF
 	var hi := -Vector3.INF
@@ -130,18 +131,27 @@ func _clear_of(t: Trailer, xf: Transform3D) -> Transform3D:
 	for w in spec.wheels:
 		lo = lo.min(w.mount - Vector3(w.width, rest_length + w.radius, w.radius))
 		hi = hi.max(w.mount + Vector3(w.width, 0.0, w.radius))
-	lo.y -= 2.5  # and whatever it would fall onto
-	var box := BoxShape3D.new()
-	box.size = hi - lo
+	var body := BoxShape3D.new()
+	body.size = hi - lo
+	var fall := BoxShape3D.new()  # and what it would fall onto
+	fall.size = body.size + Vector3(0.0, 2.5, 0.0)
 	var q := PhysicsShapeQueryParameters3D.new()
-	q.shape = box
 	q.exclude = [get_rid(), terrain.body.get_rid()] if terrain else [get_rid()]
 	var space := get_world_3d().direct_space_state
-	for i in 40:
-		var at := xf.translated(-xf.basis.z * 0.5 * i)
-		q.transform = Transform3D(at.basis, at * ((lo + hi) * 0.5))
-		if not space.intersect_shape(q, 32).any(func(hit: Dictionary) -> bool: return hit.rid == t.get_rid()):
-			return at
+	var lift := xf.origin.y - (terrain.get_height(xf.origin.x, xf.origin.z) if terrain else 0.0)
+	for i in 41:
+		for way in ([Vector3.FORWARD] if i == 0 else [Vector3.FORWARD, Vector3.LEFT, Vector3.RIGHT]):
+			var at := xf.translated(xf.basis * way * 0.5 * i)
+			if terrain:
+				at.origin.y = terrain.get_height(at.origin.x, at.origin.z) + lift
+			q.shape = fall
+			q.transform = Transform3D(at.basis, at * ((lo + hi) * 0.5 - Vector3(0.0, 1.25, 0.0)))
+			if space.intersect_shape(q, 32).any(func(hit: Dictionary) -> bool: return hit.rid == t.get_rid()):
+				continue
+			q.shape = body
+			q.transform = Transform3D(at.basis, at * ((lo + hi) * 0.5))
+			if i == 0 or space.intersect_shape(q, 1).is_empty():
+				return at
 	return xf
 
 

@@ -361,6 +361,50 @@ func test_r_sets_the_semi_down_clear_of_the_semi_trailer_it_lets_go(t: TCase) ->
 	await t.ticks(5)
 
 
+func test_r_does_not_set_the_semi_down_in_a_house_ahead(t: TCase) -> void:
+	t.world.set_truck(TruckSpec.semi())
+	await t.ticks(5)
+	var v: Vehicle = t.world.vehicle
+	var c: Contracts = t.world.contracts
+	var terrain: Terrain = t.world.terrain
+	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw)
+	var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), v.global_rotation.y)
+	await t.ticks(20)
+	v.hitch(tr)
+	await t.ticks(40)
+	var b := v.global_transform.basis
+	var over := v.global_position + b.z * 7.5
+	over.y = terrain.get_height(over.x, over.z) + 2.3
+	var branches := _wall(t, Vector3(3.0, 1.0, 7.0), Transform3D(b, over))
+	# A house 1 m ahead of the cab's nose.
+	var at := v.global_position - b.z * 7.1
+	at.y = terrain.get_height(at.x, at.z) + 2.25
+	var house := _wall(t, Vector3(6.0, 4.5, 5.0), Transform3D(b, at))
+	await t.ticks(2)
+	v.reset_upright()
+	await t.ticks(120)
+	var inside := false
+	for cs in v.get_children():
+		if cs is CollisionShape3D:
+			var q := PhysicsShapeQueryParameters3D.new()
+			q.shape = cs.shape
+			q.transform = cs.global_transform
+			inside = inside or _meets(v, q, house)
+	t.ok(v.trailer == null, "R hitched the trailer into the branches")
+	t.ok(not inside, "the truck is in the house")
+	t.ok(v.global_transform.basis.y.y > 0.97 and v.wheels.all(func(w: Chassis.Wheel) -> bool: return w.contact), "the truck is not on its wheels, upright")
+	branches.free()
+	house.free()
+	_free(t, [tr])
+	t.world.set_truck(TruckSpec.pickup())
+	await t.ticks(5)
+
+
+## Whether query q, from v's world, meets body.
+func _meets(v: Vehicle, q: PhysicsShapeQueryParameters3D, body: CollisionObject3D) -> bool:
+	return v.get_world_3d().direct_space_state.intersect_shape(q, 16).any(func(hit: Dictionary) -> bool: return hit.rid == body.get_rid())
+
+
 ## A box of size standing at xf, in the world.
 func _wall(t: TCase, size: Vector3, xf: Transform3D) -> StaticBody3D:
 	var wall := StaticBody3D.new()

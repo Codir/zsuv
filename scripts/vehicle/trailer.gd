@@ -189,6 +189,25 @@ func stand_on(at: Vector2, yaw: float) -> void:
 	place(Transform3D(b, g_axle + Vector3(0.0, 0.01, 0.0) - b * foot))
 
 
+## How far the ground under its wheels lies off the plane stand_on(at, yaw) would set it on (through
+## the ground at its stand and under its axle), the most of any wheel: 0 on even ground.
+func unevenness(at: Vector2, yaw: float) -> float:
+	var turn := Basis(Vector3.UP, yaw)
+	var axle := _axle()
+	var half := absf(spec.wheels[0].mount.x)
+	var o := Vector3(at.x, 0.0, at.y)
+	var g_axle := _ground_at(o + turn * Vector3(0.0, 0.0, axle.z)).y
+	var g_stand := _ground_at(o + turn * Vector3(0.0, 0.0, spec.stand.z)).y
+	var g_left := _ground_at(o + turn * Vector3(-half, 0.0, axle.z)).y
+	var g_right := _ground_at(o + turn * Vector3(half, 0.0, axle.z)).y
+	var most := 0.0
+	for w in spec.wheels:
+		var m: Vector3 = w.mount
+		var plane := g_axle + (m.z - axle.z) * (g_axle - g_stand) / (axle.z - spec.stand.z) + m.x * (g_right - g_left) / (half * 2.0)
+		most = maxf(most, absf(_ground_at(o + turn * Vector3(m.x, 0.0, m.z)).y - plane))
+	return most
+
+
 func _ground_at(p: Vector3) -> Vector3:
 	return Vector3(p.x, terrain.get_height(p.x, p.z) if terrain else 0.0, p.z)
 
