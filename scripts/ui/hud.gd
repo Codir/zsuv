@@ -109,7 +109,7 @@ func _process(delta: float) -> void:
 	_board_bg.visible = contracts.board_open
 	if _board.visible:
 		_board.text = contracts.board_text()
-	_prompt.text = contracts.prompt if contracts.prompt != "" else vehicle.winch.prompt()
+	_prompt.text = vehicle.prompt_with(contracts.prompt)
 	_message_time -= delta
 	_message.visible = _message_time > 0.0
 

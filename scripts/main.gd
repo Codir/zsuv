@@ -216,6 +216,7 @@ func _setup_input() -> void:
 		"toggle_map": [KEY_M],
 		"winch": [KEY_F],
 		"winch_reel": [KEY_SHIFT],
+		"hitch": [KEY_C],
 	}
 	for action in map:
 		if InputMap.has_action(action):
