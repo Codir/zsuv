@@ -182,6 +182,38 @@ func test_the_tow_brings_a_trailer_back_to_its_spot_with_another_in_its_way(t: T
 	_sell_back(t)
 
 
+func test_the_tow_sets_the_truck_on_the_spawn_with_a_trailer_left_there(t: TCase) -> void:
+	# The semi-trailer left standing across the spawn, the pickup's trailer out in the valley, the
+	# semi far off: the tow sets the semi down on the spawn, the semi-trailer off it, and the
+	# pickup's trailer back on its own spot.
+	var c: Contracts = t.world.contracts
+	c.call("_end_job")
+	c.money = 6000
+	c.garage_pick(1)  # the trailer
+	await t.ticks(5)
+	c.garage_pick(4)  # the semi and its semi-trailer: driven
+	await t.ticks(60)
+	var v: Vehicle = t.world.vehicle
+	var trailer := c._trailer("trailer")
+	var semi_trailer := c._trailer("semi_trailer")
+	var spot := trailer.global_transform
+	var farm: Vector2 = t.world.locations.farm.pos
+	trailer.stand_on(farm + Vector2(10.0, 0.0), 0.0)
+	semi_trailer.stand_on(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw + PI * 0.5)
+	await t.place(farm + Vector2(0.0, -6.0), 0.0, 60)
+	var money := c.money
+	c.recover()
+	c.money = money
+	await t.ticks(120)
+	var spawn := Vector2(c.spawn_pos.x, c.spawn_pos.z)
+	var off := Vector2(v.global_position.x, v.global_position.z).distance_to(spawn)
+	t.note = "the semi %.1f m from the spawn, the trailer %.1f m from its spot" % [off, trailer.global_position.distance_to(spot.origin)]
+	t.ok(off < 0.5 and v.global_transform.basis.y.y > 0.97, "the semi is %.1f m from the spawn, or tilted" % off)
+	t.ok(Vector2(semi_trailer.global_position.x, semi_trailer.global_position.z).distance_to(spawn) > 6.0, "the semi-trailer still stands on the spawn")
+	t.ok(trailer.global_position.distance_to(spot.origin) < 1.0 and rad_to_deg(spot.basis.z.angle_to(trailer.global_transform.basis.z)) < 10.0, "the trailer is not back on its spot")
+	_sell_back(t)
+
+
 func test_trailers_park_well_in_every_valley(t: TCase) -> void:
 	for valley in Valley.all():
 		var profile := Profile.new()

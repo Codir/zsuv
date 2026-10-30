@@ -446,25 +446,39 @@ func test_c_lets_the_semi_trailer_down_on_its_legs_in_a_dip(t: TCase) -> void:
 
 
 func test_after_c_the_semi_backs_into_its_semi_trailer_not_through_it(t: TCase) -> void:
+	# On level ground at the depot, empty; in a sag at (88.5, -42.3) and on a climb at (95.8, -13.4)
+	# in the khutir valley, loaded: let go with C, then backed slowly for 6 s as a player backs up
+	# to a trailer, the semi meets the semi-trailer's front, on its own wheels on the ground, not
+	# through the deck nor up onto it.
 	t.world.set_truck(TruckSpec.semi())
 	await t.ticks(5)
 	var v: Vehicle = t.world.vehicle
 	var c: Contracts = t.world.contracts
-	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw, 30)
-	var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), v.global_rotation.y)
-	await t.ticks(20)
-	v.hitch(tr)
-	await t.ticks(60)
-	v.toggle_hitch()
-	await t.ticks(30)
-	var from := v.global_position
-	Input.action_press("brake", 1.0)
-	await t.ticks(240)
-	Input.action_release("brake")
-	var back := (v.global_position - from).dot(v.global_transform.basis.z)
-	t.note = "backed %.1f m" % back
-	t.ok(back < 6.0, "the semi backed %.1f m, through its semi-trailer" % back)
-	_free(t, [tr])
+	var terrain: Terrain = t.world.terrain
+	var notes := PackedStringArray()
+	for spot in [[Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw, ""], [Vector2(88.5, -42.3), deg_to_rad(-165.0), "long"], [Vector2(95.8, -13.4), deg_to_rad(-6.0), "long"]]:
+		await t.place(spot[0], spot[1], 30)
+		var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), v.global_rotation.y, spot[2])
+		await t.ticks(20)
+		v.hitch(tr)
+		await t.ticks(90)
+		v.toggle_hitch()
+		await t.ticks(60)
+		var from := v.global_position
+		var high := 0.0
+		for i in 360:
+			Input.action_press("brake", 1.0 if v.forward_speed > 0.05 else (0.5 if -v.forward_speed < 0.6 else 0.0))
+			await t.tree.physics_frame
+			for w in v.wheels:
+				if w.contact:
+					high = maxf(high, w.point.y - terrain.get_height(w.point.x, w.point.z))
+		Input.action_release("brake")
+		var back := (v.global_position - from).dot(v.global_transform.basis.z)
+		notes.append("%.1f m" % back)
+		t.ok(back < 6.0, "at %s the semi backed %.1f m, through its semi-trailer" % [spot[0], back])
+		t.ok(high < 0.3, "at %s the semi's wheels rode %.2f m up, onto the deck" % [spot[0], high])
+		_free(t, [tr])
+	t.note = "backed %s" % ", ".join(notes)
 	t.world.set_truck(TruckSpec.pickup())
 	await t.ticks(5)
 

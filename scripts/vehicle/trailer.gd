@@ -10,6 +10,7 @@ extends Chassis
 
 const GROUP := "trailers"
 const STAND_TRAVEL := 0.6
+const LEGS := 0.8  # how much further its stand winds down, to hold it where its truck let it go
 const STAND_GRIP := 0.8  # the stand's foot on the ground, times the ground's grip
 const HOLD_RATE := 150.0  # a held wheel's spring to its spot, per kg it carries: about 2 Hz
 const HOLD_DAMP := 20.0
@@ -22,6 +23,7 @@ var spec: TrailerSpec  # set before it enters the tree; the pickup's trailer if 
 var truck: Vehicle  # hitched to; null: standing on its own
 var load := ""  # the kind of load on it; "" none
 var stand_contact := false  # unhitched, its stand is on the ground
+var _legs := 0.0  # how much further down than its own its stand is wound now
 var _loads := {}  # look -> its node: a kind of load ("bulk"), or another look of it ("bulk_peat")
 var _stand_gfx: Node3D  # the jockey wheel, the prop or the legs' feet
 var _stand_down := Transform3D()  # where they are standing and wound up
@@ -81,6 +83,7 @@ func coupler_point() -> Vector3:
 ## through each other while hitched.
 func couple(v: Vehicle) -> void:
 	_part()
+	_legs = 0.0
 	truck = v
 	_spots.fill(NO_SPOT)
 	add_collision_exception_with(v)
@@ -93,6 +96,14 @@ func uncouple() -> void:
 	_parting = truck
 	truck = null
 	_spots.fill(NO_SPOT)
+	# Its stand wound down to the ground before the truck pulls out from under it, as a
+	# semi-trailer's legs are: it stays as high as the hitch held it, up to LEGS further down.
+	var up := global_transform.basis.y
+	var top := global_transform * (spec.stand + Vector3(0.0, STAND_TRAVEL, 0.0))
+	var q := PhysicsRayQueryParameters3D.create(top, top - up * (STAND_TRAVEL + LEGS))
+	q.exclude = _ray_exclude()
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	_legs = LEGS if hit.is_empty() else clampf(top.distance_to(hit.position) - STAND_TRAVEL, 0.0, LEGS)
 
 
 ## Swings it about its wheels so its coupler comes onto the hitch at at (the drawbar lifted or
@@ -162,6 +173,7 @@ func _not_ground() -> Array[RID]:
 ## Moves it to xf at the next physics step, moving at velocity, not turning (a teleport, as
 ## Vehicle.teleport: a rigid body's transform set between steps does not always reach the physics).
 func place(xf: Transform3D, velocity := Vector3.ZERO) -> void:
+	_legs = 0.0
 	_place = xf
 	_place_velocity = velocity
 	_place_requested = true
@@ -283,7 +295,7 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	_animate_wheels(delta)
 	if _stand_gfx:
-		_stand_gfx.transform = _stand_up if truck else _stand_down
+		_stand_gfx.transform = _stand_up if truck else _stand_down.translated_local(Vector3(0.0, -_legs, 0.0))
 
 
 ## Springs, dampers and anti-roll as Chassis's, but where it has axles side by side (a bogie: the
@@ -364,7 +376,7 @@ func _stand() -> void:
 	var i := wheels.size()
 	var up := global_transform.basis.y
 	var top := global_transform * (spec.stand + Vector3(0.0, STAND_TRAVEL, 0.0))
-	var q := PhysicsRayQueryParameters3D.create(top, top - up * STAND_TRAVEL)
+	var q := PhysicsRayQueryParameters3D.create(top, top - up * (STAND_TRAVEL + _legs))
 	q.exclude = _ray_exclude()
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	stand_contact = not hit.is_empty()
@@ -372,7 +384,7 @@ func _stand() -> void:
 		_spots[i] = NO_SPOT
 		return
 	var p: Vector3 = hit.position
-	var compression := STAND_TRAVEL - top.distance_to(p)
+	var compression := STAND_TRAVEL + _legs - top.distance_to(p)
 	var f := maxf(spec.stand_k * compression - spec.stand_damping * point_velocity(p).dot(up), 0.0)
 	apply_force(up * f, p - global_position)
 	_hold(i, p, hit.normal, f, (terrain.sample(p).grip if terrain else 1.0) * STAND_GRIP)
@@ -398,8 +410,8 @@ func _hold(i: int, p: Vector3, n: Vector3, load_n: float, grip: float) -> void:
 	apply_force(f, p - global_position)
 
 
-## Whether body is in any of its boxes, or, until it stands on its stand, under one as far down
-## as the stand reaches (a truck it was let go from, under a semi-trailer's deck coming down).
+## Whether any of its boxes overlaps body; standing on its stand, not counting a truck's frame
+## below the truck's hitch (what a semi-trailer's deck stands over).
 func _touching(body: PhysicsBody3D) -> bool:
 	if not is_instance_valid(body):
 		return false
@@ -411,18 +423,20 @@ func _touching(body: PhysicsBody3D) -> bool:
 		var q := PhysicsShapeQueryParameters3D.new()
 		q.shape = cs.shape
 		q.transform = cs.global_transform
-		var box := cs.shape as BoxShape3D
-		if box and not stand_contact:
-			var reach := maxf(cs.position.y - box.size.y * 0.5 - spec.stand.y, 0.0)
-			var down := BoxShape3D.new()
-			down.size = box.size + Vector3(0.0, reach, 0.0)
-			q.shape = down
-			q.transform = cs.global_transform.translated_local(Vector3(0.0, -reach * 0.5, 0.0))
 		q.exclude = _not_ground()
 		for hit in space.intersect_shape(q, 16):
-			if hit.rid == body.get_rid():
+			if hit.rid == body.get_rid() and not (stand_contact and _under_hitch(body as Vehicle, hit.shape)):
 				return true
 	return false
+
+
+## Whether shape (by its index) of truck v lies wholly below v's hitch.
+static func _under_hitch(v: Vehicle, shape: int) -> bool:
+	if v == null:
+		return false
+	var cs := v.shape_owner_get_owner(v.shape_find_owner(shape)) as CollisionShape3D
+	var box := (cs.shape as BoxShape3D) if cs else null
+	return box != null and cs.position.y + box.size.y * 0.5 < v.spec.hitch.y
 
 
 ## Apart from the truck it left: the two collide again.

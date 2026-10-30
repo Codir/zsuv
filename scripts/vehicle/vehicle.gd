@@ -99,14 +99,12 @@ func set_lights(on: bool) -> void:
 ## Moves the truck to pos facing yaw at the next physics step, standing still; a hitched trailer
 ## goes with it, still hitched, straight behind or else swung as it is now, if there is room for it
 ## there. If a building or a tree is in the way of both, the trailer is let go where it is and the
-## truck set down clear of it and of anything else there. With no trailer hitched, it is set down
-## clear of any trailer under it (a semi-trailer just let go).
+## truck set down clear of it and of anything else there.
 func teleport(pos: Vector3, yaw: float) -> void:
 	winch.detach()
 	_reset_transform = Transform3D(Basis(Vector3.UP, yaw), pos)
 	_reset_requested = true
 	if trailer == null:
-		_reset_transform = _clear_of(null, _reset_transform)
 		return
 	var z := global_transform.basis.z
 	var tz := trailer.global_transform.basis.z
@@ -157,11 +155,16 @@ func _clear_of(t: Trailer, xf: Transform3D) -> Transform3D:
 	return xf
 
 
+## Upright where it is, 2 m up; with no trailer hitched, clear of any trailer under it (a
+## semi-trailer it has just let go).
 func reset_upright() -> void:
 	var p := global_position
 	if terrain:
 		p.y = terrain.get_height(p.x, p.z) + 2.0
+	var hitched := trailer != null
 	teleport(p, global_rotation.y)
+	if not hitched:
+		_reset_transform = _clear_of(null, _reset_transform)
 
 
 ## Where its hitch is now.
@@ -258,9 +261,13 @@ func prompt_with(jobs: String) -> String:
 	return first + ("   " if first != "" and c != "" else "") + c
 
 
-## What a wheel's ray must not hit: the truck and the trailer hitched to it.
+## What a wheel's ray must not hit: the truck and every trailer (it backs in under a semi-trailer's
+## deck and into a trailer, not up onto them).
 func _ray_exclude() -> Array[RID]:
-	return [get_rid(), trailer.get_rid()] if trailer else [get_rid()]
+	var out: Array[RID] = [get_rid()]
+	for t in get_tree().get_nodes_in_group(Trailer.GROUP):
+		out.append((t as Trailer).get_rid())
+	return out
 
 
 func _exit_tree() -> void:

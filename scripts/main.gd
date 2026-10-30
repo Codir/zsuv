@@ -139,17 +139,17 @@ func _park(t: Trailer, away: Array[RID] = []) -> void:
 	t.stand_on(Vector2(xf.origin.x, xf.origin.z), xf.basis.get_euler().y)
 
 
-## The tow (T) is on its way: the truck's trailer is let go, and it and any trailer left out in the
-## valley or lying on its side are brought to their spots by the depot; a trailer left standing
-## where the truck is to be set down is moved off it.
+## The tow (T) is on its way: the truck's trailer is let go, and it, any trailer left out in the
+## valley or lying on its side, and any left standing where the truck is to be set down are
+## brought to their spots by the depot.
 func _towing() -> void:
 	var hitched := vehicle.trailer
 	vehicle.unhitch()
-	var moved: Array[Trailer] = []
-	if hitched:
+	var moved := _on_spawn()
+	if hitched and not hitched in moved:
 		moved.append(hitched)
 	for t in contracts.trailers:
-		if is_instance_valid(t) and t != hitched and (t.global_transform.basis.y.y < 0.7 \
+		if is_instance_valid(t) and not t in moved and (t.global_transform.basis.y.y < 0.7 \
 				or Vector2(t.global_position.x - _spawn().x, t.global_position.z - _spawn().z).length() > TOW_HOME):
 			moved.append(t)
 	# Not in the way of the spots: the truck, towed to the spawn, and the trailers going to theirs.
@@ -158,22 +158,33 @@ func _towing() -> void:
 		away.append(t.get_rid())
 	for t in moved:
 		_park(t, away)
-	_clear_spawn(away)
 
 
 ## Moves any trailer standing where a truck is set down at the spawn (a long one left there, say)
-## to its spot by the depot; away: as _park's.
-func _clear_spawn(away: Array[RID] = []) -> void:
+## to its spot by the depot.
+func _clear_spawn() -> void:
+	var there := _on_spawn()
+	var away: Array[RID] = []
+	for t in there:
+		away.append(t.get_rid())
+	for t in there:
+		_park(t, away)
+
+
+## The trailers standing, unhitched, where a truck is set down at the spawn.
+func _on_spawn() -> Array[Trailer]:
 	var box := BoxShape3D.new()
 	box.size = Vector3(4.0, 3.0, 10.0)
 	var q := PhysicsShapeQueryParameters3D.new()
 	q.shape = box
 	q.transform = Transform3D(Basis(Vector3.UP, valley.spawn_yaw), _spawn() + Vector3(0.0, 0.5, 0.0))
 	q.exclude = [terrain.body.get_rid()]
+	var out: Array[Trailer] = []
 	for hit in get_world_3d().direct_space_state.intersect_shape(q, 8):
 		var t := hit.collider as Trailer
-		if t and t.truck == null:
-			_park(t, away)
+		if t and t.truck == null and not t in out:
+			out.append(t)
+	return out
 
 
 ## A spot for trailer t beside the depot, and t's from now on (where it stands and the way it
