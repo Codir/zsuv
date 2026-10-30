@@ -71,14 +71,19 @@ its rings only in the full mud below the Polissia forestry.
   of both, it lets the trailer go where it stands and sets the truck down clear of it and of
   anything else there (ahead or to a side). The tow (T) unhitches the trailer and brings it back
   to the depot, with any trailer left on its side or out in the valley (more than 30 m off).
-- Each trailer has a spot of its own by the depot: the nearest of a grid to either side of the
-  spawn, facing the way the truck does there (else across, else back), on the map, that nothing
-  stands on, clear of the trucks' spawn and of the other trailers' spots, with a lane ahead of its
-  coupler as long as the longest truck that tows it kept clear to back up to it; on level ground
-  off the roads, else on a gentle slope off them with all its wheels on the ground, else anywhere
-  clear. Measured with all three in every valley: each finds a level spot off the roads but the
-  semi-trailer in Polissia (a gentle slope); the semi-trailer stands across the truck's way in
-  Khutir, Polissia and the Carpathians, and the farm trailer in Polissia.
+- Each trailer has a spot of its own by the depot: on the map, that nothing stands on, clear of the
+  trucks' spawn and of the other trailers' spots, with a lane ahead of its coupler kept clear for
+  the longest truck that tows it to back up into reach. The nearest of a grid about the spawn
+  (3 m apart, 63 m to either side, 48 m along), facing the way the truck does there, else across
+  it, else back, of the best there is: level and off the roads; fairly level or a gentle slope (up
+  to 1.7 m along it, 8 degrees along a semi-trailer) off them; the ground even enough under it for
+  all its wheels to touch and, ahead of the coupler, even with it (no more than 0.15 m above it for
+  the first 3 m, where a truck's back goes in under a semi-trailer's deck); anywhere clear only if
+  none of those is about. Measured with all three in every valley: each finds a level spot off the
+  roads, but the semi-trailer in Khutir and the steppe a fairly level one; and each truck backs up
+  to its trailer there, steering for the coupler, and hitches it (tests/test_garage.gd).
+- The semi truck's frame behind the cab stands lower than its fifth wheel, so it goes in under a
+  standing semi-trailer's deck with about 0.3 m to spare.
 - `scripts/systems/garage.gd`: what the garage sells and what a job needs. `Profile` keeps the
   rigs bought and the truck picked; `Contracts` tags the jobs, sells, and swaps the truck through
   `scripts/main.gd`, which also parks the trailers bought by the depot.

@@ -213,7 +213,10 @@ static func semi() -> TruckSpec:
 	s.center_of_mass = Vector3(0.0, -0.1, -0.35)
 	s.body = "semi"
 	s.shapes = [
-		{"size": Vector3(2.3, 0.6, 6.9), "pos": Vector3(0.0, -0.05, -0.15)},  # the frame, the tanks
+		{"size": Vector3(2.3, 0.6, 2.3), "pos": Vector3(0.0, -0.05, -2.45)},  # the frame under the cab
+		# Behind the cab, the frame and the tanks stand lower than the fifth wheel: a semi-trailer's
+		# deck clears them as the truck backs under it.
+		{"size": Vector3(2.3, 0.35, 4.6), "pos": Vector3(0.0, -0.175, 1.0)},
 		{"size": Vector3(2.45, 2.4, 2.3), "pos": Vector3(0.0, 1.45, -2.45)},  # the cab
 	]
 	var road := {"sink": 1.15, "bite": 0.0}

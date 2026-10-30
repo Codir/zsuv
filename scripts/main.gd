@@ -170,20 +170,20 @@ func _clear_spawn() -> void:
 
 ## A spot for trailer t beside the depot, and t's from now on (where it stands and the way it
 ## faces): on the map, clear of whatever stands on it (but t), of the trucks' spawn and of the other
-## trailers' spots, with a lane ahead of its coupler clear for a truck to back up to it; on level
-## ground off the roads if there is such a spot about, else on a gentle slope off them (even enough
-## under it for all its wheels to touch), else anywhere clear. The nearest of a grid of spots to
-## either side of the spawn, facing the way the truck does there, else across it, else back.
+## trailers' spots, with a lane ahead of its coupler clear for a truck to back up to it. The nearest
+## of a grid of spots to either side of the spawn, facing the way the truck does there, else across
+## it, else back, of the best there is: on level ground off the roads; on a gentle slope off them;
+## anywhere clear; anywhere no trailer is.
 func _parking(t: Trailer) -> Transform3D:
 	var lo := t.spec.extent().position
 	var hi := t.spec.extent().end
-	var lane := 0.0  # ahead of the coupler: the longest truck that tows it, and 1 m
+	var lane := 0.0  # ahead of the coupler: the longest truck that tows it, as it comes in reach, and 1 m
 	for truck in TruckSpec.all():
 		if t.spec.id in truck.tows:
 			var front := truck.hitch.z
 			for b in truck.shapes:
 				front = minf(front, b.pos.z - b.size.z * 0.5)
-			lane = maxf(lane, truck.hitch.z - front + 1.0)
+			lane = maxf(lane, truck.hitch.z - front + Vehicle.HITCH_REACH + 1.0)
 	var box := BoxShape3D.new()
 	box.size = hi - lo + Vector3(1.0, 0.0, 1.0)
 	var lane_box := BoxShape3D.new()
@@ -204,57 +204,74 @@ func _parking(t: Trailer) -> Transform3D:
 			spots_taken.append(_parked[o][0])
 			lanes_taken.append(_parked[o][1])
 	var spots: Array[Vector3] = []  # about the spawn: across, along, and the quarter turns from its way
-	for row in range(-12, 13):
-		for step in range(1, 11):
+	for row in range(-16, 17):
+		for step in range(1, 22):
 			for side in [1.0, -1.0]:
 				for k in [0, 1, 3, 2]:
-					spots.append(Vector3(side * 4.5 * step, row * 3.0, k))
+					spots.append(Vector3(side * 3.0 * step, row * 3.0, k))
 	spots.sort_custom(func(a: Vector3, b: Vector3) -> bool:
 		var da := Vector2(a.x, a.y).length_squared()
 		var db := Vector2(b.x, b.y).length_squared()
 		return da < db or (da == db and [0, 1, 3, 2].find(int(a.z)) < [0, 1, 3, 2].find(int(b.z))))
 	var space := get_world_3d().direct_space_state
-	# Level and off the roads; fairly level and off them; as steep as a trailer stands still on (8
-	# degrees along a semi-trailer) and off them; anywhere clear; anywhere no trailer is.
-	for limits in [Vector2(0.6, Terrain.ROAD_HALF_WIDTH + 0.5), Vector2(1.2, Terrain.ROAD_HALF_WIDTH), Vector2(1.7, Terrain.ROAD_HALF_WIDTH), Vector2(INF, -INF), Vector2.INF]:
-		for s in spots:
-			var yaw := valley.spawn_yaw + s.z * PI * 0.5
-			var turn := Basis(Vector3.UP, yaw)
-			var at := Vector2(s.x, s.y)
-			var rect := _quarter(Rect2(lo.x - 0.5, lo.z - 0.5, hi.x - lo.x + 1.0, hi.z - lo.z + 1.0), int(s.z), at)
-			var ahead := _quarter(Rect2(lo.x, lo.z - lane, hi.x - lo.x, lane), int(s.z), at)
-			if rect.intersects(spawn) or spots_taken.any(func(r: Rect2) -> bool: return r.intersects(rect) or r.intersects(ahead)) \
-					or lanes_taken.any(func(r: Rect2) -> bool: return r.intersects(rect)):
-				continue
-			var p := _spawn() + Basis(Vector3.UP, valley.spawn_yaw) * Vector3(s.x, 0.0, s.y)
-			p.y = terrain.get_height(p.x, p.z)
-			if ends.any(func(e: Vector3) -> bool: var c := p + turn * e; return maxf(absf(c.x), absf(c.z)) > Terrain.HALF - 4.0):
-				continue
-			if limits != Vector2.INF:
-				var low := INF
-				var high := -INF
-				var off_road := INF
-				for f in feet:
-					var c: Vector3 = p + turn * f
-					var h := terrain.get_height(c.x, c.z)
-					low = minf(low, h)
-					high = maxf(high, h)
-					off_road = minf(off_road, terrain.road_distance(Vector2(c.x, c.z)))
-				if high - low > limits.x or off_road <= limits.y or (limits.x < INF and t.unevenness(Vector2(p.x, p.z), yaw) > 0.12):
-					continue
-				var q := PhysicsShapeQueryParameters3D.new()
-				q.exclude = [t.get_rid(), terrain.body.get_rid()]
-				q.shape = box
-				q.transform = Transform3D(turn, p + turn * ((lo + hi) * 0.5) + Vector3(0.0, 0.3, 0.0))
-				if not space.intersect_shape(q, 1).is_empty():
-					continue
-				q.shape = lane_box
-				q.transform = Transform3D(turn, p + turn * Vector3(0.0, 0.0, lo.z - lane * 0.5) + Vector3(0.0, 1.4, 0.0))
-				if not space.intersect_shape(q, 1).is_empty():
-					continue
-			_parked[t] = [rect, ahead]
-			return Transform3D(turn, p)
-	return Transform3D(Basis(Vector3.UP, valley.spawn_yaw), _spawn())
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.exclude = [t.get_rid(), terrain.body.get_rid()]
+	# How good a spot is, the lower the better: 0 level (0.6 m along it at most) and off the roads;
+	# 1 fairly level (1.2 m); 2 as steep as a trailer stands still on (1.7 m, 8 degrees along a
+	# semi-trailer); all three with its wheels on the ground and the lane even with it; 3 anywhere
+	# clear; 4 anywhere no trailer is.
+	var best := Transform3D(Basis(Vector3.UP, valley.spawn_yaw), _spawn())
+	var best_grade := 5
+	var best_rects := []
+	for s in spots:
+		var yaw := valley.spawn_yaw + s.z * PI * 0.5
+		var turn := Basis(Vector3.UP, yaw)
+		var at := Vector2(s.x, s.y)
+		var rect := _quarter(Rect2(lo.x - 0.5, lo.z - 0.5, hi.x - lo.x + 1.0, hi.z - lo.z + 1.0), int(s.z), at)
+		var ahead := _quarter(Rect2(lo.x, lo.z - lane, hi.x - lo.x, lane), int(s.z), at)
+		if rect.intersects(spawn) or spots_taken.any(func(r: Rect2) -> bool: return r.intersects(rect) or r.intersects(ahead)) \
+				or lanes_taken.any(func(r: Rect2) -> bool: return r.intersects(rect)):
+			continue
+		var p := _spawn() + Basis(Vector3.UP, valley.spawn_yaw) * Vector3(s.x, 0.0, s.y)
+		p.y = terrain.get_height(p.x, p.z)
+		if ends.any(func(e: Vector3) -> bool: var c := p + turn * e; return maxf(absf(c.x), absf(c.z)) > Terrain.HALF - 4.0):
+			continue
+		var low := INF
+		var high := -INF
+		for f in feet:
+			var c: Vector3 = p + turn * f
+			var h := terrain.get_height(c.x, c.z)
+			low = minf(low, h)
+			high = maxf(high, h)
+		var grade := 3
+		if high - low <= 1.7:
+			var off_road := INF
+			for f in feet:
+				var c: Vector3 = p + turn * f
+				off_road = minf(off_road, terrain.road_distance(Vector2(c.x, c.z)))
+			if off_road > Terrain.ROAD_HALF_WIDTH:
+				grade = 0 if high - low <= 0.6 and off_road > Terrain.ROAD_HALF_WIDTH + 0.5 else (1 if high - low <= 1.2 else 2)
+				if grade < best_grade and (t.unevenness(Vector2(p.x, p.z), yaw) > Trailer.DROOP * 0.75 or not t.reachable(Vector2(p.x, p.z), yaw, lane)):
+					grade = 3
+		if grade >= best_grade:
+			continue
+		q.shape = box
+		q.transform = Transform3D(turn, p + turn * ((lo + hi) * 0.5) + Vector3(0.0, 0.3, 0.0))
+		var clear := space.intersect_shape(q, 1).is_empty()
+		q.shape = lane_box
+		q.transform = Transform3D(turn, p + turn * Vector3(0.0, 0.0, lo.z - lane * 0.5) + Vector3(0.0, 1.4, 0.0))
+		clear = clear and space.intersect_shape(q, 1).is_empty()
+		if not clear:
+			grade = 4
+		if grade < best_grade:
+			best = Transform3D(turn, p)
+			best_grade = grade
+			best_rects = [rect, ahead]
+			if grade == 0:
+				break
+	if best_grade < 5:
+		_parked[t] = best_rects
+	return best
 
 
 ## r, about a trailer (across, along), as the spawn sees it when the trailer is turned k quarters

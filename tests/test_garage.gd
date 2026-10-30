@@ -3,7 +3,8 @@ extends RefCounted
 ## bought from the wallet, a trailer waits at the depot and a truck is driven from there; the board
 ## tags a job with the rig it needs, and a trailer's load waits in the trailer until it is brought;
 ## the rigs bought and the truck picked are saved; the trailers park by the depot upright, off the
-## roads and clear of each other, the buildings and the spawn, in every valley (docs/trucks.md).
+## roads and clear of each other, the buildings and the spawn, and each rig backs up to its trailer
+## there and hitches it, in every valley (docs/trucks.md).
 
 const SCENE := preload("res://scenes/main.tscn")
 
@@ -127,6 +128,57 @@ func test_trailers_park_well_in_every_valley(t: TCase) -> void:
 		t.eq(world.contracts.trailers.size(), 3, "%s: trailers at the depot" % valley.id)
 		_parked_well(t, world, valley.id)
 		vp.free()
+
+
+func test_each_rig_backs_up_to_its_trailer_by_the_depot_in_every_valley(t: TCase) -> void:
+	var shared: Vehicle = t.world.vehicle
+	shared.autodrive = true  # deaf to the keys pressed for the truck backing up here
+	shared.autodrive_path = PackedVector2Array()
+	var notes := PackedStringArray()
+	for valley in Valley.all():
+		var profile := Profile.new()
+		profile.rigs = PackedStringArray(["trailer", "tractor", "farm", "six", "semi", "semi_trailer"])
+		var vp := SubViewport.new()
+		vp.own_world_3d = true
+		vp.size = Vector2i(480, 270)
+		var world = SCENE.instantiate()
+		world.valley = valley
+		world.profile = profile
+		vp.add_child(world)
+		t.tree.root.add_child(vp)
+		await t.ticks(60)
+		for tr: Trailer in world.contracts.trailers.duplicate():
+			world.set_truck(TruckSpec.find({"trailer": "pickup", "farm": "tractor", "semi_trailer": "semi"}[tr.spec.id]))
+			await t.ticks(2)
+			var v: Vehicle = world.vehicle
+			var b := tr.global_transform.basis
+			var yaw := atan2(b.z.x, b.z.z)
+			var ahead := -Vector3(b.z.x, 0.0, b.z.z).normalized()
+			var at: Vector3 = tr.coupler_point() + ahead * 3.0 - Basis(Vector3.UP, yaw) * v.spec.hitch
+			v.teleport(Vector3(at.x, world.terrain.get_height(at.x, at.z) + 1.2, at.z), yaw)
+			await t.ticks(90)
+			var ticks := 0
+			while (v.hitch_candidate() != tr or v.hitch_point().distance_to(tr.coupler_point()) > 0.6) and ticks < 900:
+				# As a player backs up: hard on the brake while it rolls ahead, a little reverse, none past
+				# 0.6 m/s, steering its back toward the coupler (the wheel turned left takes it left).
+				Input.action_press("brake", 1.0 if v.forward_speed > 0.05 else (0.5 if -v.forward_speed < 0.6 else 0.0))
+				var d := v.global_transform.basis.inverse() * (tr.coupler_point() - v.hitch_point())
+				var wheel := clampf(-atan2(d.x, d.z) * 2.0, -1.0, 1.0)
+				Input.action_press("steer_left", maxf(wheel, 0.0))
+				Input.action_press("steer_right", maxf(-wheel, 0.0))
+				await t.tree.physics_frame
+				ticks += 1
+			for action in ["brake", "steer_left", "steer_right"]:
+				Input.action_release(action)
+			await t.ticks(20)
+			v.toggle_hitch()
+			await t.ticks(5)
+			notes.append("%s %s %.1f s" % [valley.id, tr.spec.id, ticks / 60.0])
+			t.ok(v.trailer == tr, "%s: the %s did not back up to the %s and hitch it (%.1f m off)" % [valley.id, v.spec.id, tr.spec.id, v.hitch_point().distance_to(tr.coupler_point())])
+			v.unhitch()
+		vp.free()
+	shared.autodrive = false
+	t.note = ", ".join(notes)
 
 
 func test_a_job_goes_only_where_its_rig_gets_to(t: TCase) -> void:

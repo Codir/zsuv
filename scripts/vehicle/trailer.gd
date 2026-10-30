@@ -189,9 +189,34 @@ func stand_on(at: Vector2, yaw: float) -> void:
 	place(Transform3D(b, g_axle + Vector3(0.0, 0.01, 0.0) - b * foot))
 
 
-## How far the ground under its wheels lies off the plane stand_on(at, yaw) would set it on (through
-## the ground at its stand and under its axle), the most of any wheel: 0 on even ground.
+## How far the ground under its wheels lies off the plane stand_on(at, yaw) would set it on, the
+## most of any wheel: 0 on even ground.
 func unevenness(at: Vector2, yaw: float) -> float:
+	var plane := _plane(at, yaw)
+	var most := 0.0
+	for w in spec.wheels:
+		most = maxf(most, absf(_off_plane(at, yaw, plane, w.mount)))
+	return most
+
+
+## Whether a truck can back up to its coupler, standing at (at, yaw): the ground ahead of the
+## coupler, as far as length, is no more than 0.15 m above the plane it stands on for the first 3 m
+## (where the truck's back goes in under it) and within 0.7 m of it all along.
+func reachable(at: Vector2, yaw: float, length: float) -> bool:
+	var plane := _plane(at, yaw)
+	for i in ceili(length) + 1:
+		var z := spec.coupler.z - minf(float(i), length)
+		for x in [-1.2, 0.0, 1.2]:
+			var off := _off_plane(at, yaw, plane, Vector3(x, 0.0, z))
+			if off > (0.15 if i <= 3 else 0.7) or off < -0.7:
+				return false
+	return true
+
+
+## The plane stand_on(at, yaw) sets it on, through the ground at its stand and under the middle of
+## its axles, rolled as the ground is there: its height under that middle, and how much it rises
+## per metre back along it (y) and across it to the right (z).
+func _plane(at: Vector2, yaw: float) -> Vector3:
 	var turn := Basis(Vector3.UP, yaw)
 	var axle := _axle()
 	var half := absf(spec.wheels[0].mount.x)
@@ -200,12 +225,13 @@ func unevenness(at: Vector2, yaw: float) -> float:
 	var g_stand := _ground_at(o + turn * Vector3(0.0, 0.0, spec.stand.z)).y
 	var g_left := _ground_at(o + turn * Vector3(-half, 0.0, axle.z)).y
 	var g_right := _ground_at(o + turn * Vector3(half, 0.0, axle.z)).y
-	var most := 0.0
-	for w in spec.wheels:
-		var m: Vector3 = w.mount
-		var plane := g_axle + (m.z - axle.z) * (g_axle - g_stand) / (axle.z - spec.stand.z) + m.x * (g_right - g_left) / (half * 2.0)
-		most = maxf(most, absf(_ground_at(o + turn * Vector3(m.x, 0.0, m.z)).y - plane))
-	return most
+	return Vector3(g_axle, (g_axle - g_stand) / (axle.z - spec.stand.z), (g_right - g_left) / (half * 2.0))
+
+
+## How far the ground at m (in its frame, standing at (at, yaw)) lies above plane.
+func _off_plane(at: Vector2, yaw: float, plane: Vector3, m: Vector3) -> float:
+	var ground := _ground_at(Vector3(at.x, 0.0, at.y) + Basis(Vector3.UP, yaw) * Vector3(m.x, 0.0, m.z)).y
+	return ground - (plane.x + (m.z - _axle().z) * plane.y + m.x * plane.z)
 
 
 func _ground_at(p: Vector3) -> Vector3:
