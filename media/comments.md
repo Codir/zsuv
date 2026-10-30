@@ -23,11 +23,11 @@ hint and the sound (Philip) in 0.1.2, the maps and challenges (Philip) in 0.2.2,
 a job board (`docs/valleys.md`); 0.1.2 had no build of its own, so 0.2.2 is the first players get
 of the last three.
 
-- [ ] **Different trucks for different loads, and trailers, as in SnowRunner** (the owner,
-  2026-10-29, for 0.3.0 after 0.2.2 ships). Bought in a garage at the depot and kept for every
-  valley: a heavy 6x6 truck, a tractor unit with a semi-trailer for long loads (logs, pipes,
-  turbine blades), a tractor with a trailer for bog and deep snow, and a trailer for the pickup.
-  Heavy loads only go on the heavy ones; the board says what a job needs.
+- [x] **Different trucks for different loads, and trailers, as in SnowRunner** (the owner,
+  2026-10-29). Picked for 0.3.0 on 2026-10-30, all in one update (`docs/trucks.md`): a trailer for
+  the pickup, a heavy 6x6, a tractor with a farm trailer and a semi truck with a semi-trailer,
+  bought in a garage at the depot and kept for every valley; trailers hitched by hand (C); the
+  board shows every job with the rig it needs.
 - [ ] **Sivash, the salt lakes** (the owner, 2026-10-29): a valley of pink lakes and salt flats
   that slide like ice, in place of the Oleshky Sands (a desert with pines did not look right, and
   there are five valleys for now).
