@@ -40,15 +40,11 @@ func _ready() -> void:
 	add_child(builder)
 	builder.build(terrain, valley)
 
-	var spawn := Vector3(valley.spawn.x, terrain.get_height(valley.spawn.x, valley.spawn.y) + 1.5, valley.spawn.y)
+	if profile == null:
+		profile = Profile.new()
+	var spawn := _spawn()
 	var spawn_yaw := valley.spawn_yaw
-	vehicle = Vehicle.new()
-	vehicle.name = "Truck"
-	vehicle.terrain = terrain
-	vehicle.position = spawn
-	vehicle.rotation.y = spawn_yaw
-	add_child(vehicle)
-	vehicle.winch.anchors = builder.anchor_points
+	vehicle = _truck(TruckSpec.find(profile.truck))
 
 	camera_rig = CameraRig.new()
 	camera_rig.target = vehicle
@@ -60,9 +56,11 @@ func _ready() -> void:
 	contracts.spawn_pos = spawn
 	contracts.spawn_yaw = spawn_yaw
 	add_child(contracts)
-	if profile:
-		contracts.profile = profile
+	contracts.profile = profile
+	_park_trailers()
 	contracts.setup(vehicle, terrain, locations)
+	contracts.truck_wanted.connect(set_truck)
+	contracts.rigs_changed.connect(_park_trailers)
 
 	_setup_post()
 	hud = Hud.new()
@@ -81,6 +79,60 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--capture="):
 			_capture(arg.get_slice("=", 1))
+
+
+## Where the truck starts: beside the depot, facing the first road out.
+func _spawn() -> Vector3:
+	return Vector3(valley.spawn.x, terrain.get_height(valley.spawn.x, valley.spawn.y) + 1.5, valley.spawn.y)
+
+
+## A truck of spec at the spawn, in the world (the pickup when spec is null).
+func _truck(spec: TruckSpec) -> Vehicle:
+	var v := Vehicle.new()
+	v.name = "Truck"
+	v.spec = spec if spec else TruckSpec.pickup()
+	v.terrain = terrain
+	v.position = _spawn()
+	v.rotation.y = valley.spawn_yaw
+	add_child(v)
+	v.winch.anchors = builder.anchor_points
+	return v
+
+
+## The garage put spec at the depot: the truck in play is replaced by it, at the spawn.
+func set_truck(spec: TruckSpec) -> void:
+	var old := vehicle
+	if old.trailer and old.has_method("unhitch"):
+		old.call("unhitch")
+	remove_child(old)
+	old.queue_free()
+	vehicle = _truck(spec)
+	camera_rig.target = vehicle
+	camera_rig.snap_to_target()
+	hud.vehicle = vehicle
+	map_screen.vehicle = vehicle
+	contracts.set_vehicle(vehicle)
+
+
+## The player's trailers wait side by side beside the truck's spawn, facing the way it faces; one
+## bought here joins them.
+func _park_trailers() -> void:
+	var yaw := valley.spawn_yaw
+	var right := Basis(Vector3.UP, yaw) * Vector3.RIGHT
+	var k := contracts.trailers.size()
+	for spec in TrailerSpec.all():
+		if not profile.has_rig(spec.id) or contracts._trailer(spec.id) != null:
+			continue
+		k += 1
+		var p := _spawn() + right * 5.0 * k
+		var t := Trailer.new()
+		t.name = "Trailer_%s" % spec.id
+		t.spec = spec
+		t.terrain = terrain
+		t.position = Vector3(p.x, terrain.get_height(p.x, p.z) + 1.0, p.z)
+		t.rotation.y = yaw
+		add_child(t)
+		contracts.trailers.append(t)
 
 
 ## Store-page capture (scripts/capture/director.gd): --capture=trailer --out=<dir>.

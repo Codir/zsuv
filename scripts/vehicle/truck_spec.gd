@@ -80,7 +80,7 @@ static func pickup() -> TruckSpec:
 		_wheel(Vector3(0.95, 0.2, 1.45), 0.5, 0.42, false, true),
 	]
 	s.axles = [Vector2i(0, 1), Vector2i(2, 3)]
-	s.cargo_mass = {"plain": 900.0, "timed": 900.0, "fragile": 900.0, "heavy": 1800.0}
+	s.cargo_mass = {"plain": 900.0, "timed": 900.0, "fragile": 900.0}
 	s.hitch = Vector3(0.0, 0.0, 2.35)
 	s.hitch_kind = "ball"
 	s.tows = ["trailer"]

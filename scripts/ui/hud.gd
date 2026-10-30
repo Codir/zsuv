@@ -53,11 +53,11 @@ func setup(v: Vehicle, c: Contracts) -> void:
 	_board_bg = ColorRect.new()
 	_board_bg.color = Color(0.0, 0.0, 0.0, 0.72)
 	_board_bg.position = Vector2(20, 78)
-	_board_bg.size = Vector2(size.x - 40, 74)
+	_board_bg.size = Vector2(size.x - 40, 96)
 	_board_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_board_bg.visible = false
 	add_child(_board_bg)
-	_board = _make_label(Vector2(28, 82), Vector2(size.x - 56, 66), HORIZONTAL_ALIGNMENT_LEFT)
+	_board = _make_label(Vector2(28, 82), Vector2(size.x - 56, 88), HORIZONTAL_ALIGNMENT_LEFT)
 	_board.visible = false
 	_message.add_theme_color_override("font_color", Color(0.5, 1.0, 0.6))
 	_help = _make_label(Vector2(size.x - 196, 4), Vector2(190, 150), HORIZONTAL_ALIGNMENT_LEFT)
@@ -91,7 +91,7 @@ func _process(delta: float) -> void:
 	_status.text = "%3d km/h  %s  %s  DIFF:%s\nFUEL %s%s %2d L\n$ %d%s" % [
 		roundi(absf(vehicle.forward_speed) * 3.6),
 		"LOW " if vehicle.low_range else "HIGH",
-		"4x4" if vehicle.awd else "4x2",
+		_drive_text(),
 		"LOCK" if vehicle.diff_lock else "OPEN",
 		"█".repeat(fuel_bars),
 		"░".repeat(10 - fuel_bars),
@@ -110,6 +110,15 @@ func _process(delta: float) -> void:
 	_prompt.text = contracts.prompt if contracts.prompt != "" else vehicle.winch.prompt()
 	_message_time -= delta
 	_message.visible = _message_time > 0.0
+
+
+## The drive in play as its wheels and the driven ones: 4x2, 4x4, 6x4, 6x6.
+func _drive_text() -> String:
+	var driven := 0
+	for w in vehicle.wheels:
+		if vehicle.awd or w.drive2:
+			driven += 1
+	return "%dx%d" % [vehicle.wheels.size(), driven]
 
 
 func _make_label(pos: Vector2, size: Vector2, align: HorizontalAlignment) -> Label:

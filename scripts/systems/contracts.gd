@@ -1,23 +1,39 @@
 class_name Contracts
 extends Node3D
-## The jobs. A board at the depot offers three: where to, what kind, what they pay. Taken, the
-## cargo goes on and the tank is filled; delivered, it pays the place's reward times the valley's
-## pay, by its kind:
+## The jobs, and the garage beside them. A board at the depot offers five: where to, what kind,
+## what they pay, and the rig a job needs when the one in play cannot take it (docs/trucks.md).
+## Taken, the cargo goes on and the tank is filled; delivered, it pays the place's reward times
+## the valley's pay, by its kind:
 ##   plain    as it is
 ##   timed    against the clock from the depot: gold, silver and bronze for an average along the
 ##            road of 30, 22 and 15 km/h, paying 1.5, 1.25 and 1 times, 0.6 without a medal; the
 ##            best time of each job is kept
 ##   fragile  1.3 times what is left of it: every hard knock or landing breaks some, and at
 ##            nothing left it is gone
-##   heavy    1800 kg instead of 900: the truck sits low, drags deeper and drinks more; 1.6 times
+##   heavy    3500 kg of concrete rings on the 6x6: it sits low, drags deeper, drinks; twice
+##   double   on the bed and in the trailer behind; 1.5 times
+##   bulk     grain, peat or hay in the tractor's farm trailer; 1.8 times
+##   long     logs, pipes or a turbine blade on the semi-trailer; 2.5 times
 ##   stuck    no cargo: a car in a ditch by a road, to winch back onto it; STUCK_REWARD
+## A trailer's load goes into the trailer where it stands at the depot; it is unloaded only
+## hitched to the truck that brought it. Tab on the board turns to the garage: 1-5 buys a truck
+## or a trailer, or drives a truck bought.
 
 signal message(text: String)
+signal truck_wanted(spec: TruckSpec)  # the garage: drive this one (scripts/main.gd puts it at the depot)
+signal rigs_changed  # the garage sold a rig: its trailer, if any, waits at the depot
 
 const INTERACT_RADIUS := 12.0
 const RECOVER_COST := 100
-const KINDS := ["plain", "timed", "fragile", "heavy"]
-const PAY := {"plain": 1.0, "timed": 1.0, "fragile": 1.3, "heavy": 1.6, "stuck": 1.0}
+const KINDS := ["plain", "timed", "fragile", "heavy", "double", "bulk", "long"]
+const PAY := {"plain": 1.0, "timed": 1.0, "fragile": 1.3, "heavy": 2.0, "double": 1.5, "bulk": 1.8, "long": 2.5, "stuck": 1.0}
+const OFFERS := 5
+const DOABLE := 2  # of them the rig in play can take, at least
+const BULK := {"elevator": "grain", "khutir": "hay", "sheepfold": "hay", "peat_works": "peat", "apiary": "hay",
+	"village_church": "grain", "forestry": "sawdust", "winery": "grape marc", "fish_farm": "fish feed"}
+const LONG := {"sawmill": "logs", "forestry": "logs", "wind_farm": "a turbine blade", "radio_tower": "mast sections",
+	"weather_station": "mast sections", "castle": "scaffolding"}
+const SHORT := {"pickup": "PICKUP", "six": "6X6", "tractor": "TRACTOR", "semi": "SEMI", "trailer": "TRAILER"}
 const STUCK_REWARD := 300
 const MEDALS := ["gold", "silver", "bronze"]
 const MEDAL_KMH := [30.0, 22.0, 15.0]
@@ -47,6 +63,8 @@ var spawn_yaw := 0.0
 var offers: Array[Dictionary] = []
 var job := {}  # the job in hand, an offer taken; empty: none
 var board_open := false
+var garage_open := false  # the board turned to the garage (Tab)
+var trailers: Array[Trailer] = []  # the player's, in this valley (scripts/main.gd parks them)
 var clock := 0.0  # seconds since a timed job was loaded
 var integrity := 1.0  # what is left of a fragile load
 var rng := RandomNumberGenerator.new()
@@ -85,8 +103,8 @@ func setup(v: Vehicle, t: Terrain, locations: Dictionary) -> void:
 	_update_markers()
 
 
-## Three new jobs on the board, each of its own kind (a stuck car among them where the valley
-## has ditches), each place once.
+## Five new jobs on the board, each of its own kind (a stuck car among them where the valley has
+## ditches), at least two of them for the rig in play, the places in turn.
 func roll_offers() -> void:
 	var keys: Array = _places.keys()
 	var kinds: Array = KINDS.duplicate()
@@ -94,12 +112,17 @@ func roll_offers() -> void:
 		kinds.append("stuck")
 	_shuffle(keys)
 	_shuffle(kinds)
+	var picked: Array = kinds.filter(func(k: String) -> bool: return need(k) == "").slice(0, DOABLE)
+	for k in kinds:
+		if picked.size() < OFFERS and not k in picked:
+			picked.append(k)
+	_shuffle(picked)
 	offers.clear()
-	for i in mini(3, keys.size()):
-		if kinds[i] == "stuck":
+	for i in picked.size():
+		if picked[i] == "stuck":
 			offers.append(offer_stuck(rng.randi() % terrain.valley.ditches.size()))
 		else:
-			offers.append(offer(keys[i], kinds[i]))
+			offers.append(offer(keys[i % keys.size()], picked[i]))
 
 
 ## A car stuck in the valley's ditch i, to winch out.
@@ -122,7 +145,13 @@ func offer_stuck(i: int) -> Dictionary:
 func offer(key: String, kind: String) -> Dictionary:
 	var loc: Dictionary = _places[key]
 	var route: float = _routes[key]
-	var o := {"key": key, "kind": kind, "loc": loc, "name": loc.name, "cargo": loc.cargo, "route": route,
+	var cargo: String = loc.cargo
+	match kind:
+		"bulk":
+			cargo = BULK.get(loc.kind, "gravel")
+		"long":
+			cargo = LONG.get(loc.kind, "pipes")
+	var o := {"key": key, "kind": kind, "loc": loc, "name": loc.name, "cargo": cargo, "route": route,
 		"reward": _round(float(loc.reward) * terrain.valley.pay * PAY[kind]),
 		"record": "%s:%s:%s" % [terrain.valley.id, key, kind]}
 	if kind == "timed":
@@ -133,8 +162,44 @@ func offer(key: String, kind: String) -> Dictionary:
 	return o
 
 
+## What a job of kind needs that the rig in play has not got: "" when it can take it now, or the
+## truck to drive (or the trailer to buy), as the board tags it.
+func need(kind: String) -> String:
+	var trucks := Garage.trucks_for(kind)
+	var ids := PackedStringArray()
+	for t in trucks:
+		ids.append(t.id)
+	if not vehicle.spec.id in ids:
+		var names := PackedStringArray()
+		for id in ids:
+			names.append(SHORT.get(id, id.to_upper()))
+		return "/".join(names)
+	var trailer := Garage.trailer_for(kind)
+	if trailer != "" and _trailer(trailer) == null:
+		return SHORT.get(trailer, trailer.to_upper())
+	return ""
+
+
+## Why the rig in play cannot take job o, for the player ("" when it can).
+func cannot_take(o: Dictionary) -> String:
+	var tag := need(o.kind)
+	if tag == "":
+		return ""
+	for item in garage_items():
+		if SHORT.get(item.id, "") in tag.split("/"):
+			if profile.has_rig(item.id):
+				return "This one needs the %s: drive it from the garage ([Tab] on the board)" % item.title.to_lower()
+			return "This one needs the %s: $%d in the garage ([Tab] on the board)" % [item.title.to_lower(), item.price]
+	return "This one needs another rig"
+
+
 ## Takes job o: on with the cargo, a full tank, the clock from zero. A job in hand is dropped.
+## Not if the rig in play cannot carry it: the board says what it needs.
 func take(o: Dictionary) -> void:
+	var why := cannot_take(o)
+	if why != "":
+		message.emit(why)
+		return
 	var dropped := ""  # said with what is loaded, as the HUD shows one message at a time
 	if not job.is_empty():
 		dropped = "Dropped: %s. " % job.cargo
@@ -150,7 +215,12 @@ func take(o: Dictionary) -> void:
 		message.emit(dropped + "A car slid into %s: winch it out" % o.name)
 		_update_markers()
 		return
-	vehicle.set_cargo(true, o.kind)
+	var bed: String = "plain" if o.kind == "double" else (o.kind if vehicle.spec.cargo_mass.has(o.kind) else "")
+	if bed != "":
+		vehicle.set_cargo(true, bed)
+	var trailer := _trailer(Garage.trailer_for(o.kind))
+	if trailer:
+		trailer.set_load(o.kind)
 	var text := "Loaded: %s. Head for %s" % [o.cargo, o.name]
 	match o.kind:
 		"timed":
@@ -159,12 +229,21 @@ func take(o: Dictionary) -> void:
 			text += ". Fragile: go gently"
 		"heavy":
 			text += ". Heavy: low range on the hills"
+	if trailer and vehicle.trailer != trailer:
+		text += ". It is in the %s: hitch it with C" % trailer.spec.title.to_lower()
 	message.emit(dropped + text)
 	_update_markers()
 
 
+## Where the arrow points: the depot for a job, the job's trailer while it is not hitched, the
+## place the job goes to.
 func current_target() -> Dictionary:
-	return job.loc if not job.is_empty() else _depot
+	if job.is_empty():
+		return _depot
+	var trailer := _job_trailer()
+	if trailer and vehicle.trailer != trailer:
+		return {"name": trailer.spec.title, "pos": Vector2(trailer.global_position.x, trailer.global_position.z)}
+	return job.loc
 
 
 func objective_text() -> String:
@@ -180,15 +259,21 @@ func objective_text() -> String:
 			return "TIMED %s: %s%s" % [clock_text(clock), where, next]
 		"fragile":
 			return "FRAGILE %d%%: %s  +$%d" % [roundi(integrity * 100.0), where, _round(job.reward * integrity)]
-		"heavy":
-			return "HEAVY: %s  +$%d" % [where, job.reward]
+		"heavy", "double", "bulk", "long":
+			var trailer := _job_trailer()
+			if trailer and vehicle.trailer != trailer:
+				return "HITCH THE %s, then %s -> %s  +$%d" % [trailer.spec.title.to_upper(), job.cargo, job.name, job.reward]
+			return "%s: %s  +$%d" % [job.kind.to_upper(), where, job.reward]
 		"stuck":
 			return "STUCK CAR in %s: winch it onto the road  %d m  +$%d" % [job.name, _distance_to(job.loc), job.reward]
 	return "DELIVER: %s  +$%d" % [where, job.reward]
 
 
-## The board as the HUD shows it (the prompt under it says which keys take a job).
+## The board as the HUD shows it, or the garage when it is turned to it (the prompt under it says
+## which keys do what).
 func board_text() -> String:
+	if garage_open:
+		return garage_text()
 	var title := "JOB BOARD - %s" % _depot.name.to_upper()
 	if not job.is_empty():
 		title += "   (a new job drops %s)" % job.cargo
@@ -201,8 +286,71 @@ func board_text() -> String:
 			var best := profile.record(o.record)
 			if not best.is_empty():
 				extra += "  best %s" % clock_text(best.time)
+		var tag := need(o.kind)
+		if tag != "":
+			extra += "  [%s]" % tag
 		lines.append("%d  %-8s %s -> %s  %d m  $%d%s" % [i + 1, o.kind.to_upper(), o.cargo, o.name, o.route, o.reward, extra])
 	return "\n".join(lines)
+
+
+## The garage: the pickup, then what it sells, cheapest first, each owned, driven or its price.
+func garage_text() -> String:
+	var lines := PackedStringArray(["GARAGE - %s   $%d" % [_depot.name.to_upper(), money], ""])
+	var items := garage_items()
+	for i in items.size():
+		var item: Dictionary = items[i]
+		var state := "$%d" % item.price
+		if item.truck == vehicle.spec.id:
+			state = "driving"
+		elif profile.has_rig(item.id):
+			state = "at the depot" if item.truck == "" else "yours: drive it"
+		lines.append("%d  %-34s %s" % [i + 1, item.title.to_upper(), state])
+	return "\n".join(lines)
+
+
+## The pickup, then the garage's catalogue (Garage.catalogue()).
+func garage_items() -> Array[Dictionary]:
+	var pickup := TruckSpec.pickup()
+	var items: Array[Dictionary] = [{"id": pickup.id, "title": pickup.title, "price": 0,
+		"gives": PackedStringArray([pickup.id]), "truck": pickup.id}]
+	items.append_array(Garage.catalogue())
+	return items
+
+
+## The garage's item i: bought, it is the player's (a truck to drive, a trailer at the depot);
+## owned, a truck is driven from here (the job in hand dropped).
+func garage_pick(i: int) -> void:
+	var item: Dictionary = garage_items()[i]
+	if not profile.has_rig(item.id):
+		var why := profile.cannot_buy_rig(item)
+		if why != "":
+			message.emit("Not yet: %s" % why)
+			return
+		profile.buy_rig(item)
+		rigs_changed.emit()
+		if item.truck == "":
+			message.emit("Bought: the %s. It waits at the depot: back up to it and press C" % item.title.to_lower())
+			roll_offers()
+			return
+		message.emit("Bought: the %s" % item.title.to_lower())
+	if item.truck == "":
+		message.emit("The %s waits at the depot: back up to it and press C" % item.title.to_lower())
+	elif item.truck != vehicle.spec.id:
+		if not job.is_empty():
+			message.emit("Dropped: %s" % job.cargo)
+			_end_job()
+		profile.truck = item.truck
+		profile.save()
+		garage_open = false
+		board_open = false
+		truck_wanted.emit(TruckSpec.find(item.truck))
+
+
+## The truck in play is now v (the garage put it at the depot): new jobs for it.
+func set_vehicle(v: Vehicle) -> void:
+	vehicle = v
+	roll_offers()
+	_update_markers()
 
 
 ## What the dashboard says of the load.
@@ -212,8 +360,8 @@ func cargo_text() -> String:
 	match job.kind:
 		"fragile":
 			return "FRAGILE %d%%" % roundi(integrity * 100.0)
-		"heavy":
-			return "HEAVY"
+		"heavy", "double", "bulk", "long":
+			return job.kind.to_upper()
 		"timed":
 			return "CARGO %s" % clock_text(clock)
 		"stuck":
@@ -241,9 +389,14 @@ func _process(_delta: float) -> void:
 	if board_open and not (_near(_depot) and slow):
 		board_open = false
 	if board_open:
-		prompt = "[1] [2] [3] take a job   [E] close"
+		var n := garage_items().size() if garage_open else offers.size()
+		prompt = "[1]-[%d] %s   [Tab] %s   [E] close" % [n, "buy or drive" if garage_open else "take a job", "jobs" if garage_open else "garage"]
 	elif not job.is_empty() and job.kind != "stuck" and _near(job.loc):
-		prompt = "[E] Unload" if slow else "Stop to unload"
+		var trailer := _job_trailer()
+		if trailer and vehicle.trailer != trailer:
+			prompt = "Bring the %s: the load is in it" % trailer.spec.title.to_lower()
+		else:
+			prompt = "[E] Unload" if slow else "Stop to unload"
 	elif _near(_depot):
 		if not slow:
 			prompt = "Stop at the depot"
@@ -297,8 +450,16 @@ func _physics_process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if board_open and event is InputEventKey and event.pressed and not event.echo:
 		var k := (event as InputEventKey).physical_keycode
-		if k >= KEY_1 and k < KEY_1 + offers.size():
-			take(offers[k - KEY_1])
+		var n := garage_items().size() if garage_open else offers.size()
+		if k >= KEY_1 and k < KEY_1 + n:
+			if garage_open:
+				garage_pick(k - KEY_1)
+			else:
+				take(offers[k - KEY_1])
+			get_viewport().set_input_as_handled()
+			return
+		if k == KEY_TAB:
+			garage_open = not garage_open
 			get_viewport().set_input_as_handled()
 			return
 		if k == KEY_ESCAPE:
@@ -328,9 +489,14 @@ func _interact() -> void:
 			vehicle.fuel = vehicle.spec.fuel_capacity
 			message.emit("Tank is full")
 		board_open = not board_open
+		garage_open = false
 
 
 func _deliver() -> void:
+	var trailer := _job_trailer()
+	if trailer and vehicle.trailer != trailer:
+		message.emit("The load is in the %s: bring it here" % trailer.spec.title.to_lower())
+		return
 	var pay := float(job.reward)
 	var text := "Delivered to %s!" % job.name
 	match job.kind:
@@ -363,10 +529,26 @@ func _drop() -> void:
 func _end_job() -> void:
 	job = {}
 	vehicle.set_cargo(false)
+	for t in trailers:
+		if is_instance_valid(t) and t.load != "":
+			t.set_load("")
 	if _car:
 		vehicle.winch.forget(_car)
 		_car.drive_off(3.0)
 		_car = null
+
+
+## The player's trailer with that TrailerSpec id in this valley, or null.
+func _trailer(id: String) -> Trailer:
+	for t in trailers:
+		if is_instance_valid(t) and t.spec.id == id:
+			return t
+	return null
+
+
+## The trailer the job in hand's load is in, or null.
+func _job_trailer() -> Trailer:
+	return null if job.is_empty() else _trailer(Garage.trailer_for(job.kind))
 
 
 ## The best medal a time still earns: 0 gold, 1 silver, 2 bronze, 3 none.
