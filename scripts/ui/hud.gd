@@ -17,7 +17,9 @@ Q     all-wheel drive 4x4
 X     differential lock
 G     low range
 H     headlights   R  flip upright
-E     load / refuel
+E     job board, unload, refuel
+TAB   garage, on the board
+C     hitch / unhitch a trailer
 F     winch, Shift - reel in
 M     map
 T     tow back to depot
@@ -60,7 +62,7 @@ func setup(v: Vehicle, c: Contracts) -> void:
 	_board = _make_label(Vector2(28, 82), Vector2(size.x - 56, 88), HORIZONTAL_ALIGNMENT_LEFT)
 	_board.visible = false
 	_message.add_theme_color_override("font_color", Color(0.5, 1.0, 0.6))
-	_help = _make_label(Vector2(size.x - 196, 4), Vector2(190, 150), HORIZONTAL_ALIGNMENT_LEFT)
+	_help = _make_label(Vector2(size.x - 196, 4), Vector2(190, 172), HORIZONTAL_ALIGNMENT_LEFT)
 	_help.text = HELP_TEXT
 	_hint = _make_label(Vector2(size.x - 146, 4), Vector2(140, 40), HORIZONTAL_ALIGNMENT_LEFT)
 	_hint.text = HINT_TEXT
