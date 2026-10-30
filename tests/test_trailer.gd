@@ -445,6 +445,57 @@ func test_c_lets_the_semi_trailer_down_on_its_legs_in_a_dip(t: TCase) -> void:
 	await t.ticks(5)
 
 
+func test_after_c_the_semi_backs_into_its_semi_trailer_not_through_it(t: TCase) -> void:
+	t.world.set_truck(TruckSpec.semi())
+	await t.ticks(5)
+	var v: Vehicle = t.world.vehicle
+	var c: Contracts = t.world.contracts
+	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw, 30)
+	var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), v.global_rotation.y)
+	await t.ticks(20)
+	v.hitch(tr)
+	await t.ticks(60)
+	v.toggle_hitch()
+	await t.ticks(30)
+	var from := v.global_position
+	Input.action_press("brake", 1.0)
+	await t.ticks(240)
+	Input.action_release("brake")
+	var back := (v.global_position - from).dot(v.global_transform.basis.z)
+	t.note = "backed %.1f m" % back
+	t.ok(back < 6.0, "the semi backed %.1f m, through its semi-trailer" % back)
+	_free(t, [tr])
+	t.world.set_truck(TruckSpec.pickup())
+	await t.ticks(5)
+
+
+func test_r_right_after_c_sets_the_semi_down_clear_of_its_semi_trailer(t: TCase) -> void:
+	t.world.set_truck(TruckSpec.semi())
+	await t.ticks(5)
+	var v: Vehicle = t.world.vehicle
+	var c: Contracts = t.world.contracts
+	var terrain: Terrain = t.world.terrain
+	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw, 30)
+	var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), v.global_rotation.y)
+	await t.ticks(20)
+	v.hitch(tr)
+	await t.ticks(60)
+	v.toggle_hitch()
+	await t.ticks(2)
+	v.reset_upright()
+	await t.ticks(120)
+	var high := 0.0
+	for w in v.wheels:
+		if w.contact:
+			high = maxf(high, w.point.y - terrain.get_height(w.point.x, w.point.z))
+	t.note = "its wheels %.2f m off the ground at most" % high
+	t.ok(v.wheels.all(func(w: Chassis.Wheel) -> bool: return w.contact) and high < 0.3, "the semi stands on its semi-trailer's deck (a wheel %.2f m up)" % high)
+	t.ok(v.global_transform.basis.y.y > 0.97, "the semi is tilted")
+	_free(t, [tr])
+	t.world.set_truck(TruckSpec.pickup())
+	await t.ticks(5)
+
+
 ## A box of size standing at xf, in the world.
 func _wall(t: TCase, size: Vector3, xf: Transform3D) -> StaticBody3D:
 	var wall := StaticBody3D.new()

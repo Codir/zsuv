@@ -145,13 +145,19 @@ func _park(t: Trailer, away: Array[RID] = []) -> void:
 func _towing() -> void:
 	var hitched := vehicle.trailer
 	vehicle.unhitch()
-	var away: Array[RID] = [vehicle.get_rid()]  # the truck, towed to the spawn
+	var moved: Array[Trailer] = []
 	if hitched:
-		_park(hitched, away)
+		moved.append(hitched)
 	for t in contracts.trailers:
 		if is_instance_valid(t) and t != hitched and (t.global_transform.basis.y.y < 0.7 \
 				or Vector2(t.global_position.x - _spawn().x, t.global_position.z - _spawn().z).length() > TOW_HOME):
-			_park(t, away)
+			moved.append(t)
+	# Not in the way of the spots: the truck, towed to the spawn, and the trailers going to theirs.
+	var away: Array[RID] = [vehicle.get_rid()]
+	for t in moved:
+		away.append(t.get_rid())
+	for t in moved:
+		_park(t, away)
 	_clear_spawn(away)
 
 
@@ -265,7 +271,8 @@ func _parking(t: Trailer, away: Array[RID] = []) -> Transform3D:
 		q.transform = Transform3D(turn, p + turn * ((lo + hi) * 0.5) + Vector3(0.0, 0.3, 0.0))
 		var clear := space.intersect_shape(q, 1).is_empty()
 		q.shape = lane_box
-		q.transform = Transform3D(turn, p + turn * Vector3(0.0, 0.0, lo.z - lane * 0.5) + Vector3(0.0, 1.4, 0.0))
+		var mid := p + turn * Vector3(0.0, 0.0, lo.z - lane * 0.5)  # the lane's, on the ground there
+		q.transform = Transform3D(turn, Vector3(mid.x, terrain.get_height(mid.x, mid.z) + 1.4, mid.z))
 		clear = clear and space.intersect_shape(q, 1).is_empty()
 		if not clear:
 			grade = 4

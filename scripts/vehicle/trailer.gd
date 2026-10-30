@@ -398,8 +398,8 @@ func _hold(i: int, p: Vector3, n: Vector3, load_n: float, grip: float) -> void:
 	apply_force(f, p - global_position)
 
 
-## Whether body is in any of its boxes, or under one as far down as its stand reaches (a truck
-## it was let go from, still under a semi-trailer's deck as the deck comes down).
+## Whether body is in any of its boxes, or, until it stands on its stand, under one as far down
+## as the stand reaches (a truck it was let go from, under a semi-trailer's deck coming down).
 func _touching(body: PhysicsBody3D) -> bool:
 	if not is_instance_valid(body):
 		return false
@@ -412,7 +412,7 @@ func _touching(body: PhysicsBody3D) -> bool:
 		q.shape = cs.shape
 		q.transform = cs.global_transform
 		var box := cs.shape as BoxShape3D
-		if box:
+		if box and not stand_contact:
 			var reach := maxf(cs.position.y - box.size.y * 0.5 - spec.stand.y, 0.0)
 			var down := BoxShape3D.new()
 			down.size = box.size + Vector3(0.0, reach, 0.0)

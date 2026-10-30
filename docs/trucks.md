@@ -83,11 +83,13 @@ its rings only in the full mud below the Polissia forestry.
   roads, but the semi-trailer in Khutir and the steppe a fairly level one; and each truck backs up
   to its trailer there, steering for the coupler, and hitches it (tests/test_garage.gd). A
   trailer keeps its spot while the spot stays level or a gentle slope and clear: the tow puts it
-  back there (the truck being towed off is not in its way).
+  back there (the truck being towed off and the trailers it brings back are not in its way).
 - The semi truck's frame behind the cab stands lower than its fifth wheel, so it goes in under a
   standing semi-trailer's deck with about 0.3 m to spare. Unhitched (C), a trailer and its truck
-  pass through each other until the truck is out from under it, down to where its stand reaches:
-  a semi-trailer let go in a dip comes down on its legs, not on the truck's frame.
+  pass through each other while they touch, and, until the trailer stands on its stand, while the
+  truck is under it: a semi-trailer let go in a dip comes down on its legs, not on the truck's
+  frame; once it stands, the truck backs into it, not through it. R with no trailer hitched sets
+  the truck down clear of any trailer under it.
 - `scripts/systems/garage.gd`: what the garage sells and what a job needs. `Profile` keeps the
   rigs bought and the truck picked; `Contracts` tags the jobs, sells, and swaps the truck through
   `scripts/main.gd`, which also parks the trailers bought by the depot.

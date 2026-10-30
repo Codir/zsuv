@@ -99,12 +99,14 @@ func set_lights(on: bool) -> void:
 ## Moves the truck to pos facing yaw at the next physics step, standing still; a hitched trailer
 ## goes with it, still hitched, straight behind or else swung as it is now, if there is room for it
 ## there. If a building or a tree is in the way of both, the trailer is let go where it is and the
-## truck set down clear of it and of anything else there.
+## truck set down clear of it and of anything else there. With no trailer hitched, it is set down
+## clear of any trailer under it (a semi-trailer just let go).
 func teleport(pos: Vector3, yaw: float) -> void:
 	winch.detach()
 	_reset_transform = Transform3D(Basis(Vector3.UP, yaw), pos)
 	_reset_requested = true
 	if trailer == null:
+		_reset_transform = _clear_of(null, _reset_transform)
 		return
 	var z := global_transform.basis.z
 	var tz := trailer.global_transform.basis.z
@@ -120,8 +122,8 @@ func teleport(pos: Vector3, yaw: float) -> void:
 
 
 ## xf, or else the nearest spot ahead of it or to either side where the truck comes down clear of
-## trailer t (a semi-trailer's deck reaches over the truck it is let go from) and of anything else
-## standing there; xf if there is none within 20 m.
+## trailer t (any trailer if null; a semi-trailer's deck reaches over the truck it is let go from)
+## and of anything else standing there; xf if there is none within 20 m.
 func _clear_of(t: Trailer, xf: Transform3D) -> Transform3D:
 	var lo := Vector3.INF
 	var hi := -Vector3.INF
@@ -146,7 +148,7 @@ func _clear_of(t: Trailer, xf: Transform3D) -> Transform3D:
 				at.origin.y = terrain.get_height(at.origin.x, at.origin.z) + lift
 			q.shape = fall
 			q.transform = Transform3D(at.basis, at * ((lo + hi) * 0.5 - Vector3(0.0, 1.25, 0.0)))
-			if space.intersect_shape(q, 32).any(func(hit: Dictionary) -> bool: return hit.rid == t.get_rid()):
+			if space.intersect_shape(q, 32).any(func(hit: Dictionary) -> bool: return hit.collider == t if t else hit.collider is Trailer):
 				continue
 			q.shape = body
 			q.transform = Transform3D(at.basis, at * ((lo + hi) * 0.5))

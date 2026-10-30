@@ -141,6 +141,47 @@ func test_the_tow_leaves_a_trailer_on_its_spot(t: TCase) -> void:
 	_sell_back(t)
 
 
+func test_the_tow_brings_a_trailer_back_to_its_spot_with_another_in_its_way(t: TCase) -> void:
+	# The farm trailer left out in the valley, the pickup's trailer hitched and standing ahead of the
+	# farm trailer's coupler: the tow takes both, and each goes back to its own spot.
+	var c: Contracts = t.world.contracts
+	c.call("_end_job")
+	c.money = 4000
+	c.garage_pick(1)  # the trailer
+	await t.ticks(5)
+	c.garage_pick(2)  # the tractor and its farm trailer
+	await t.ticks(5)
+	c.garage_pick(0)  # back to the pickup
+	await t.ticks(60)
+	var v: Vehicle = t.world.vehicle
+	var farm := c._trailer("farm")
+	var trailer := c._trailer("trailer")
+	var farm_spot := farm.global_transform
+	var trailer_spot := trailer.global_position
+	var farm_pos: Vector2 = t.world.locations.farm.pos
+	farm.stand_on(farm_pos + Vector2(10.0, 0.0), 0.0)
+	# The pickup facing the way the farm trailer does, its trailer behind it 3 m ahead of the farm trailer's coupler.
+	var b := farm_spot.basis
+	var ahead := -Vector3(b.z.x, 0.0, b.z.z).normalized()
+	var yaw := atan2(b.z.x, b.z.z)
+	var hitch := farm_spot * farm.spec.coupler + ahead * (3.0 + absf(trailer.spec.coupler.z) + 1.0)
+	await t.place(Vector2(hitch.x, hitch.z) - Vector2((Basis(Vector3.UP, yaw) * v.spec.hitch).x, (Basis(Vector3.UP, yaw) * v.spec.hitch).z), yaw, 60)
+	trailer.place(trailer.behind(Transform3D(v.global_transform.basis, v.hitch_point())))
+	await t.ticks(20)
+	v.hitch(trailer)
+	await t.ticks(30)
+	t.ok(v.trailer == trailer, "the trailer is not hitched")
+	var money := c.money
+	c.recover()
+	c.money = money
+	await t.ticks(120)
+	var off := farm.global_position.distance_to(farm_spot.origin)
+	t.note = "the farm trailer %.1f m from its spot, the trailer %.1f m" % [off, trailer.global_position.distance_to(trailer_spot)]
+	t.ok(off < 1.0 and rad_to_deg(b.z.angle_to(farm.global_transform.basis.z)) < 10.0, "the farm trailer is %.1f m from its spot, or turned" % off)
+	t.ok(trailer.global_position.distance_to(trailer_spot) < 1.0, "the trailer is %.1f m from its spot" % trailer.global_position.distance_to(trailer_spot))
+	_sell_back(t)
+
+
 func test_trailers_park_well_in_every_valley(t: TCase) -> void:
 	for valley in Valley.all():
 		var profile := Profile.new()
