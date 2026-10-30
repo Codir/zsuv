@@ -74,8 +74,8 @@ its rings only in the full mud below the Polissia forestry.
 - Each trailer has a spot of its own by the depot, facing the way the truck does: the nearest of
   a grid to either side of the spawn that nothing stands on, clear of the trucks' spawn and of the
   other trailers' spots, on level ground off the roads (fairly level, if no spot is level; anywhere
-  clear, if none is either). Measured with all three in every valley: each finds a level or
-  fairly level spot off the roads.
+  clear, if none is either). Measured with all three in every valley: each finds a level spot
+  off the roads, the semi-trailer up to 41 m across from the spawn (in Khutir).
 - `scripts/systems/garage.gd`: what the garage sells and what a job needs. `Profile` keeps the
   rigs bought and the truck picked; `Contracts` tags the jobs, sells, and swaps the truck through
   `scripts/main.gd`, which also parks the trailers bought by the depot.
