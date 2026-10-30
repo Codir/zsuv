@@ -87,12 +87,15 @@ its rings only in the full mud below the Polissia forestry.
   spawn among them, are not in its way), and sets the truck down on the spawn.
 - The semi truck's frame behind the cab stands lower than its fifth wheel, so it goes in under a
   standing semi-trailer's deck with about 0.3 m to spare. Unhitched (C), a trailer winds its stand
-  down to the ground (up to 0.8 m further than its own) and stays as high as the hitch held it,
-  as a semi-trailer's legs do: let go in a dip, it does not come down on the truck's frame. The
-  two pass through each other while they touch, but for the truck's frame under its hitch once
-  the trailer stands; after that the truck backs into it, not through it. A truck's wheels do not
-  take a trailer for ground: it backs in under a deck, not up onto it. R with no trailer hitched
-  sets the truck down clear of any trailer under it.
+  to the ground (up to 0.8 m further down than its own, or shorter over a hump) and stays as high
+  as the hitch held it, as a semi-trailer's legs do: let go in a dip, it does not come down on the
+  truck's frame, nor is it thrown up over a hump. Its stand stands on the ground, not on a truck
+  backing in under it. The two pass through each other while they touch, but for the truck's
+  frame under its hitch once the trailer stands, unless they overlapped when let go (over a
+  crest); after that the truck backs into it, not through it. C does not let go a trailer hung
+  on the hitch over a crest with most of its wheels in the air (it would see-saw). A truck's
+  wheels do not take a trailer for ground: it backs in under a deck, not up onto it. R with no
+  trailer hitched sets the truck down clear of any trailer under it.
 - `scripts/systems/garage.gd`: what the garage sells and what a job needs. `Profile` keeps the
   rigs bought and the truck picked; `Contracts` tags the jobs, sells, and swaps the truck through
   `scripts/main.gd`, which also parks the trailers bought by the depot.

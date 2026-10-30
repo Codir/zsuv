@@ -23,7 +23,9 @@ var spec: TrailerSpec  # set before it enters the tree; the pickup's trailer if 
 var truck: Vehicle  # hitched to; null: standing on its own
 var load := ""  # the kind of load on it; "" none
 var stand_contact := false  # unhitched, its stand is on the ground
-var _legs := 0.0  # how much further down than its own its stand is wound now
+var _legs := 0.0  # how much further down than its own its stand is wound now (up, if less than 0)
+var _held: Array[int] = []  # the shapes of the truck it was let go from that it overlapped then
+var _stand_top := 0.0  # the stand graphic's height (in its frame) that stays put as the stand winds
 var _loads := {}  # look -> its node: a kind of load ("bulk"), or another look of it ("bulk_peat")
 var _stand_gfx: Node3D  # the jockey wheel, the prop or the legs' feet
 var _stand_down := Transform3D()  # where they are standing and wound up
@@ -74,6 +76,12 @@ func set_load(kind: String, look := "") -> void:
 		_loads[k].visible = kind != "" and k == shown
 
 
+## Whether at least half its wheels are on the ground: not hung on its hitch over a crest, where
+## let go it would see-saw.
+func standing() -> bool:
+	return wheels.filter(func(w: Wheel) -> bool: return w.contact).size() * 2 >= wheels.size()
+
+
 ## Where its coupler is now.
 func coupler_point() -> Vector3:
 	return global_transform * spec.coupler
@@ -96,14 +104,14 @@ func uncouple() -> void:
 	_parting = truck
 	truck = null
 	_spots.fill(NO_SPOT)
-	# Its stand wound down to the ground before the truck pulls out from under it, as a
-	# semi-trailer's legs are: it stays as high as the hitch held it, up to LEGS further down.
+	# Its stand wound to the ground before the truck pulls out from under it, as a semi-trailer's
+	# legs are: it stays as high as the hitch held it, the stand up to LEGS further down or up to
+	# its whole travel shorter (over a hump), not pressed into the ground.
 	var up := global_transform.basis.y
-	var top := global_transform * (spec.stand + Vector3(0.0, STAND_TRAVEL, 0.0))
-	var q := PhysicsRayQueryParameters3D.create(top, top - up * (STAND_TRAVEL + LEGS))
-	q.exclude = _ray_exclude()
-	var hit := get_world_3d().direct_space_state.intersect_ray(q)
-	_legs = LEGS if hit.is_empty() else clampf(top.distance_to(hit.position) - STAND_TRAVEL, 0.0, LEGS)
+	var foot := global_transform * spec.stand
+	var hit := _ground_hit(foot + up * (STAND_TRAVEL + 1.0), foot - up * LEGS)
+	_legs = LEGS if hit.is_empty() else clampf((foot - hit.position).dot(up), 0.05 - STAND_TRAVEL, LEGS)
+	_held = _overlapped(_parting)
 
 
 ## Swings it about its wheels so its coupler comes onto the hitch at at (the drawbar lifted or
@@ -295,7 +303,12 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	_animate_wheels(delta)
 	if _stand_gfx:
-		_stand_gfx.transform = _stand_up if truck else _stand_down.translated_local(Vector3(0.0, -_legs, 0.0))
+		if truck:
+			_stand_gfx.transform = _stand_up
+		else:  # wound: its foot _legs lower, stretched from _stand_top
+			var foot := spec.stand.y - _stand_down.origin.y
+			var stretch := (_stand_top - foot + _legs) / (_stand_top - foot)
+			_stand_gfx.transform = Transform3D(Basis.from_scale(Vector3(1.0, stretch, 1.0)), _stand_down.origin + Vector3(0.0, _stand_top * (1.0 - stretch), 0.0))
 
 
 ## Springs, dampers and anti-roll as Chassis's, but where it has axles side by side (a bogie: the
@@ -376,9 +389,7 @@ func _stand() -> void:
 	var i := wheels.size()
 	var up := global_transform.basis.y
 	var top := global_transform * (spec.stand + Vector3(0.0, STAND_TRAVEL, 0.0))
-	var q := PhysicsRayQueryParameters3D.create(top, top - up * (STAND_TRAVEL + _legs))
-	q.exclude = _ray_exclude()
-	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	var hit := _ground_hit(top, top - up * (STAND_TRAVEL + _legs))
 	stand_contact = not hit.is_empty()
 	if not stand_contact:
 		_spots[i] = NO_SPOT
@@ -410,11 +421,20 @@ func _hold(i: int, p: Vector3, n: Vector3, load_n: float, grip: float) -> void:
 	apply_force(f, p - global_position)
 
 
-## Whether any of its boxes overlaps body; standing on its stand, not counting a truck's frame
-## below the truck's hitch (what a semi-trailer's deck stands over).
+## Whether it overlaps body, the truck it was let go from: standing on its stand, not counting
+## the truck's frame below its hitch (what a semi-trailer's deck stands over), but for what of it
+## it overlapped when let go (over a crest), until that is clear of it.
 func _touching(body: PhysicsBody3D) -> bool:
+	var now := _overlapped(body)
+	_held = _held.filter(func(i: int) -> bool: return i in now)
+	return now.any(func(i: int) -> bool: return not (stand_contact and _under_hitch(body as Vehicle, i)) or i in _held)
+
+
+## The shapes (by index) of body any of its boxes overlaps.
+func _overlapped(body: PhysicsBody3D) -> Array[int]:
+	var out: Array[int] = []
 	if not is_instance_valid(body):
-		return false
+		return out
 	var space := get_world_3d().direct_space_state
 	for c in get_children():
 		var cs := c as CollisionShape3D
@@ -425,9 +445,23 @@ func _touching(body: PhysicsBody3D) -> bool:
 		q.transform = cs.global_transform
 		q.exclude = _not_ground()
 		for hit in space.intersect_shape(q, 16):
-			if hit.rid == body.get_rid() and not (stand_contact and _under_hitch(body as Vehicle, hit.shape)):
-				return true
-	return false
+			if hit.rid == body.get_rid() and not hit.shape in out:
+				out.append(hit.shape)
+	return out
+
+
+## What the ray from a to b meets first that is ground: not a truck or a trailer (a truck backing
+## in under it, say); empty if nothing.
+func _ground_hit(a: Vector3, b: Vector3) -> Dictionary:
+	var skip := _ray_exclude()
+	for i in 4:
+		var q := PhysicsRayQueryParameters3D.create(a, b)
+		q.exclude = skip
+		var hit := get_world_3d().direct_space_state.intersect_ray(q)
+		if hit.is_empty() or not hit.collider is Chassis:
+			return hit
+		skip.append(hit.rid)
+	return {}
 
 
 ## Whether shape (by its index) of truck v lies wholly below v's hitch.
@@ -481,6 +515,7 @@ func _build_trailer() -> void:
 	jockey.rotation.z = PI * 0.5
 	_stand_down = Transform3D(Basis(), spec.stand)
 	_stand_up = Transform3D(Basis(), spec.stand + Vector3(0.0, 0.25, 0.0))
+	_stand_top = 0.73  # the post's top
 	# A double load: crates two by two, one more on top, strapped down.
 	var crates := _load("double")
 	var wood := Color(0.55, 0.38, 0.2)
@@ -593,6 +628,7 @@ func _build_semi_trailer() -> void:
 		Psx.box(_stand_gfx, Vector3(0.32, 0.05, 0.32), Vector3(0.85 * side, 0.025, 0.0), DARK)
 	_stand_down = Transform3D(Basis(), spec.stand)
 	_stand_up = Transform3D(Basis(), spec.stand + Vector3(0.0, 0.35, 0.0))
+	_stand_top = 0.54  # the inner tubes' top
 	# Logs: nine trunks, four, three and two, between stakes, chained.
 	var logs := _load("long")
 	var trunk := Psx.cylinder(0.27, 0.27, 10.6, 7)

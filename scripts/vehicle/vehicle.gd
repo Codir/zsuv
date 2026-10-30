@@ -191,12 +191,14 @@ func hitch_candidate() -> Trailer:
 	return best
 
 
-## C: hitches the trailer in reach, or unhitches the one hitched; only when slow.
+## C: hitches the trailer in reach, or unhitches the one hitched (standing: not hung on the hitch
+## over a crest); only when slow.
 func toggle_hitch() -> void:
 	if absf(forward_speed) >= HITCH_SLOW:
 		return
 	if trailer:
-		unhitch()
+		if trailer.standing():
+			unhitch()
 	else:
 		var t := hitch_candidate()
 		if t:
@@ -248,7 +250,7 @@ func hitch_prompt() -> String:
 	if absf(forward_speed) >= HITCH_SLOW:
 		return ""
 	if trailer:
-		return "[C] Unhitch"
+		return "[C] Unhitch" if trailer.standing() else ""
 	var t := hitch_candidate()
 	return "[C] Hitch the %s" % t.spec.title.to_lower() if t else ""
 

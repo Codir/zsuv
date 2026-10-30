@@ -456,7 +456,9 @@ func test_after_c_the_semi_backs_into_its_semi_trailer_not_through_it(t: TCase) 
 	var c: Contracts = t.world.contracts
 	var terrain: Terrain = t.world.terrain
 	var notes := PackedStringArray()
-	for spot in [[Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw, ""], [Vector2(88.5, -42.3), deg_to_rad(-165.0), "long"], [Vector2(95.8, -13.4), deg_to_rad(-6.0), "long"]]:
+	for spot in [[Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw, ""], [Vector2(88.5, -42.3), deg_to_rad(-165.0), "long"],
+			[Vector2(88.5, -42.3), deg_to_rad(-165.0), ""], [Vector2(95.8, -13.4), deg_to_rad(-6.0), "long"],
+			[Vector2(95.8, -13.4), deg_to_rad(-6.0), ""], [Vector2(-97.23, -77.14), deg_to_rad(-7.0), ""]]:
 		await t.place(spot[0], spot[1], 30)
 		var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), v.global_rotation.y, spot[2])
 		await t.ticks(20)
@@ -465,20 +467,73 @@ func test_after_c_the_semi_backs_into_its_semi_trailer_not_through_it(t: TCase) 
 		v.toggle_hitch()
 		await t.ticks(60)
 		var from := v.global_position
+		var stood := tr.global_position
+		var fastest := 0.0
 		var high := 0.0
 		for i in 360:
 			Input.action_press("brake", 1.0 if v.forward_speed > 0.05 else (0.5 if -v.forward_speed < 0.6 else 0.0))
 			await t.tree.physics_frame
+			fastest = maxf(fastest, tr.linear_velocity.length())
 			for w in v.wheels:
 				if w.contact:
 					high = maxf(high, w.point.y - terrain.get_height(w.point.x, w.point.z))
 		Input.action_release("brake")
 		var back := (v.global_position - from).dot(v.global_transform.basis.z)
 		notes.append("%.1f m" % back)
+		t.ok(fastest < 1.0 and tr.global_position.distance_to(stood) < 1.5, "at %s the semi-trailer was thrown (%.1f m/s, %.1f m)" % [spot[0], fastest, tr.global_position.distance_to(stood)])
 		t.ok(back < 6.0, "at %s the semi backed %.1f m, through its semi-trailer" % [spot[0], back])
 		t.ok(high < 0.3, "at %s the semi's wheels rode %.2f m up, onto the deck" % [spot[0], high])
 		_free(t, [tr])
 	t.note = "backed %s" % ", ".join(notes)
+	t.world.set_truck(TruckSpec.pickup())
+	await t.ticks(5)
+
+
+func test_c_leaves_the_semi_trailer_standing_still_and_the_semi_drives_out(t: TCase) -> void:
+	# At the depot, in sags, on climbs, over humps and crests along the khutir valley's roads,
+	# empty and loaded: let go with C, the semi-trailer stands still on its legs, its kingpin no
+	# higher than the hitch held it, and the semi drives out from under it. Where it hangs on the
+	# hitch over a crest, most of its wheels in the air, C does not let it go.
+	t.world.set_truck(TruckSpec.semi())
+	await t.ticks(5)
+	var v: Vehicle = t.world.vehicle
+	var c: Contracts = t.world.contracts
+	var notes := PackedStringArray()
+	for spot in [[Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw, ""], [Vector2(6.68, -95.56), deg_to_rad(108.0), ""],
+			[Vector2(-82.23, 66.82), deg_to_rad(-158.0), "long"], [Vector2(-84.49, 61.26), deg_to_rad(-158.0), "long"],
+			[Vector2(77.0, 68.0), deg_to_rad(180.0), ""], [Vector2(-86.5, 53.9), deg_to_rad(180.0), ""]]:
+		Input.action_press("handbrake")  # stopped there, as a player stops
+		await t.place(spot[0], spot[1], 30)
+		var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), v.global_rotation.y, spot[2])
+		await t.ticks(20)
+		v.hitch(tr)
+		await t.ticks(90)
+		var kingpin := tr.coupler_point()
+		v.toggle_hitch()
+		if not tr.standing():
+			t.ok(v.trailer == tr and v.hitch_prompt() == "", "at %s C let go the semi-trailer hung over a crest" % spot[0])
+			notes.append("kept")
+			Input.action_release("handbrake")
+			_free(t, [tr])
+			continue
+		var fastest := 0.0
+		var rose := 0.0
+		for i in 60:
+			await t.tree.physics_frame
+			fastest = maxf(fastest, tr.linear_velocity.length())
+			rose = maxf(rose, (tr.coupler_point() - kingpin).dot(tr.global_transform.basis.y))
+		Input.action_release("handbrake")
+		var from := v.global_position
+		Input.action_press("accelerate", 1.0)
+		await t.ticks(240)
+		Input.action_release("accelerate")
+		var went := v.global_position.distance_to(from)
+		notes.append("%.0f m" % went)
+		t.ok(fastest < 0.5 and rose < 0.1, "at %s the semi-trailer was thrown (%.1f m/s, its kingpin %.2f m up)" % [spot[0], fastest, rose])
+		t.ok(went > 5.0, "at %s the semi went %.1f m in 4 s out from under it" % [spot[0], went])
+		t.ok(tr.stand_contact and tr.global_transform.basis.y.y > 0.9, "at %s the semi-trailer is not on its legs" % spot[0])
+		_free(t, [tr])
+	t.note = "the semi drove out %s" % ", ".join(notes)
 	t.world.set_truck(TruckSpec.pickup())
 	await t.ticks(5)
 
