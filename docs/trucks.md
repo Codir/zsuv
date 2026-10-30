@@ -67,8 +67,15 @@ its rings only in the full mud below the Polissia forestry.
 - The hitch (C, in reach of a trailer's coupler, slow) is a 6DOF joint at the truck's hitch: it
   turns 85 degrees either way, pitches 30, rolls 10; the trailer is swung onto the hitch first so
   nothing jerks; the two do not collide while hitched. Setting upright (R) carries a hitched
-  trailer along, straight behind, or lets it go where it stands if a building or a tree is in the
-  way there; the tow (T) unhitches it and parks it by the depot, beside the truck.
+  trailer along, straight behind or else swung as it was; if a building or a tree is in the way
+  of both, it lets the trailer go where it stands and sets the truck down clear of it. The tow (T)
+  unhitches the trailer and brings it back to the depot, with any trailer left on its side or out
+  in the valley (more than 30 m off).
+- Each trailer has a spot of its own by the depot, facing the way the truck does: the nearest of
+  a grid to either side of the spawn that nothing stands on, clear of the trucks' spawn and of the
+  other trailers' spots, on level ground off the roads (fairly level, if no spot is level; anywhere
+  clear, if none is either). Measured with all three in every valley: each finds a level or
+  fairly level spot off the roads.
 - `scripts/systems/garage.gd`: what the garage sells and what a job needs. `Profile` keeps the
   rigs bought and the truck picked; `Contracts` tags the jobs, sells, and swaps the truck through
-  `scripts/main.gd`, which also parks the trailers bought on level, clear ground by the depot.
+  `scripts/main.gd`, which also parks the trailers bought by the depot.

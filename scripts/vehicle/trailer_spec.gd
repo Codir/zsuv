@@ -32,6 +32,17 @@ var hitch_kind := "ball"  # the TruckSpec.hitch_kind it fits
 var cargo_mass := {}  # the loads it carries and what each weighs
 
 
+## The box it stands in, in its frame: its collision boxes and its drawbar out to the coupler,
+## 3 m across at least and 2.5 m high.
+func extent() -> AABB:
+	var lo := Vector3(-1.5, 0.0, coupler.z)
+	var hi := Vector3(1.5, 2.5, coupler.z)
+	for b in shapes:
+		lo = lo.min(b.pos - b.size * 0.5)
+		hi = hi.max(b.pos + b.size * 0.5)
+	return AABB(lo, hi - lo)
+
+
 static func all() -> Array[TrailerSpec]:
 	return [trailer(), farm(), semi_trailer()]
 

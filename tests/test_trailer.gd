@@ -3,8 +3,9 @@ extends RefCounted
 ## wheels on the ground; the pickup backs up to its trailer and C hitches it with no jerk; it pulls
 ## it down the road at 30 km/h without sway, turns at full lock without jackknifing into the truck,
 ## holds it on a slope; C unhitches it standing; a load adds its weight; the tow (T) takes both to
-## the depot, the trailer to a spot of its own; R lets the trailer go when there is no room for it
-## straight behind.
+## the depot, the trailer to a spot of its own, and brings back a trailer left on its side; R keeps
+## the trailer hitched as it is swung when there is no room for it straight behind, lets it go when
+## there is room for neither, and sets the truck down clear of it.
 
 
 func test_each_trailer_stands_still(t: TCase) -> void:
@@ -232,7 +233,8 @@ func test_the_tow_takes_both_to_the_depot(t: TCase) -> void:
 	var c: Contracts = t.world.contracts
 	var tr := await _hitched(t)
 	var farm: Vector2 = t.world.locations.farm.pos
-	await t.place(farm + Vector2(0.0, -4.0), 1.0, 60)
+	await t.place(farm + Vector2(0.0, -4.0), 0.0, 60)
+	t.ok(v.trailer == tr, "the trailer did not come along to the farm")
 	var money := c.money
 	c.recover()
 	c.money = money
@@ -251,6 +253,56 @@ func test_the_tow_takes_both_to_the_depot(t: TCase) -> void:
 	_free(t, [tr])
 
 
+func test_the_tow_brings_back_a_trailer_left_on_its_side(t: TCase) -> void:
+	var v: Vehicle = t.world.vehicle
+	var c: Contracts = t.world.contracts
+	var farm: Vector2 = t.world.locations.farm.pos
+	var tr := _trailer(t, TrailerSpec.farm(), farm + Vector2(8.0, 0.0), 0.0, "bulk")
+	await t.ticks(2)
+	tr.place(Transform3D(Basis(Vector3.FORWARD, PI * 0.5), tr.global_position + Vector3(0.0, 1.0, 0.0)))
+	await t.ticks(120)
+	t.ok(tr.global_transform.basis.y.y < 0.7, "the farm trailer did not fall on its side")
+	c.trailers.append(tr)
+	await t.place(farm + Vector2(0.0, -4.0), 0.0, 30)
+	var money := c.money
+	c.recover()
+	c.money = money
+	await t.ticks(180)
+	var depot: Vector2 = t.world.locations.depot.pos
+	var at := Vector2(tr.global_position.x, tr.global_position.z)
+	t.note = "the trailer %.0f m from the depot, up %.2f" % [at.distance_to(depot), tr.global_transform.basis.y.y]
+	t.ok(at.distance_to(depot) < 45.0, "the trailer is %.0f m from the depot" % at.distance_to(depot))
+	t.ok(tr.global_transform.basis.y.y > 0.95, "the trailer is not upright")
+	t.eq(tr.load, "bulk", "its load")
+	c.trailers.erase(tr)
+	_free(t, [tr])
+
+
+func test_r_keeps_the_trailer_swung_where_there_is_no_room_straight_behind(t: TCase) -> void:
+	var v: Vehicle = t.world.vehicle
+	var c: Contracts = t.world.contracts
+	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw)
+	var yaw := v.global_rotation.y
+	var tr := _behind(t, TrailerSpec.trailer(), v.hitch_point(), yaw + deg_to_rad(60.0))
+	await t.ticks(20)
+	v.hitch(tr)
+	await t.ticks(20)
+	# A post straight behind the hitch, where the trailer is not.
+	var post := _wall(t, Vector3(1.0, 3.0, 0.5), Transform3D(v.global_transform.basis, v.hitch_point() + v.global_transform.basis.z * 2.5))
+	await t.ticks(2)
+	v.reset_upright()
+	await t.ticks(60)
+	var z := v.global_transform.basis.z
+	var tz := tr.global_transform.basis.z
+	var swing := rad_to_deg(wrapf(atan2(tz.x, tz.z) - atan2(z.x, z.z), -PI, PI))
+	t.note = "swung %.0f deg" % swing
+	t.ok(v.trailer == tr, "R let the trailer go")
+	t.ok(absf(swing - 60.0) < 20.0, "the trailer is swung %.0f deg, not 60" % swing)
+	t.ok(tr.global_transform.basis.y.y > 0.95, "the trailer is not upright")
+	post.free()
+	_free(t, [tr])
+
+
 func test_r_lets_the_trailer_go_where_there_is_no_room_behind(t: TCase) -> void:
 	var v: Vehicle = t.world.vehicle
 	var tr := await _hitched(t)
@@ -260,14 +312,7 @@ func test_r_lets_the_trailer_go_where_there_is_no_room_behind(t: TCase) -> void:
 	var to := v.global_position - v.global_transform.basis.z * 25.0
 	to.y = terrain.get_height(to.x, to.z) + 2.0
 	var there := Transform3D(Basis(Vector3.UP, yaw), to)
-	var wall := StaticBody3D.new()
-	var cs := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(4.0, 4.0, 1.0)
-	cs.shape = box
-	wall.add_child(cs)
-	t.world.add_child(wall)
-	wall.global_transform = Transform3D(there.basis, there * v.spec.hitch + there.basis.z * 2.0)
+	var wall := _wall(t, Vector3(4.0, 4.0, 1.0), Transform3D(there.basis, there * v.spec.hitch + there.basis.z * 2.0))
 	var stood := tr.global_position
 	await t.ticks(2)
 	v.teleport(to, yaw)
@@ -277,6 +322,56 @@ func test_r_lets_the_trailer_go_where_there_is_no_room_behind(t: TCase) -> void:
 	t.ok(tr.global_position.distance_to(stood) < 1.0, "the trailer moved %.1f m" % tr.global_position.distance_to(stood))
 	wall.free()
 	_free(t, [tr])
+
+
+func test_r_sets_the_semi_down_clear_of_the_semi_trailer_it_lets_go(t: TCase) -> void:
+	t.world.set_truck(TruckSpec.semi())
+	await t.ticks(5)
+	var v: Vehicle = t.world.vehicle
+	var c: Contracts = t.world.contracts
+	var terrain: Terrain = t.world.terrain
+	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw)
+	var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), v.global_rotation.y)
+	await t.ticks(20)
+	v.hitch(tr)
+	await t.ticks(40)
+	# Branches over the trailer, too high to touch it, in the way of it 2 m up where R puts it.
+	var b := v.global_transform.basis
+	var over := v.global_position + b.z * 7.5
+	over.y = terrain.get_height(over.x, over.z) + 2.3
+	var branches := _wall(t, Vector3(3.0, 1.0, 7.0), Transform3D(b, over))
+	var stood := tr.global_position
+	var was := v.global_position
+	await t.ticks(2)
+	t.ok(tr.fits(tr.global_transform, v), "the branches touch the trailer")
+	v.reset_upright()
+	await t.ticks(120)
+	var high := 0.0
+	for w in v.wheels:
+		if w.contact:
+			high = maxf(high, w.point.y - terrain.get_height(w.point.x, w.point.z))
+	t.note = "the truck set down %.1f m ahead, its wheels %.2f m off the ground at most" % [(v.global_position - was).dot(-b.z), high]
+	t.ok(v.trailer == null and tr.truck == null, "R hitched the trailer into the branches")
+	t.ok(v.wheels.all(func(w: Chassis.Wheel) -> bool: return w.contact) and high < 0.3, "the truck stands on the trailer's deck (a wheel %.2f m up)" % high)
+	t.ok(v.global_transform.basis.y.y > 0.97, "the truck is tilted")
+	t.ok(tr.global_transform.basis.y.y > 0.97 and tr.global_position.distance_to(stood) < 1.0, "the trailer moved or tipped")
+	branches.free()
+	_free(t, [tr])
+	t.world.set_truck(TruckSpec.pickup())
+	await t.ticks(5)
+
+
+## A box of size standing at xf, in the world.
+func _wall(t: TCase, size: Vector3, xf: Transform3D) -> StaticBody3D:
+	var wall := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	cs.shape = box
+	wall.add_child(cs)
+	t.world.add_child(wall)
+	wall.global_transform = xf
+	return wall
 
 
 ## The pickup at the depot with its trailer hitched straight behind, settled.

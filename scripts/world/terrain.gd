@@ -30,6 +30,7 @@ var snow_img: Image  # R - snow or dust, G - mud, B - road, A - 1 - ice
 var track_img: Image  # compaction 0..1
 var track_tex: ImageTexture
 var roads: Array[PackedVector2Array] = []
+var body: StaticBody3D  # its collision: the height map, one shape that a query meets many times over
 
 var _track_dirty := false
 var _track_timer := 0.0
@@ -570,6 +571,6 @@ func _build_collision() -> void:
 	shape.map_data = heights
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
-	var body := StaticBody3D.new()
+	body = StaticBody3D.new()
 	body.add_child(cs)
 	add_child(body)

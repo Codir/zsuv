@@ -2,6 +2,7 @@ extends Node3D
 ## A valley in play: builds its world, the truck, the camera, the HUD and the contracts.
 
 const POST_SHADER := preload("res://shaders/post_dither.gdshader")
+const TOW_HOME := 30.0  # m from the spawn: a trailer further off than this the tow brings back
 
 signal leave  # Esc: back to the valleys (scripts/game.gd)
 
@@ -19,7 +20,7 @@ var roads: Array[PackedVector2Array] = []
 var weather: Weather  # set before the scene enters the tree; the valley's own if not
 var _env: Environment
 var _sun: DirectionalLight3D
-var _parked: Array[Vector3] = []  # the middles of the spots the trailers were parked on
+var _parked := {}  # trailer -> the spot it was given by the depot: its footprint about the spawn
 var _fall: CPUParticles3D
 
 
@@ -119,7 +120,6 @@ func set_truck(spec: TruckSpec) -> void:
 ## The player's trailers wait beside the truck's spawn, facing the way it faces; one bought here
 ## joins them.
 func _park_trailers() -> void:
-	_parked.clear()
 	for spec in TrailerSpec.all():
 		if not profile.has_rig(spec.id) or contracts._trailer(spec.id) != null:
 			continue
@@ -132,82 +132,118 @@ func _park_trailers() -> void:
 		contracts.trailers.append(t)
 
 
-## Stands trailer t on a free spot by the depot (it moves at the next physics step).
+## Stands trailer t on its spot by the depot (it moves at the next physics step).
 func _park(t: Trailer) -> void:
-	var p := _parking(t.spec, t)
+	var p := _parking(t)
 	t.stand_on(Vector2(p.x, p.z), valley.spawn_yaw)
 
 
-## The tow (T) is on its way: the truck's trailer comes along to a spot by the depot of its own,
-## and a trailer left standing where the truck is to be set down is moved off it.
+## The tow (T) is on its way: the truck's trailer is let go, and it and any trailer left out in the
+## valley or lying on its side are brought to their spots by the depot; a trailer left standing
+## where the truck is to be set down is moved off it.
 func _towing() -> void:
-	var t := vehicle.trailer
+	var hitched := vehicle.trailer
 	vehicle.unhitch()
-	_parked.clear()
+	if hitched:
+		_park(hitched)
+	for t in contracts.trailers:
+		if is_instance_valid(t) and t != hitched and (t.global_transform.basis.y.y < 0.7 \
+				or Vector2(t.global_position.x - _spawn().x, t.global_position.z - _spawn().z).length() > TOW_HOME):
+			_park(t)
 	_clear_spawn()
-	if t:
-		_park(t)
 
 
 ## Moves any trailer standing where a truck is set down at the spawn (a long one left there, say)
-## to a free spot by the depot.
+## to its spot by the depot.
 func _clear_spawn() -> void:
 	var box := BoxShape3D.new()
 	box.size = Vector3(4.0, 3.0, 10.0)
 	var q := PhysicsShapeQueryParameters3D.new()
 	q.shape = box
 	q.transform = Transform3D(Basis(Vector3.UP, valley.spawn_yaw), _spawn() + Vector3(0.0, 0.5, 0.0))
+	q.exclude = [terrain.body.get_rid()]
 	for hit in get_world_3d().direct_space_state.intersect_shape(q, 8):
 		var t := hit.collider as Trailer
 		if t and t.truck == null:
 			_park(t)
 
 
-## A spot for a trailer of spec beside the depot: on level ground off the roads with nothing
-## standing on it (but moving, the trailer itself), clear of the truck's spawn and of the spots
-## given out already, the nearest of a few rows to either side.
-func _parking(spec: TrailerSpec, moving: Trailer = null) -> Vector3:
+## A spot for trailer t beside the depot, facing the way the truck does there, and t's from now
+## on: clear of whatever stands on it (but t), of the trucks' spawn and of the other trailers'
+## spots; on level ground off the roads if there is such a spot about, else on fairly level ground
+## off them, else anywhere clear. The nearest of a grid of spots to either side of the spawn.
+func _parking(t: Trailer) -> Vector3:
 	var turn := Basis(Vector3.UP, valley.spawn_yaw)
-	var lo := Vector3(-1.5, 0.0, spec.coupler.z)
-	var hi := Vector3(1.5, 2.5, spec.coupler.z)
-	for b in spec.shapes:
-		lo = lo.min(b.pos - b.size * 0.5)
-		hi = hi.max(b.pos + b.size * 0.5)
+	var lo := t.spec.extent().position
+	var hi := t.spec.extent().end
 	var box := BoxShape3D.new()
 	box.size = hi - lo + Vector3(1.0, 0.0, 1.0)
-	var space := get_world_3d().direct_space_state
-	for row in [0.0, 6.0, -6.0, 12.0, -12.0]:
-		for step in range(1, 8):
+	var feet: Array[Vector3] = []  # along its sides and down its middle, every 2 m or less
+	var n := ceili((hi.z - lo.z) / 2.0)
+	for i in n + 1:
+		for x in [lo.x, 0.0, hi.x]:
+			feet.append(Vector3(x, 0.0, lerpf(lo.z, hi.z, float(i) / n)))
+	var taken: Array[Rect2] = [_spawn_rect()]
+	for o in _parked.keys():
+		if not is_instance_valid(o):
+			_parked.erase(o)
+		elif o != t:
+			taken.append(_parked[o])
+	var spots: Array[Vector2] = []  # about the spawn: across, along
+	for row in range(-8, 9):
+		for step in range(1, 11):
 			for side in [1.0, -1.0]:
-				var p := _spawn() + turn * Vector3(side * 4.5 * step, 0.0, row)
-				p.y = terrain.get_height(p.x, p.z)
-				var middle := p + turn * ((lo + hi) * 0.5)
-				var heights := PackedFloat32Array()
-				for c in [Vector3(lo.x, 0.0, lo.z), Vector3(hi.x, 0.0, lo.z), Vector3(lo.x, 0.0, hi.z), Vector3(hi.x, 0.0, hi.z)]:
-					var corner: Vector3 = p + turn * c
-					heights.append(terrain.get_height(corner.x, corner.z))
-				var level := heights[heights.size() - 1]
-				var spread := 0.0
-				for h in heights:
-					spread = maxf(spread, absf(h - level))
-				if spread > 0.6 or middle.distance_to(_spawn()) < 6.0:
-					continue
-				var free := true
-				for c in [Vector3(lo.x, 0.0, lo.z), Vector3(hi.x, 0.0, lo.z), Vector3(lo.x, 0.0, hi.z), Vector3(hi.x, 0.0, hi.z), (lo + hi) * 0.5]:
-					var at: Vector3 = p + turn * c
-					free = free and terrain.road_distance(Vector2(at.x, at.z)) > Terrain.ROAD_HALF_WIDTH + 0.5
-				for taken in _parked:
-					free = free and middle.distance_to(taken) > 6.0
-				var q := PhysicsShapeQueryParameters3D.new()
-				q.shape = box
-				q.transform = Transform3D(turn, middle + Vector3(0.0, 0.3, 0.0))
-				q.exclude = [moving.get_rid()] if moving else []
-				for hit in space.intersect_shape(q, 8):
-					free = free and hit.collider.get_parent() == terrain
-				if free:
-					_parked.append(middle)
-					return p
-	return _spawn() + turn * Vector3(9.0, 0.0, 0.0)
+				spots.append(Vector2(side * 4.5 * step, row * 3.0))
+	spots.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.length_squared() < b.length_squared())
+	var space := get_world_3d().direct_space_state
+	# Level and off the roads; fairly level and off them; anywhere clear.
+	for limits in [Vector2(0.6, Terrain.ROAD_HALF_WIDTH + 0.5), Vector2(1.2, Terrain.ROAD_HALF_WIDTH), Vector2(INF, -INF)]:
+		for s in spots:
+			var rect := Rect2(s.x + lo.x - 0.5, s.y + lo.z - 0.5, hi.x - lo.x + 1.0, hi.z - lo.z + 1.0)
+			if taken.any(func(r: Rect2) -> bool: return r.intersects(rect)):
+				continue
+			var p := _spawn() + turn * Vector3(s.x, 0.0, s.y)
+			p.y = terrain.get_height(p.x, p.z)
+			var low := INF
+			var high := -INF
+			var off_road := INF
+			for f in feet:
+				var at: Vector3 = p + turn * f
+				var h := terrain.get_height(at.x, at.z)
+				low = minf(low, h)
+				high = maxf(high, h)
+				off_road = minf(off_road, terrain.road_distance(Vector2(at.x, at.z)))
+			if high - low > limits.x or off_road <= limits.y:
+				continue
+			var q := PhysicsShapeQueryParameters3D.new()
+			q.shape = box
+			q.transform = Transform3D(turn, p + turn * ((lo + hi) * 0.5) + Vector3(0.0, 0.3, 0.0))
+			q.exclude = [t.get_rid(), terrain.body.get_rid()]
+			if space.intersect_shape(q, 1).is_empty():
+				_parked[t] = rect
+				return p
+	# Nowhere clear of buildings and trees for 30 m about: the first spot no truck or trailer has.
+	for s in spots:
+		var rect := Rect2(s.x + lo.x - 0.5, s.y + lo.z - 0.5, hi.x - lo.x + 1.0, hi.z - lo.z + 1.0)
+		if not taken.any(func(r: Rect2) -> bool: return r.intersects(rect)):
+			_parked[t] = rect
+			var p := _spawn() + turn * Vector3(s.x, 0.0, s.y)
+			return Vector3(p.x, terrain.get_height(p.x, p.z), p.z)
+	return _spawn()
+
+
+## Where the trucks stand at the spawn, about it (across, along): the largest of them, and 1 m about.
+func _spawn_rect() -> Rect2:
+	var lo := Vector2(-1.0, -1.0)
+	var hi := Vector2(1.0, 1.0)
+	for spec in TruckSpec.all():
+		for b in spec.shapes:
+			lo = lo.min(Vector2(b.pos.x - b.size.x * 0.5, b.pos.z - b.size.z * 0.5))
+			hi = hi.max(Vector2(b.pos.x + b.size.x * 0.5, b.pos.z + b.size.z * 0.5))
+		for w in spec.wheels:
+			lo = lo.min(Vector2(w.mount.x - w.width, w.mount.z - w.radius))
+			hi = hi.max(Vector2(w.mount.x + w.width, w.mount.z + w.radius))
+	return Rect2(lo - Vector2.ONE, hi - lo + Vector2.ONE * 2.0)
 
 
 ## Store-page capture (scripts/capture/director.gd): --capture=trailer --out=<dir>.

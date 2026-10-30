@@ -2,7 +2,10 @@ extends RefCounted
 ## The garage at the depot (Tab on the board): the pickup and what it sells, cheapest first;
 ## bought from the wallet, a trailer waits at the depot and a truck is driven from there; the board
 ## tags a job with the rig it needs, and a trailer's load waits in the trailer until it is brought;
-## the rigs bought and the truck picked are saved (docs/trucks.md).
+## the rigs bought and the truck picked are saved; the trailers park by the depot upright, off the
+## roads and clear of each other, the buildings and the spawn, in every valley (docs/trucks.md).
+
+const SCENE := preload("res://scenes/main.tscn")
 
 
 func test_the_garage_sells_cheapest_first(t: TCase) -> void:
@@ -88,20 +91,13 @@ func test_trailers_park_off_the_roads_and_off_the_spawn(t: TCase) -> void:
 	c.call("_end_job")
 	c.money = 9000
 	c.garage_pick(1)  # the trailer
+	await t.ticks(5)
 	c.garage_pick(2)  # the tractor and its farm trailer: driven
 	await t.ticks(5)
 	c.garage_pick(4)  # the semi truck and its semi-trailer: driven
-	await t.ticks(5)
+	await t.ticks(60)
 	t.eq(c.trailers.size(), 3, "trailers at the depot")
-	var terrain: Terrain = t.world.terrain
-	for tr in c.trailers:
-		var on_road := 0
-		for x in [-1.0, 0.0, 1.0]:
-			for z in range(-6, 7, 2):
-				var p: Vector3 = tr.global_transform * Vector3(x, 0.0, float(z) * 0.5)
-				if terrain.road_distance(Vector2(p.x, p.z)) < Terrain.ROAD_HALF_WIDTH:
-					on_road += 1
-		t.eq(on_road, 0, "points of the %s on a road" % tr.spec.id)
+	_parked_well(t, t.world, "khutir")
 	# The semi-trailer left over the spawn: driving another truck from the garage moves it off.
 	var semi_trailer := c._trailer("semi_trailer")
 	semi_trailer.stand_on(Vector2(c.spawn_pos.x, c.spawn_pos.z), t.world.valley.spawn_yaw)
@@ -111,7 +107,26 @@ func test_trailers_park_off_the_roads_and_off_the_spawn(t: TCase) -> void:
 	var v: Vehicle = t.world.vehicle
 	t.ok(v.spec.id == "pickup" and v.global_transform.basis.y.y > 0.95, "the pickup is not upright on the spawn")
 	t.ok(Vector2(semi_trailer.global_position.x, semi_trailer.global_position.z).distance_to(Vector2(c.spawn_pos.x, c.spawn_pos.z)) > 6.0, "the semi-trailer still stands on the spawn")
+	_parked_well(t, t.world, "khutir, the spawn cleared")
 	_sell_back(t)
+
+
+func test_trailers_park_well_in_every_valley(t: TCase) -> void:
+	for valley in Valley.all():
+		var profile := Profile.new()
+		profile.rigs = PackedStringArray(["trailer", "tractor", "farm", "six", "semi", "semi_trailer"])
+		var vp := SubViewport.new()
+		vp.own_world_3d = true
+		vp.size = Vector2i(480, 270)
+		var world = SCENE.instantiate()
+		world.valley = valley
+		world.profile = profile
+		vp.add_child(world)
+		t.tree.root.add_child(vp)
+		await t.ticks(90)
+		t.eq(world.contracts.trailers.size(), 3, "%s: trailers at the depot" % valley.id)
+		_parked_well(t, world, valley.id)
+		vp.free()
 
 
 func test_a_job_goes_only_where_its_rig_gets_to(t: TCase) -> void:
@@ -150,6 +165,39 @@ func test_the_rigs_are_saved(t: TCase) -> void:
 	t.eq(r.rigs, PackedStringArray(), "rigs as a string")
 	t.eq(r.truck, "pickup", "a truck not bought")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## Every trailer in world parked well: upright, off the roads all along it, clear of buildings,
+## trees and the other trailers, and off the spot where a truck is set down.
+func _parked_well(t: TCase, world: Node, label: String) -> void:
+	var c: Contracts = world.contracts
+	var terrain: Terrain = world.terrain
+	var turn := Basis(Vector3.UP, c.spawn_yaw)
+	var spawn := PackedVector2Array()
+	for k in [Vector3(-2.5, 0.0, -6.0), Vector3(2.5, 0.0, -6.0), Vector3(2.5, 0.0, 6.0), Vector3(-2.5, 0.0, 6.0)]:
+		var p: Vector3 = c.spawn_pos + turn * k
+		spawn.append(Vector2(p.x, p.z))
+	var feet: Array[PackedVector2Array] = []
+	for tr in c.trailers:
+		var box := tr.spec.extent()
+		var corners := PackedVector2Array()
+		var on_road := 0
+		for i in 13:
+			for j in 3:
+				var p := tr.global_transform * (box.position + Vector3(box.size.x * j * 0.5, 0.0, box.size.z * i / 12.0))
+				if terrain.road_distance(Vector2(p.x, p.z)) < Terrain.ROAD_HALF_WIDTH:
+					on_road += 1
+				if (i == 0 or i == 12) and j != 1:
+					corners.append(Vector2(p.x, p.z))
+		corners = PackedVector2Array([corners[0], corners[1], corners[3], corners[2]])
+		feet.append(corners)
+		t.eq(on_road, 0, "%s: points of the %s on a road" % [label, tr.spec.id])
+		t.ok(tr.global_transform.basis.y.y > 0.95, "%s: the %s tipped (up %.2f)" % [label, tr.spec.id, tr.global_transform.basis.y.y])
+		t.ok(tr.fits(tr.global_transform), "%s: the %s stands in a building, a tree or another trailer" % [label, tr.spec.id])
+		t.ok(Geometry2D.intersect_polygons(corners, spawn).is_empty(), "%s: the %s stands where a truck is set down" % [label, tr.spec.id])
+	for i in feet.size():
+		for j in range(i + 1, feet.size()):
+			t.ok(Geometry2D.intersect_polygons(feet[i], feet[j]).is_empty(), "%s: the %s and the %s overlap" % [label, c.trailers[i].spec.id, c.trailers[j].spec.id])
 
 
 ## Undoes what the garage sold in the shared world: the pickup, no trailers, no rigs.

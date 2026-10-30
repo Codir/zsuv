@@ -135,6 +135,9 @@ func behind(hitch: Transform3D) -> Transform3D:
 ## Whether it would stand at xf without running into anything but the ground and the truck.
 func fits(xf: Transform3D, truck_too: Node = null) -> bool:
 	var space := get_world_3d().direct_space_state
+	var skip := _not_ground()
+	if truck_too is CollisionObject3D:
+		skip.append(truck_too.get_rid())
 	for c in get_children():
 		var cs := c as CollisionShape3D
 		if cs == null:
@@ -142,11 +145,18 @@ func fits(xf: Transform3D, truck_too: Node = null) -> bool:
 		var q := PhysicsShapeQueryParameters3D.new()
 		q.shape = cs.shape
 		q.transform = xf * cs.transform
-		q.exclude = [get_rid(), truck_too.get_rid()] if truck_too is CollisionObject3D else [get_rid()]
-		for hit in space.intersect_shape(q, 8):
-			if not (hit.collider is StaticBody3D and hit.collider.get_parent() is Terrain):
-				return false
+		q.exclude = skip
+		if not space.intersect_shape(q, 1).is_empty():
+			return false
 	return true
+
+
+## What a query for what it meets leaves out: itself, and the ground (met all over).
+func _not_ground() -> Array[RID]:
+	var out: Array[RID] = [get_rid()]
+	if terrain and terrain.body:
+		out.append(terrain.body.get_rid())
+	return out
 
 
 ## Moves it to xf at the next physics step, moving at velocity, not turning (a teleport, as
@@ -355,7 +365,7 @@ func _touching(body: PhysicsBody3D) -> bool:
 		var q := PhysicsShapeQueryParameters3D.new()
 		q.shape = cs.shape
 		q.transform = cs.global_transform
-		q.exclude = [get_rid()]
+		q.exclude = _not_ground()
 		for hit in space.intersect_shape(q, 16):
 			if hit.rid == body.get_rid():
 				return true
