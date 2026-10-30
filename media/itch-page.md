@@ -31,7 +31,10 @@ across a frozen lake, and a Carpathian pass at night in a blizzard.
 - **Five valleys**, each with its own ground, places and sky, and the sky yours to switch: sun,
   overcast, snow or rain, night.
 - **A job board at the depot:** race the clock for gold, nurse a fragile load over the bumps,
-  haul concrete rings that sit the truck low, or winch a stranger's car out of a ditch.
+  or winch a stranger's car out of a ditch.
+- **A garage of rigs:** a trailer for the pickup, a heavy army 6x6 for the concrete rings, a farm
+  tractor and its tipper trailer for grain through the bog, a semi truck with a 12 m flatbed for
+  logs and pipes. Back up to a trailer and hitch it yourself.
 - **Deep snow and mud** fight every wheel, and pack down into ruts that stay where you left them.
 - **Drive like it matters:** all-wheel drive, a differential lock and low range, each with its
   moment.
@@ -44,7 +47,8 @@ across a frozen lake, and a Carpathian pass at night in a blizzard.
 ### Controls
 
 W/S throttle/brake · A/D steer · Space handbrake · Q 4x4 · X diff lock · G low range ·
-H headlights · E job board/unload/refuel · 1-3 take a job · F winch (hold Shift to reel in) ·
+H headlights · E job board/unload/refuel · 1-5 take a job · Tab garage · C hitch ·
+F winch (hold Shift to reel in) ·
 M map · T tow · R flip upright · right mouse to orbit the camera, wheel to zoom · F1 help ·
 Esc the valleys
 

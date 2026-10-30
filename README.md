@@ -7,7 +7,9 @@ PSX-style off-road delivery game: haul groceries to a lone *khutir* (a Ukrainian
 snowbound valley at dusk, then buy your way on to a sunny autumn steppe, Zakarpattia's spring
 vineyards, a foggy Polissia thaw with a road across a frozen lake, and a Carpathian pass at night
 in a blizzard, through snow and mud that pack down into ruts under your wheels. Take jobs from the
-board at the depot: against the clock, fragile, heavy, or a car to winch out of a ditch.
+board at the depot: against the clock, fragile, heavy, or a car to winch out of a ditch; buy a
+trailer, a heavy 6x6, a tractor with its trailer or a semi truck in the depot's garage and hitch
+up for the loads they carry (`docs/trucks.md`).
 
 Godot 4.7.2 (GL Compatibility, Jolt Physics), everything procedural; runs on Windows, Linux,
 macOS and in the browser.
