@@ -8,6 +8,14 @@ extends Chassis
 const AUTODRIVE_LOOK := 10.0
 const BODY_COLOR := Color(0.9, 0.62, 0.16)
 const GLASS := Color(0.13, 0.17, 0.24)
+const HITCH_REACH := 1.0  # m from the hitch to a trailer's coupler for C to couple them
+const HITCH_SLOW := 1.5  # m/s: C hitches and unhitches only this slow
+# The hitch's joint: its X up (the trailer swings behind), its Y back along the truck (roll),
+# its Z across (pitch); a joint's X turns furthest.
+const HITCH_AXES := Basis(Vector3.UP, Vector3.BACK, Vector3.RIGHT)
+const HITCH_YAW := 85.0 * PI / 180.0
+const HITCH_PITCH := 30.0 * PI / 180.0
+const HITCH_ROLL := 10.0 * PI / 180.0
 
 
 var spec: TruckSpec  # set before the truck enters the tree; the pickup if not
@@ -38,6 +46,7 @@ var teleports := 0  # how many times teleport() has moved the truck: no jolt, a 
 var _reset_transform := Transform3D()
 var _loads := {}  # look -> its node on the bed: crates, fragile, heavy
 var _lights: Array[SpotLight3D] = []
+var _joint := RID()  # the hitch's, while a trailer is hitched
 
 
 func _ready() -> void:
@@ -84,10 +93,14 @@ func set_lights(on: bool) -> void:
 		l.visible = on
 
 
+## Moves the truck to pos facing yaw at the next physics step, standing still; a hitched trailer
+## goes with it, straight behind and still hitched.
 func teleport(pos: Vector3, yaw: float) -> void:
 	winch.detach()
 	_reset_transform = Transform3D(Basis(Vector3.UP, yaw), pos)
 	_reset_requested = true
+	if trailer:
+		trailer.place(trailer.behind(Transform3D(_reset_transform.basis, _reset_transform * spec.hitch)))
 
 
 func reset_upright() -> void:
@@ -95,6 +108,109 @@ func reset_upright() -> void:
 	if terrain:
 		p.y = terrain.get_height(p.x, p.z) + 2.0
 	teleport(p, global_rotation.y)
+
+
+## Where its hitch is now.
+func hitch_point() -> Vector3:
+	return global_transform * spec.hitch
+
+
+## The trailer whose coupler is within reach of the hitch, of a kind this truck tows: the nearest,
+## or null (none, or one is hitched already).
+func hitch_candidate() -> Trailer:
+	if trailer or spec.hitch_kind == "":
+		return null
+	var at := hitch_point()
+	var best: Trailer = null
+	var best_d := HITCH_REACH
+	for n in get_tree().get_nodes_in_group(Trailer.GROUP):
+		var t := n as Trailer
+		if t.truck or t.spec.hitch_kind != spec.hitch_kind or not spec.tows.has(t.spec.id) or t.get_world_3d() != get_world_3d():
+			continue
+		var d := at.distance_to(t.coupler_point())
+		if d < best_d:
+			best = t
+			best_d = d
+	return best
+
+
+## C: hitches the trailer in reach, or unhitches the one hitched; only when slow.
+func toggle_hitch() -> void:
+	if absf(forward_speed) >= HITCH_SLOW:
+		return
+	if trailer:
+		unhitch()
+	else:
+		var t := hitch_candidate()
+		if t:
+			hitch(t)
+
+
+## Couples t: the trailer swung onto the hitch first, then a joint there, free to turn up to
+## HITCH_YAW either way and to pitch HITCH_PITCH, held within HITCH_ROLL; the two pass through each
+## other, and their wheels' rays too.
+func hitch(t: Trailer) -> void:
+	unhitch()
+	t.meet(hitch_point(), global_transform.basis, point_velocity(hitch_point()))
+	_joint = PhysicsServer3D.joint_create()
+	# The joint's pitch and roll are about its first body's axes: a fifth wheel's plate tilts across
+	# the truck, a drawbar pitches and rolls with its trailer however far round it has swung.
+	var on_truck := Transform3D(HITCH_AXES, spec.hitch)
+	var on_trailer := Transform3D(HITCH_AXES, t.spec.coupler)
+	if spec.hitch_kind == "fifth":
+		PhysicsServer3D.joint_make_generic_6dof(_joint, get_rid(), on_truck, t.get_rid(), on_trailer)
+	else:
+		PhysicsServer3D.joint_make_generic_6dof(_joint, t.get_rid(), on_trailer, get_rid(), on_truck)
+	var turn := {Vector3.AXIS_X: HITCH_YAW, Vector3.AXIS_Y: HITCH_ROLL, Vector3.AXIS_Z: HITCH_PITCH}
+	for axis: int in turn:
+		PhysicsServer3D.generic_6dof_joint_set_flag(_joint, axis, PhysicsServer3D.G6DOF_JOINT_FLAG_ENABLE_LINEAR_LIMIT, true)
+		PhysicsServer3D.generic_6dof_joint_set_param(_joint, axis, PhysicsServer3D.G6DOF_JOINT_LINEAR_LOWER_LIMIT, 0.0)
+		PhysicsServer3D.generic_6dof_joint_set_param(_joint, axis, PhysicsServer3D.G6DOF_JOINT_LINEAR_UPPER_LIMIT, 0.0)
+		PhysicsServer3D.generic_6dof_joint_set_flag(_joint, axis, PhysicsServer3D.G6DOF_JOINT_FLAG_ENABLE_ANGULAR_LIMIT, true)
+		PhysicsServer3D.generic_6dof_joint_set_param(_joint, axis, PhysicsServer3D.G6DOF_JOINT_ANGULAR_LOWER_LIMIT, -float(turn[axis]))
+		PhysicsServer3D.generic_6dof_joint_set_param(_joint, axis, PhysicsServer3D.G6DOF_JOINT_ANGULAR_UPPER_LIMIT, float(turn[axis]))
+	# Not the joint's own "no collisions between its bodies": with Jolt that leaves the two
+	# passing through each other for good once the joint is gone. Trailer.couple sees to it.
+	trailer = t
+	t.couple(self)
+
+
+## Lets the trailer go: it stands on its stand where it is.
+func unhitch() -> void:
+	if trailer == null:
+		return
+	PhysicsServer3D.free_rid(_joint)
+	_joint = RID()
+	var t := trailer
+	trailer = null
+	t.uncouple()
+
+
+## What C does here, for the HUD's bottom line ("" nothing).
+func hitch_prompt() -> String:
+	if absf(forward_speed) >= HITCH_SLOW:
+		return ""
+	if trailer:
+		return "[C] Unhitch"
+	var t := hitch_candidate()
+	return "[C] Hitch the %s" % t.spec.title.to_lower() if t else ""
+
+
+## The HUD's bottom line: what the jobs ask (or else what the winch offers), and beside it what
+## the hitch does; a trailer waits at the depot beside the job board.
+func prompt_with(jobs: String) -> String:
+	var first := jobs if jobs != "" else winch.prompt()
+	var c := hitch_prompt()
+	return first + ("   " if first != "" and c != "" else "") + c
+
+
+## What a wheel's ray must not hit: the truck and the trailer hitched to it.
+func _ray_exclude() -> Array[RID]:
+	return [get_rid(), trailer.get_rid()] if trailer else [get_rid()]
+
+
+func _exit_tree() -> void:
+	unhitch()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -108,6 +224,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		set_lights(not _lights[0].visible)
 	elif event.is_action_pressed("winch"):
 		winch.toggle()
+	elif event.is_action_pressed("hitch"):
+		toggle_hitch()
 	elif event.is_action_pressed("reset"):
 		reset_upright()
 
