@@ -398,7 +398,8 @@ func _hold(i: int, p: Vector3, n: Vector3, load_n: float, grip: float) -> void:
 	apply_force(f, p - global_position)
 
 
-## Whether any of its boxes overlaps body.
+## Whether body is in any of its boxes, or under one as far down as its stand reaches (a truck
+## it was let go from, still under a semi-trailer's deck as the deck comes down).
 func _touching(body: PhysicsBody3D) -> bool:
 	if not is_instance_valid(body):
 		return false
@@ -410,6 +411,13 @@ func _touching(body: PhysicsBody3D) -> bool:
 		var q := PhysicsShapeQueryParameters3D.new()
 		q.shape = cs.shape
 		q.transform = cs.global_transform
+		var box := cs.shape as BoxShape3D
+		if box:
+			var reach := maxf(cs.position.y - box.size.y * 0.5 - spec.stand.y, 0.0)
+			var down := BoxShape3D.new()
+			down.size = box.size + Vector3(0.0, reach, 0.0)
+			q.shape = down
+			q.transform = cs.global_transform.translated_local(Vector3(0.0, -reach * 0.5, 0.0))
 		q.exclude = _not_ground()
 		for hit in space.intersect_shape(q, 16):
 			if hit.rid == body.get_rid():

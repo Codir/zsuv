@@ -112,6 +112,35 @@ func test_trailers_park_off_the_roads_and_off_the_spawn(t: TCase) -> void:
 	_sell_back(t)
 
 
+func test_the_tow_leaves_a_trailer_on_its_spot(t: TCase) -> void:
+	# A trailer hitched where it is parked and towed back at once stays on its spot: the truck it
+	# is hitched to, about to be towed off, is not in the way.
+	var c: Contracts = t.world.contracts
+	var v: Vehicle = t.world.vehicle
+	c.call("_end_job")
+	c.money = 1000
+	c.garage_pick(1)  # the trailer
+	await t.ticks(60)
+	var tr := c._trailer("trailer")
+	var spot := tr.global_position
+	var b := tr.global_transform.basis
+	var yaw := atan2(b.z.x, b.z.z)
+	var at := tr.coupler_point() - Basis(Vector3.UP, yaw) * v.spec.hitch - Vector3(b.z.x, 0.0, b.z.z).normalized() * 0.3
+	await t.place(Vector2(at.x, at.z), yaw, 60)
+	v.hitch(tr)
+	await t.ticks(30)
+	t.ok(v.trailer == tr, "the trailer is not hitched")
+	var money := c.money
+	c.recover()
+	c.money = money
+	await t.ticks(120)
+	var turned := rad_to_deg(b.z.angle_to(tr.global_transform.basis.z))
+	t.note = "%.1f m from its spot, turned %.0f deg" % [tr.global_position.distance_to(spot), turned]
+	t.ok(v.trailer == null and tr.global_position.distance_to(spot) < 1.0, "the tow moved the trailer %.1f m off its spot" % tr.global_position.distance_to(spot))
+	t.ok(turned < 10.0, "the tow turned the trailer %.0f deg on its spot" % turned)
+	_sell_back(t)
+
+
 func test_trailers_park_well_in_every_valley(t: TCase) -> void:
 	for valley in Valley.all():
 		var profile := Profile.new()

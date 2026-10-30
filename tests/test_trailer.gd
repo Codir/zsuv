@@ -405,6 +405,46 @@ func _meets(v: Vehicle, q: PhysicsShapeQueryParameters3D, body: CollisionObject3
 	return v.get_world_3d().direct_space_state.intersect_shape(q, 16).any(func(hit: Dictionary) -> bool: return hit.rid == body.get_rid())
 
 
+func test_c_lets_the_semi_trailer_down_on_its_legs_in_a_dip(t: TCase) -> void:
+	# Where the road dips at (77, 68) in the khutir valley, the semi rig set down along it either way,
+	# loaded: C leaves the semi-trailer on its legs, and the semi drives out from under it.
+	t.world.set_truck(TruckSpec.semi())
+	await t.ticks(5)
+	var v: Vehicle = t.world.vehicle
+	var at := Vector2(77.0, 68.0)
+	var along := Vector2.ZERO
+	var nearest := INF
+	for road: PackedVector2Array in t.world.roads:
+		for i in road.size() - 1:
+			var p := Geometry2D.get_closest_point_to_segment(at, road[i], road[i + 1])
+			if p.distance_to(at) < nearest:
+				nearest = p.distance_to(at)
+				along = (road[i + 1] - road[i]).normalized()
+	var notes := PackedStringArray()
+	for way in [1.0, -1.0]:
+		var yaw := atan2(-along.x * way, -along.y * way)  # facing along the road
+		await t.place(at, yaw, 30)
+		var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), yaw, "long")
+		await t.ticks(20)
+		v.hitch(tr)
+		await t.ticks(90)
+		v.toggle_hitch()
+		var from := v.global_position
+		Input.action_press("accelerate", 1.0)
+		await t.ticks(300)
+		Input.action_release("accelerate")
+		await t.ticks(60)
+		var went := v.global_position.distance_to(from)
+		notes.append("%.0f m" % went)
+		t.ok(v.trailer == null, "C did not unhitch it")
+		t.ok(went > 5.0, "the semi went %.1f m in 5 s out from under its semi-trailer" % went)
+		t.ok(tr.stand_contact and tr.global_transform.basis.y.y > 0.95, "the semi-trailer is not on its legs")
+		_free(t, [tr])
+	t.note = "the semi drove %s out from under it" % " and ".join(notes)
+	t.world.set_truck(TruckSpec.pickup())
+	await t.ticks(5)
+
+
 ## A box of size standing at xf, in the world.
 func _wall(t: TCase, size: Vector3, xf: Transform3D) -> StaticBody3D:
 	var wall := StaticBody3D.new()
@@ -431,10 +471,10 @@ func _hitched(t: TCase) -> Trailer:
 	return tr
 
 
-## A trailer standing with its coupler at (over) at, facing yaw.
-func _behind(t: TCase, spec: TrailerSpec, at: Vector3, yaw: float) -> Trailer:
+## A trailer standing with its coupler at (over) at, facing yaw, with a load of kind.
+func _behind(t: TCase, spec: TrailerSpec, at: Vector3, yaw: float, kind := "") -> Trailer:
 	var o := at - Basis(Vector3.UP, yaw) * spec.coupler
-	return _trailer(t, spec, Vector2(o.x, o.z), yaw)
+	return _trailer(t, spec, Vector2(o.x, o.z), yaw, kind)
 
 
 func _trailer(t: TCase, spec: TrailerSpec, at: Vector2, yaw: float, kind := "") -> Trailer:
