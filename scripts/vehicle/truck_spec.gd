@@ -8,6 +8,7 @@ extends RefCounted
 var id := ""
 var title := ""
 var price := 0  # in the garage; 0: owned from the start
+var comes_with := ""  # the TrailerSpec bought with it ("" none)
 
 # Body.
 var mass := 2000.0  # empty
@@ -35,13 +36,15 @@ var steer_speed := 2.2
 var fuel_capacity := 80.0  # L
 var burn := 1.0  # times the pickup's fuel at the same throttle
 
-# Loads: what each kind of load weighs on it (a kind it does not list, it does not carry).
+# Loads: what each kind of load weighs on its own bed (a kind it does not list, it does not
+# carry); a trailer's loads are the trailer's (TrailerSpec.cargo_mass).
 var cargo_mass := {}
+var tows: Array[String] = []  # the TrailerSpecs it can hitch
 
 # Gear.
 var winch_mount := Vector3(0.0, 0.25, -2.4)
 var hitch := Vector3.ZERO  # where a trailer couples, in the body's frame
-var hitch_kind := ""  # "": none; "ball" a towbar; "fifth" a fifth wheel for a semi-trailer
+var hitch_kind := ""  # "": none; "ball" a towbar; "pin" a tractor's drawbar pin; "fifth" a fifth wheel
 var lights: Array[Vector3] = []  # headlights, in the body's frame
 
 # Camera and sound.
@@ -51,7 +54,7 @@ var engine_pitch := 1.0  # the recordings' pitch at the same revs
 
 
 static func all() -> Array[TruckSpec]:
-	return [pickup()]
+	return [pickup(), six(), tractor(), semi()]
 
 
 static func find(spec_id: String) -> TruckSpec:
@@ -80,7 +83,47 @@ static func pickup() -> TruckSpec:
 	s.cargo_mass = {"plain": 900.0, "timed": 900.0, "fragile": 900.0, "heavy": 1800.0}
 	s.hitch = Vector3(0.0, 0.0, 2.35)
 	s.hitch_kind = "ball"
+	s.tows = ["trailer"]
 	s.lights = [Vector3(-0.6, 0.45, -2.3), Vector3(0.6, 0.45, -2.3)]
+	return s
+
+
+## The heavy 6x6: three axles, the rear two driven in 2WD, all six in 6x6; the heavy load is
+## its alone. (To be built: its look, its numbers.)
+static func six() -> TruckSpec:
+	var s := pickup()
+	s.id = "six"
+	s.title = "Heavy 6x6"
+	s.price = 3500
+	s.cargo_mass = {"plain": 900.0, "timed": 900.0, "fragile": 900.0, "heavy": 3500.0}
+	return s
+
+
+## The farm tractor and its trailer: big rear wheels, slow, through bog and deep snow; it
+## carries only in its trailer. (To be built: its look, its numbers.)
+static func tractor() -> TruckSpec:
+	var s := pickup()
+	s.id = "tractor"
+	s.title = "Tractor"
+	s.price = 2500
+	s.comes_with = "farm"
+	s.cargo_mass = {}
+	s.hitch_kind = "pin"
+	s.tows = ["farm"]
+	return s
+
+
+## The semi truck and its semi-trailer: fast on a road, wide in a turn; it carries only on its
+## semi-trailer. (To be built: its look, its numbers.)
+static func semi() -> TruckSpec:
+	var s := pickup()
+	s.id = "semi"
+	s.title = "Semi truck"
+	s.price = 5000
+	s.comes_with = "semi_trailer"
+	s.cargo_mass = {}
+	s.hitch_kind = "fifth"
+	s.tows = ["semi_trailer"]
 	return s
 
 

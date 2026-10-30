@@ -31,6 +31,8 @@ var handbrake := false
 
 var winch: Winch
 var audio: TruckAudio
+var trailer: Trailer  # hitched to it; null: none
+var braking := 0.0  # how hard its brakes hold this tick, 0..1 (a hitched trailer's follow)
 var _reset_requested := false
 var teleports := 0  # how many times teleport() has moved the truck: no jolt, a jump
 var _reset_transform := Transform3D()
@@ -169,6 +171,7 @@ func _physics_process(delta: float) -> void:
 			a.allowed = m
 			b.allowed = m
 
+	braking = brake
 	for w in wheels:
 		_apply_tire(w, brake, delta)
 
