@@ -83,11 +83,11 @@ static func khutir() -> Valley:
 	v.locations = {
 		"depot": {"name": "Depot", "pos": Vector2(-95, -95), "radius": 14.0, "kind": "depot", "out": Vector2(35, -7)},
 		"farm": {"name": "Khutir", "pos": Vector2(-72, 92), "radius": 10.0, "kind": "khutir",
-			"cargo": "groceries", "reward": 250},
+			"cargo": "groceries", "reward": 250, "no": ["long"]},
 		"lumber": {"name": "Sawmill", "pos": Vector2(75, 88), "radius": 10.0, "kind": "sawmill",
-			"cargo": "spare parts", "reward": 300},
+			"cargo": "spare parts", "reward": 300, "no": ["long", "bulk"]},
 		"tower": {"name": "Radio Tower", "pos": Vector2(25, 35), "radius": 8.0, "kind": "radio_tower",
-			"cargo": "drone batteries", "reward": 500, "offroad": true},
+			"cargo": "drone batteries", "reward": 500, "offroad": true, "no": ["long", "bulk"]},
 	}
 	v.roads = [
 		PackedVector2Array([Vector2(-95, -95), Vector2(-60, -102), Vector2(-25, -85), Vector2(8, -96), Vector2(45, -80),
@@ -132,11 +132,11 @@ static func steppe() -> Valley:
 		"elevator": {"name": "Elevator", "pos": Vector2(72, -78), "radius": 12.0, "kind": "elevator",
 			"cargo": "conveyor belts", "reward": 300},
 		"sheepfold": {"name": "Sheepfold", "pos": Vector2(-42, 60), "radius": 10.0, "kind": "sheepfold",
-			"cargo": "sheep feed", "reward": 250},
+			"cargo": "sheep feed", "reward": 250, "no": ["long"]},
 		"wind": {"name": "Wind Farm", "pos": Vector2(60, 55), "radius": 10.0, "kind": "wind_farm",
 			"cargo": "turbine parts", "reward": 350},
 		"kurgan": {"name": "Kurgan Dig", "pos": Vector2(-72, 92), "radius": 10.0, "kind": "kurgan_dig",
-			"cargo": "the archaeologists' tents", "reward": 350},
+			"cargo": "the archaeologists' tents", "reward": 350, "no": ["long"]},
 	}
 	v.roads = [
 		PackedVector2Array([Vector2(-90, -85), Vector2(-40, -92), Vector2(20, -88), Vector2(72, -78)]),
@@ -190,7 +190,7 @@ static func zakarpattia() -> Valley:
 		"winery": {"name": "Winery", "pos": Vector2(10, 38), "radius": 10.0, "kind": "winery",
 			"cargo": "empty barrels", "reward": 300},
 		"castle": {"name": "Castle", "pos": Vector2(76, 70), "radius": 10.0, "kind": "castle",
-			"cargo": "festival stage lights", "reward": 400},
+			"cargo": "festival stage lights", "reward": 400, "no": ["long", "bulk"]},
 		"church": {"name": "Wooden Church", "pos": Vector2(-30, -72), "radius": 10.0, "kind": "wooden_church",
 			"cargo": "roof shingles", "reward": 350},
 		"spring": {"name": "Mineral Spring", "pos": Vector2(66, -34), "radius": 10.0, "kind": "pump_room",
@@ -248,11 +248,11 @@ static func polissia() -> Valley:
 		"peat": {"name": "Peat Works", "pos": Vector2(-40, 72), "radius": 10.0, "kind": "peat_works",
 			"cargo": "excavator parts", "reward": 350},
 		"village": {"name": "Village", "pos": Vector2(66, 82), "radius": 12.0, "kind": "village_church",
-			"cargo": "bread and post", "reward": 300},
+			"cargo": "bread and post", "reward": 300, "no": ["long", "bulk"]},
 		"apiary": {"name": "Apiary", "pos": Vector2(-8, 46), "radius": 9.0, "kind": "apiary",
 			"cargo": "empty frames", "reward": 300},
 		"forestry": {"name": "Forestry", "pos": Vector2(4, -78), "radius": 10.0, "kind": "forestry",
-			"cargo": "saplings", "reward": 300},
+			"cargo": "saplings", "reward": 300, "no": ["long", "bulk", "heavy"]},
 	}
 	v.roads = [
 		PackedVector2Array([Vector2(-85, -80), Vector2(-60, -40), Vector2(-34, -14), Vector2(15, -12), Vector2(46, -18), Vector2(62, -22)]),
@@ -305,15 +305,15 @@ static func carpathians() -> Valley:
 	v.locations = {
 		"depot": {"name": "Village", "pos": Vector2(-80, 90), "radius": 14.0, "kind": "yard"},
 		"koliba": {"name": "Koliba", "pos": Vector2(-62, -10), "radius": 10.0, "kind": "koliba",
-			"cargo": "salt and supplies", "reward": 350},
+			"cargo": "salt and supplies", "reward": 350, "no": ["long"]},
 		"weather": {"name": "Weather Station", "pos": Vector2(46, -64), "radius": 8.0, "kind": "weather_station",
-			"cargo": "instrument batteries", "reward": 500},
+			"cargo": "instrument batteries", "reward": 500, "no": ["long", "bulk"]},
 		"rescue": {"name": "Mountain Rescue", "pos": Vector2(70, 20), "radius": 10.0, "kind": "rescue_base",
 			"cargo": "ropes and stretchers", "reward": 400},
 		"logging": {"name": "Logging Camp", "pos": Vector2(-18, 22), "radius": 10.0, "kind": "sawmill",
-			"cargo": "chainsaw chains", "reward": 350},
+			"cargo": "chainsaw chains", "reward": 350, "no": ["long"]},
 		"village": {"name": "Mountain Village", "pos": Vector2(-12, -28), "radius": 10.0, "kind": "wooden_church",
-			"cargo": "flour and candles", "reward": 450},
+			"cargo": "flour and candles", "reward": 450, "no": ["long", "bulk"]},
 	}
 	v.roads = [
 		_bends(PackedVector2Array([Vector2(-80, 90), Vector2(-40, 86), Vector2(-8, 70), Vector2(22, 60), Vector2(50, 46), Vector2(70, 20)]), 10.0),

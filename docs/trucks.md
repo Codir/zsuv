@@ -37,6 +37,23 @@ The hitches meet: a towbar at 0.62-0.70 m and the trailer's ball at 0.64; the tr
 the farm trailer's eye at 0.72; the fifth wheel at 1.30 m and the kingpin, standing on its legs,
 at 1.33.
 
+## Where each rig gets to
+
+A job goes only where its rig gets to, loaded, from the depot (a place's `no` in
+`scripts/world/valley.gd`). Measured with a probe driving each rig from where the garage puts it,
+its trailer hitched and full, in low range with the differentials locked, along the roads to every
+place: the semi rig stops in deep snow, full mud and on the steepest climbs, and cannot follow the
+Carpathian hairpins; the tractor rig with 4 t of grain stops on the steepest climbs; the 6x6 with
+its rings only in the full mud below the Polissia forestry.
+
+| Valley | Long (semi) | Bulk (tractor) | Heavy (6x6) |
+|---|---|---|---|
+| Khutir | none | Khutir | all |
+| Steppe | elevator, wind farm | all | all |
+| Zakarpattia | winery, wooden church, spring | all but the castle | all |
+| Polissia | fish farm, peat works, apiary | all but the village and the forestry | all but the forestry |
+| Carpathians | mountain rescue | all but the weather station and the village | all |
+
 ## How it is built
 
 - `scripts/vehicle/truck_spec.gd`: a truck as data, as `Valley` is a valley: its wheels (mount,
