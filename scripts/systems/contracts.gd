@@ -107,7 +107,8 @@ func setup(v: Vehicle, t: Terrain, locations: Dictionary) -> void:
 
 
 ## Five new jobs on the board, each of its own kind (a stuck car among them where the valley has
-## ditches), at least two of them for the rig in play, the places in turn.
+## ditches), at least two of them for the rig in play, the places in turn; a kind goes only where
+## its rig gets to (a place's "no" lists the kinds it is not offered).
 func roll_offers() -> void:
 	var keys: Array = _places.keys()
 	var kinds: Array = KINDS.duplicate()
@@ -115,6 +116,7 @@ func roll_offers() -> void:
 		kinds.append("stuck")
 	_shuffle(keys)
 	_shuffle(kinds)
+	kinds = kinds.filter(func(k: String) -> bool: return k == "stuck" or keys.any(func(key: String) -> bool: return _accepts(key, k)))
 	var picked: Array = kinds.filter(func(k: String) -> bool: return need(k) == "").slice(0, DOABLE)
 	for k in kinds:
 		if picked.size() < OFFERS and not k in picked:
@@ -124,8 +126,17 @@ func roll_offers() -> void:
 	for i in picked.size():
 		if picked[i] == "stuck":
 			offers.append(offer_stuck(rng.randi() % terrain.valley.ditches.size()))
-		else:
-			offers.append(offer(keys[i % keys.size()], picked[i]))
+			continue
+		for j in keys.size():
+			var key: String = keys[(i + j) % keys.size()]
+			if _accepts(key, picked[i]):
+				offers.append(offer(key, picked[i]))
+				break
+
+
+## Whether a job of kind goes to the place key: not where its rig cannot get (docs/trucks.md).
+func _accepts(key: String, kind: String) -> bool:
+	return not kind in _places[key].get("no", [])
 
 
 ## A car stuck in the valley's ditch i, to winch out.

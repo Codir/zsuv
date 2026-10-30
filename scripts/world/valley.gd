@@ -24,7 +24,8 @@ var rim := 30.0  # how high the land climbs at the map's edge
 var features: Array[Dictionary] = []
 
 # Places: key -> {name, pos, radius, kind (what the world builder puts there), cargo, reward;
-# offroad: no road goes there; below: metres its flat is dug in under the ground there}.
+# offroad: no road goes there; below: metres its flat is dug in under the ground there; no: the
+# kinds of job not offered there, as the rig they need cannot get there (docs/trucks.md)}.
 var locations := {}
 var roads: Array[PackedVector2Array] = []
 var road_smooth := 0.0  # metres a road's profile is averaged over (0: it keeps to the ground)

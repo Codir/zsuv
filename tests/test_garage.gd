@@ -83,6 +83,23 @@ func test_a_truck_bought_is_driven_from_the_depot(t: TCase) -> void:
 	_sell_back(t)
 
 
+func test_a_job_goes_only_where_its_rig_gets_to(t: TCase) -> void:
+	var c: Contracts = t.world.contracts
+	var places: Dictionary = c._places
+	var farm: Dictionary = places.farm
+	farm["no"] = ["long", "bulk"]
+	var seen := 0
+	for i in 40:
+		c.roll_offers()
+		for o in c.offers:
+			if o.key == "farm":
+				seen += 1
+				t.ok(not o.kind in ["long", "bulk"], "a %s job to the khutir, where its rig cannot get" % o.kind)
+	t.ok(seen > 0, "no job to the khutir in 40 boards")
+	farm.erase("no")
+	c.roll_offers()
+
+
 func test_the_rigs_are_saved(t: TCase) -> void:
 	var path := "user://test_garage.cfg"
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
