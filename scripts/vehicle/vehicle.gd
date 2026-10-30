@@ -63,7 +63,10 @@ func _ready() -> void:
 	winch.mount = spec.winch_mount
 	add_child(winch)
 	for w in spec.wheels:
-		_add_wheel(w.mount, w.radius, w.width, w.steer, w.drive2)
+		var wheel := _add_wheel(w.mount, w.radius, w.width, w.steer, w.drive2, spec.rim_color)
+		wheel.sink = float(w.get("sink", 1.0))
+		wheel.bite = float(w.get("bite", 0.0))
+		_dress_wheel(wheel, str(w.get("look", "")), w.width)
 	axles = spec.axles
 	audio = TruckAudio.new()
 	audio.vehicle = self
@@ -99,7 +102,7 @@ func reset_upright() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_awd"):
-		awd = not awd
+		awd = not awd and spec.all_wheel
 	elif event.is_action_pressed("toggle_diff"):
 		diff_lock = not diff_lock
 	elif event.is_action_pressed("toggle_low"):
@@ -154,12 +157,13 @@ func _physics_process(delta: float) -> void:
 	_update_wheels(delta)
 
 	# Split the torque between the wheels.
+	var every := awd and spec.all_wheel
 	var driven := 0
 	for w in wheels:
-		if awd or w.drive2:
+		if every or w.drive2:
 			driven += 1
 	for w in wheels:
-		w.request = total_drive / driven if (awd or w.drive2) else 0.0
+		w.request = total_drive / driven if (every or w.drive2) else 0.0
 	for axle in axles:
 		var a: Wheel = wheels[axle.x]
 		var b: Wheel = wheels[axle.y]
@@ -298,6 +302,198 @@ func _build_pickup() -> void:
 	for k in _loads:
 		gfx.add_child(_loads[k])
 		_loads[k].visible = false
+
+
+## The 6x6's look (TruckSpec.body "six"): an olive army truck, a long bonnet between wide flat
+## fenders, the cab, a spare wheel behind it, a dropside bed and the loads on it. The ground is
+## about 0.7 m under its origin, the bed's floor 1.55 m over the ground.
+func _build_six() -> void:
+	var olive := Color(0.32, 0.36, 0.22)
+	var boards := Color(0.26, 0.29, 0.17)
+	var gfx := Node3D.new()
+	add_child(gfx)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.16, 0.26, 7.3), Vector3(0.5 * side, 0.2, 0.0), DARK)
+	# Bumper, bonnet, grille, the fenders with the headlights on them.
+	Psx.box(gfx, Vector3(2.3, 0.3, 0.22), Vector3(0.0, 0.15, -3.66), olive)
+	Psx.box(gfx, Vector3(1.15, 0.65, 1.65), Vector3(0.0, 0.975, -2.775), olive)
+	Psx.box(gfx, Vector3(1.05, 0.5, 0.04), Vector3(0.0, 0.95, -3.61), DARK)
+	for i in 5:
+		Psx.box(gfx, Vector3(0.06, 0.5, 0.05), Vector3(-0.4 + i * 0.2, 0.95, -3.62), olive)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.1, 0.1, 0.2), Vector3(0.6 * side, 0.15, -3.82), Color(0.7, 0.12, 0.08))
+		Psx.box(gfx, Vector3(0.62, 0.08, 2.1), Vector3(0.9 * side, 0.78, -2.35), olive)
+		Psx.box(gfx, Vector3(0.62, 0.42, 0.08), Vector3(0.9 * side, 0.6, -3.38), olive)
+		Psx.box(gfx, Vector3(0.3, 0.26, 0.16), Vector3(0.88 * side, 0.94, -3.28), DARK)
+		Psx.box(gfx, Vector3(0.24, 0.2, 0.04), Vector3(0.88 * side, 0.94, -3.37), Color(1.0, 0.95, 0.75), 2.0)
+	# The cab: two panes ahead, a window in each door, a step under it, the mirrors.
+	Psx.box(gfx, Vector3(2.25, 1.15, 1.5), Vector3(0.0, 1.375, -1.2), olive)
+	Psx.box(gfx, Vector3(2.1, 0.08, 1.4), Vector3(0.0, 1.99, -1.2), boards)
+	Psx.box(gfx, Vector3(1.2, 0.35, 0.04), Vector3(0.0, 1.6, -0.44), GLASS)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.95, 0.5, 0.04), Vector3(0.52 * side, 1.58, -1.96), GLASS)
+		Psx.box(gfx, Vector3(0.04, 0.45, 0.7), Vector3(1.13 * side, 1.58, -1.4), GLASS)
+		Psx.box(gfx, Vector3(0.45, 0.06, 0.35), Vector3(1.05 * side, 0.5, -1.15), DARK)
+		Psx.box(gfx, Vector3(0.2, 0.04, 0.04), Vector3(1.22 * side, 1.72, -1.9), DARK)
+		Psx.box(gfx, Vector3(0.05, 0.35, 0.2), Vector3(1.32 * side, 1.55, -1.9), DARK)
+		var tank := Psx.mesh(gfx, Psx.cylinder(0.24, 0.24, 1.0, 8), Vector3(1.0 * side, 0.4, -0.3), olive)
+		tank.rotation.x = PI * 0.5
+	var spare := Psx.mesh(gfx, Psx.cylinder(0.55, 0.55, 0.3, 10), Vector3(0.0, 1.25, -0.32), DARK)
+	spare.rotation.x = PI * 0.5
+	# The bed: a floor, a high front board, the sides and the tailgate.
+	Psx.box(gfx, Vector3(2.45, 0.1, 3.85), Vector3(0.0, 0.8, 1.775), boards)
+	Psx.box(gfx, Vector3(2.45, 0.85, 0.08), Vector3(0.0, 1.27, -0.12), boards)
+	Psx.box(gfx, Vector3(2.45, 0.55, 0.08), Vector3(0.0, 1.12, 3.66), boards)
+	Psx.box(gfx, Vector3(2.47, 0.04, 0.1), Vector3(0.0, 1.14, 3.66), DARK)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.08, 0.55, 3.85), Vector3(1.19 * side, 1.12, 1.775), boards)
+		Psx.box(gfx, Vector3(0.1, 0.04, 3.87), Vector3(1.19 * side, 1.14, 1.775), DARK)
+		Psx.box(gfx, Vector3(0.45, 0.45, 0.04), Vector3(1.0 * side, 0.2, 3.05), DARK)
+		Psx.box(gfx, Vector3(0.22, 0.14, 0.05), Vector3(0.95 * side, 0.32, 3.7), Color(0.9, 0.1, 0.05), 1.5)
+	# The rear crossmember and the towbar dropped from it to the pickup's height.
+	Psx.box(gfx, Vector3(2.0, 0.22, 0.14), Vector3(0.0, 0.3, 3.62), DARK)
+	Psx.box(gfx, Vector3(0.3, 0.42, 0.12), Vector3(0.0, 0.1, 3.72), DARK)
+	Psx.box(gfx, Vector3(0.12, 0.1, 0.3), Vector3(0.0, -0.05, 3.85), DARK)
+	Psx.mesh(gfx, Psx.cylinder(0.06, 0.06, 0.1, 6), Vector3(0.0, 0.03, spec.hitch.z), Color(0.55, 0.55, 0.58))
+
+	var floor_y := 0.85
+	var crates := Node3D.new()
+	for z in [0.75, 2.3]:
+		Psx.box(crates, Vector3(1.9, 0.9, 1.4), Vector3(0.0, floor_y + 0.45, z), Color(0.55, 0.38, 0.2))
+		Psx.box(crates, Vector3(1.95, 0.08, 0.15), Vector3(0.0, floor_y + 0.92, z), DARK)
+	# Fragile: three pairs of strapped crates, red and white.
+	var fragile := Node3D.new()
+	for i in 3:
+		var z := 0.55 + i * 1.15
+		Psx.box(fragile, Vector3(1.7, 0.7, 0.9), Vector3(0.0, floor_y + 0.35, z), Color(0.86, 0.84, 0.78))
+		Psx.box(fragile, Vector3(1.72, 0.14, 0.92), Vector3(0.0, floor_y + 0.45, z), Color(0.85, 0.15, 0.1))
+	Psx.box(fragile, Vector3(0.06, 0.74, 3.5), Vector3(0.0, floor_y + 0.36, 1.7), DARK)
+	# Heavy: six well rings stood on end, two by three, 3.5 t of concrete.
+	var heavy := Node3D.new()
+	for z in [0.55, 1.75, 2.95]:
+		for x in [-0.58, 0.58]:
+			Psx.mesh(heavy, Psx.cylinder(0.57, 0.57, 0.9, 10), Vector3(x, floor_y + 0.45, z), Color(0.62, 0.62, 0.6))
+			Psx.mesh(heavy, Psx.cylinder(0.46, 0.46, 0.96, 10), Vector3(x, floor_y + 0.47, z), DARK)
+	_loads = {"crates": crates, "fragile": fragile, "heavy": heavy}
+	for k in _loads:
+		gfx.add_child(_loads[k])
+		_loads[k].visible = false
+
+
+## The tractor's look (TruckSpec.body "tractor"): weights ahead of a narrow red bonnet, the
+## exhaust and the air intake before a glass cab over the rear axle, big fenders, the linkage and
+## the drawbar behind. The ground is about 0.95 m under its origin.
+func _build_tractor() -> void:
+	var red := Color(0.72, 0.13, 0.08)
+	var white := Color(0.88, 0.88, 0.84)
+	var grey := Color(0.3, 0.3, 0.32)
+	var gfx := Node3D.new()
+	add_child(gfx)
+	# The engine under its bonnet, the grille and its lamps, the weights, the front axle.
+	Psx.box(gfx, Vector3(0.6, 0.45, 2.0), Vector3(0.0, -0.2, -1.1), grey)
+	Psx.box(gfx, Vector3(0.82, 0.62, 2.1), Vector3(0.0, 0.35, -1.12), red)
+	Psx.box(gfx, Vector3(0.74, 0.5, 0.04), Vector3(0.0, 0.32, -2.18), DARK)
+	for i in 3:
+		Psx.box(gfx, Vector3(0.74, 0.04, 0.05), Vector3(0.0, 0.18 + i * 0.14, -2.19), red)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.14, 0.12, 0.04), Vector3(0.25 * side, 0.42, -2.21), Color(1.0, 0.95, 0.75), 2.0)
+		for i in 2:
+			Psx.box(gfx, Vector3(0.03, 0.04, 0.9), Vector3(0.415 * side, 0.4 + i * 0.12, -1.3), DARK)
+	Psx.box(gfx, Vector3(0.8, 0.32, 0.3), Vector3(0.0, -0.3, -2.35), grey)
+	for i in 3:
+		Psx.box(gfx, Vector3(0.82, 0.02, 0.32), Vector3(0.0, -0.38 + i * 0.08, -2.35), DARK)
+	Psx.box(gfx, Vector3(1.4, 0.14, 0.16), Vector3(0.0, -0.47, -1.5), DARK)
+	# The exhaust and the air intake ahead of the cab.
+	Psx.mesh(gfx, Psx.cylinder(0.055, 0.055, 1.1, 6), Vector3(0.3, 1.0, -0.3), DARK)
+	Psx.mesh(gfx, Psx.cylinder(0.09, 0.09, 0.5, 6), Vector3(-0.28, 0.9, -0.3), grey)
+	Psx.mesh(gfx, Psx.cylinder(0.13, 0.13, 0.08, 6), Vector3(-0.28, 1.18, -0.3), DARK)
+	# The cab: red below, glass all round between red pillars, a white roof with work lamps.
+	Psx.box(gfx, Vector3(1.3, 0.35, 1.4), Vector3(0.0, 0.575, 0.85), red)
+	Psx.box(gfx, Vector3(1.26, 0.85, 1.36), Vector3(0.0, 1.175, 0.85), GLASS)
+	for side in [-1.0, 1.0]:
+		for end in [-1.0, 1.0]:
+			Psx.box(gfx, Vector3(0.07, 0.85, 0.07), Vector3(0.63 * side, 1.175, 0.85 + 0.68 * end), red)
+		Psx.box(gfx, Vector3(0.12, 0.08, 0.05), Vector3(0.45 * side, 1.66, 0.06), Color(1.0, 0.95, 0.75), 2.0)
+	Psx.box(gfx, Vector3(1.45, 0.12, 1.55), Vector3(0.0, 1.66, 0.85), white)
+	# Fenders over the big wheels, the lamps at their backs.
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.5, 0.06, 0.95), Vector3(0.92 * side, 0.68, 0.95), red)
+		for end in [-1.0, 1.0]:
+			var slope := Psx.box(gfx, Vector3(0.5, 0.06, 0.55), Vector3(0.92 * side, 0.38, 0.95 + 0.65 * end), red)
+			slope.rotation.x = 0.87 * end
+		Psx.box(gfx, Vector3(0.1, 0.08, 0.04), Vector3(0.6 * side, 0.5, 1.57), Color(0.9, 0.1, 0.05), 1.5)
+	# The gearbox and the rear axle, the three-point linkage, the drawbar and its pin.
+	Psx.box(gfx, Vector3(0.7, 0.6, 1.3), Vector3(0.0, -0.2, 0.75), grey)
+	Psx.box(gfx, Vector3(1.4, 0.16, 0.18), Vector3(0.0, -0.17, 0.95), DARK)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.07, 0.07, 0.75), Vector3(0.35 * side, -0.42, 1.75), DARK)
+	Psx.box(gfx, Vector3(0.07, 0.07, 0.55), Vector3(0.0, 0.12, 1.62), DARK)
+	Psx.box(gfx, Vector3(0.14, 0.06, 0.8), Vector3(0.0, -0.53, 1.65), DARK)
+	Psx.mesh(gfx, Psx.cylinder(0.035, 0.035, 0.22, 6), Vector3(0.0, -0.47, spec.hitch.z - 0.04), Color(0.6, 0.6, 0.62))
+
+
+## The semi truck's look (TruckSpec.body "semi"): a tall blue cab over the engine under a white
+## high roof, the tanks along the frame, the fifth wheel over the doubled rear wheels. The ground is
+## about 0.85 m under its origin.
+func _build_semi() -> void:
+	var blue := Color(0.17, 0.3, 0.58)
+	var white := Color(0.88, 0.89, 0.9)
+	var grey := Color(0.3, 0.31, 0.33)
+	var gfx := Node3D.new()
+	add_child(gfx)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.14, 0.3, 6.7), Vector3(0.45 * side, 0.08, -0.05), DARK)
+	# The bumper with its lamps, the cab, its windows, grille, roof and mirrors.
+	Psx.box(gfx, Vector3(2.45, 0.45, 0.25), Vector3(0.0, -0.15, -3.5), grey)
+	Psx.box(gfx, Vector3(2.45, 2.0, 2.2), Vector3(0.0, 1.25, -2.45), blue)
+	Psx.box(gfx, Vector3(2.47, 0.14, 2.22), Vector3(0.0, 0.62, -2.45), white)
+	Psx.box(gfx, Vector3(2.2, 0.85, 0.04), Vector3(0.0, 1.78, -3.56), GLASS)
+	Psx.box(gfx, Vector3(1.8, 0.5, 0.04), Vector3(0.0, 0.98, -3.56), DARK)
+	for i in 3:
+		Psx.box(gfx, Vector3(1.8, 0.05, 0.05), Vector3(0.0, 0.83 + i * 0.15, -3.575), grey)
+	Psx.box(gfx, Vector3(2.35, 0.45, 2.0), Vector3(0.0, 2.47, -2.35), white)
+	Psx.box(gfx, Vector3(2.35, 0.06, 0.5), Vector3(0.0, 2.47, -3.44), white).rotation.x = -1.15
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.42, 0.16, 0.04), Vector3(0.82 * side, -0.05, -3.63), Color(1.0, 0.95, 0.75), 2.0)
+		Psx.box(gfx, Vector3(0.04, 0.6, 0.85), Vector3(1.23 * side, 1.78, -3.0), GLASS)
+		Psx.box(gfx, Vector3(0.2, 0.05, 0.05), Vector3(1.32 * side, 2.0, -3.45), DARK)
+		Psx.box(gfx, Vector3(0.06, 0.5, 0.22), Vector3(1.42 * side, 1.8, -3.45), DARK)
+		for i in 2:
+			Psx.box(gfx, Vector3(0.35, 0.05, 0.4), Vector3(1.1 * side, 0.05 - i * 0.3, -1.45), DARK)
+	# Behind the cab: the exhaust stack, the air filter; along the frame the fuel tank, the batteries.
+	Psx.mesh(gfx, Psx.cylinder(0.07, 0.07, 1.3, 6), Vector3(0.95, 1.55, -1.2), Color(0.68, 0.7, 0.72))
+	Psx.box(gfx, Vector3(0.3, 0.8, 0.3), Vector3(-0.95, 1.4, -1.18), DARK)
+	Psx.box(gfx, Vector3(0.5, 0.55, 1.2), Vector3(1.0, -0.15, -0.55), Color(0.68, 0.7, 0.72))
+	Psx.box(gfx, Vector3(0.5, 0.45, 0.8), Vector3(-1.0, -0.1, -0.5), DARK)
+	# The fifth wheel: its plate's top at the hitch, the slot the kingpin rides into.
+	Psx.box(gfx, Vector3(1.0, 0.16, 0.7), Vector3(0.0, spec.hitch.y - 0.14, spec.hitch.z), DARK)
+	Psx.box(gfx, Vector3(1.15, 0.08, 1.05), Vector3(0.0, spec.hitch.y - 0.04, spec.hitch.z), grey)
+	Psx.box(gfx, Vector3(0.18, 0.09, 0.5), Vector3(0.0, spec.hitch.y - 0.035, spec.hitch.z + 0.3), DARK)
+	# Mudguards over the rear wheels, the mud flaps, the lamps on the last crossmember.
+	Psx.box(gfx, Vector3(2.0, 0.2, 0.12), Vector3(0.0, -0.05, 3.3), DARK)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.75, 0.05, 2.45), Vector3(0.85 * side, 0.32, 1.875), DARK)
+		Psx.box(gfx, Vector3(0.65, 0.45, 0.04), Vector3(0.85 * side, 0.05, 3.15), DARK)
+		Psx.box(gfx, Vector3(0.25, 0.12, 0.05), Vector3(0.85 * side, -0.05, 3.37), Color(0.9, 0.1, 0.05), 1.5)
+
+
+## A tyre that is not the pickup's (TruckSpec.wheels' look): "lugs", chevrons across its tread, in
+## one mesh; "dual", a second tyre beside it on the inside.
+func _dress_wheel(w: Wheel, look: String, width: float) -> void:
+	if look == "lugs":
+		var bar := BoxMesh.new()
+		bar.size = Vector3(width * 0.5, 0.07, w.radius * 0.24)
+		var st := SurfaceTool.new()
+		var n := roundi(w.radius * 18.0)
+		for i in n:
+			for side in [-1.0, 1.0]:
+				var around := Basis(Vector3.RIGHT, TAU * (i + (0.5 if side > 0.0 else 0.0)) / n)
+				var xf := Transform3D(around * Basis(Vector3.UP, 0.4 * side), around * Vector3(width * 0.25 * side, w.radius + 0.01, 0.0))
+				st.append_from(bar, 0, xf)
+		Psx.mesh(w.spin, st.commit(), Vector3.ZERO, DARK)
+	elif look == "dual":
+		var inner := Psx.mesh(w.spin, Psx.cylinder(w.radius, w.radius, width, 10), Vector3(-signf(w.mount.x) * (width + 0.04), 0.0, 0.0), DARK)
+		inner.rotation.z = PI * 0.5
 
 
 ## A headlight at pos, in the body's frame, shining ahead.

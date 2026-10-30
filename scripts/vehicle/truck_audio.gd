@@ -28,7 +28,7 @@ const WINCH_DB := -4.0
 const SNOW_STEP := 0.9  # metres a tread rolls per crunch
 const MUD_STEP := 1.3
 const MIN_TREAD := 0.3  # m/s: slower than this a wheel makes no sound
-const MAX_HITS := 12.0  # a second, all four wheels together
+const MAX_HITS := 12.0  # a second, all the wheels together
 
 var vehicle: Vehicle
 var rpm := IDLE_RPM
@@ -51,9 +51,8 @@ var _mud_due := 0.0
 
 
 func _ready() -> void:
-	var front := Vector3(0.0, 0.4, -1.7)
-	idle = _player(IDLE, &"Engine", front)
-	growl = _player(LABOUR, &"Engine", front)
+	idle = _player(IDLE, &"Engine", vehicle.spec.engine_pos)
+	growl = _player(LABOUR, &"Engine", vehicle.spec.engine_pos)
 	motor = _player(MOTOR, &"Sfx", vehicle.spec.winch_mount)
 	snow = _player(_randomizer("snow", SNOW_HITS), &"Sfx", Vector3.ZERO)
 	mud = _player(_randomizer("mud", MUD_HITS), &"Sfx", Vector3.ZERO)

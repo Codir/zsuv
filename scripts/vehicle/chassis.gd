@@ -2,9 +2,9 @@ class_name Chassis
 extends RigidBody3D
 ## Raycast wheels under a body, a truck's or a trailer's. Each wheel is a spring and a damper on
 ## a ray down from its mount, anti-roll ties the two of an axle, and a tyre grips as the ground
-## under it lets it: snow and mud add rolling resistance and cut grip. What drives a wheel
-## (request) and how much of its grip it may use (allowed) is the body's to set: Vehicle's engine
-## and differentials, a Trailer's brakes.
+## under it lets it: snow and mud add rolling resistance and cut grip, less so for a big tyre or a
+## lugged one. What drives a wheel (request) and how much of its grip it may use (allowed) is the
+## body's to set: Vehicle's engine and differentials, a Trailer's brakes.
 
 const SLIP_SPIN := 14.0
 const DARK := Color(0.12, 0.12, 0.13)
@@ -15,6 +15,8 @@ class Wheel:
 	var radius := 0.5
 	var front: bool  # steered
 	var drive2: bool  # driven in 2WD too
+	var sink := 1.0  # how much of the drag of snow and mud its tyre feels (a big one floats)
+	var bite := 0.0  # how much of the grip snow and mud take its tread wins back (not on ice)
 	var pivot: Node3D
 	var spin: Node3D
 	var spray: CPUParticles3D
@@ -80,6 +82,9 @@ func _update_suspension(w: Wheel, space: PhysicsDirectSpaceState3D, up: Vector3,
 	w.compression = ray_len - w.dist
 	if terrain:
 		w.surface = terrain.sample(w.point)
+		if w.sink != 1.0 or w.bite != 0.0:
+			w.surface.rolling *= w.sink
+			w.surface.grip = lerpf(w.surface.grip, 1.0, w.bite * (1.0 - w.surface.ice))
 	var comp_vel := clampf((w.compression - prev) / delta, -5.0, 5.0)
 	w.load = maxf(spring_k * w.compression + damping * comp_vel, 0.0)
 	apply_force(up * w.load, w.point - global_position)
