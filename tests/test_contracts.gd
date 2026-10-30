@@ -45,7 +45,7 @@ func test_a_new_job_at_the_depot_drops_the_one_in_hand(t: TCase) -> void:
 	await t.ticks(2)
 	t.eq(c.prompt, "[E] Refuel, job board", "prompt at the depot with a job")
 	c.call("_interact")
-	t.eq(v.fuel, Vehicle.FUEL_CAPACITY, "E does not refuel")
+	t.eq(v.fuel, v.spec.fuel_capacity, "E does not refuel")
 	t.ok(c.board_open, "E does not open the board with a job in hand")
 	t.ok(c.board_text().begins_with("JOB BOARD - DEPOT   (a new job drops pull a car out)"), "board: " + c.board_text())
 	var car: StuckCar = c._car
@@ -83,7 +83,7 @@ func test_a_plain_delivery_pays(t: TCase) -> void:
 	v.fuel = 10.0
 	c.take(c.offer("farm", "plain"))
 	t.ok(v.has_cargo, "loaded")
-	t.eq(v.fuel, Vehicle.FUEL_CAPACITY, "refuelled")
+	t.eq(v.fuel, v.spec.fuel_capacity, "refuelled")
 	t.ok(c.objective_text().begins_with("DELIVER: groceries -> Khutir"), "objective: " + c.objective_text())
 	var farm: Vector2 = t.world.locations.farm.pos
 	await t.place(farm + Vector2(0.0, -4.0), 0.0)
@@ -173,7 +173,7 @@ func test_a_heavy_load_sits_low_and_drinks(t: TCase) -> void:
 		v.freeze = false
 		v.awd = false
 		_clear(c, v)
-	t.eq(Vehicle.BASE_MASS + Vehicle.HEAVY_MASS, 3800.0, "heavy mass")
+	t.eq(v.spec.mass + v.spec.cargo_mass.heavy, 3800.0, "heavy mass")
 	t.ok(sag.heavy > sag.plain + 0.03, "the heavy load does not sit lower: %.2f vs %.2f m" % [sag.heavy, sag.plain])
 	t.ok(absf(burnt.heavy / burnt.plain - 1.5) < 0.05, "fuel: %.2f vs %.2f L" % [burnt.heavy, burnt.plain])
 	t.eq(c.offer("farm", "heavy").reward, 400, "heavy pays 1.6 times $250")
@@ -188,7 +188,7 @@ func test_tow_to_depot(t: TCase) -> void:
 	c.recover()
 	await t.ticks(60)
 	t.eq(c.money, 500 - Contracts.RECOVER_COST, "money after the tow")
-	t.ok(v.fuel > Vehicle.FUEL_CAPACITY * 0.45, "half a tank after the tow: %.1f L" % v.fuel)
+	t.ok(v.fuel > v.spec.fuel_capacity * 0.45, "half a tank after the tow: %.1f L" % v.fuel)
 	t.ok(v.global_position.distance_to(c.spawn_pos) < 3.0, "back at the depot: %s" % v.global_position)
 
 

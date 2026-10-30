@@ -90,7 +90,7 @@ func _drive(t: TCase, world, road: PackedVector2Array) -> float:
 	var dir := road[1] - a
 	truck.teleport(Vector3(a.x, world.terrain.get_height(a.x, a.y) + 1.2, a.y), atan2(-dir.x, -dir.y))
 	await t.ticks(60)
-	truck.fuel = Vehicle.FUEL_CAPACITY
+	truck.fuel = truck.spec.fuel_capacity
 	truck.drive_along(road.slice(1), 9.0)
 	var end := road[road.size() - 1]
 	var last := truck.global_position

@@ -1,61 +1,22 @@
 class_name Vehicle
-extends RigidBody3D
-## A truck on raycast suspension.
-## Snow and mud add rolling resistance and cut grip. An open differential limits
-## both wheels of an axle to the worse grip of the two; the lock lets each use its own.
+extends Chassis
+## A truck on raycast wheels (Chassis), built from its TruckSpec: the engine, the drive train
+## (2WD or all wheels, open or locked differentials, low range), the brakes, the fuel, the winch,
+## the loads on its bed. An open differential limits both wheels of an axle to the worse grip of
+## the two; the lock lets each use its own.
 
-const WHEEL_RADIUS := 0.5
-const REST_LENGTH := 0.5
-const SPRING_K := 32000.0
-const DAMPING := 3800.0
-const ANTI_ROLL := 16000.0
-const ENGINE_FORCE := 12000.0
-const LOW_RANGE_MULT := 1.8
-const MAX_SPEED_HIGH := 18.0
-const MAX_SPEED_LOW := 5.5
-const MAX_SPEED_REVERSE := 5.0
-const MAX_STEER := 0.6
-const STEER_SPEED := 2.2
-const BASE_MASS := 2000.0
-const CARGO_MASS := 900.0
-const HEAVY_MASS := 1800.0
-const FUEL_CAPACITY := 80.0
-const SLIP_SPIN := 14.0
 const AUTODRIVE_LOOK := 10.0
-
 const BODY_COLOR := Color(0.9, 0.62, 0.16)
-const DARK := Color(0.12, 0.12, 0.13)
 const GLASS := Color(0.13, 0.17, 0.24)
 
 
-class Wheel:
-	var mount: Vector3
-	var front: bool
-	var pivot: Node3D
-	var spin: Node3D
-	var spray: CPUParticles3D
-	var contact := false
-	var compression := 0.0
-	var dist := 0.0
-	var load := 0.0
-	var point := Vector3.ZERO
-	var normal := Vector3.UP
-	var surface := Terrain.Surface.new()
-	var traction := 0.0
-	var allowed := 0.0
-	var request := 0.0
-	var spin_angle := 0.0
-	var spin_speed := 0.0
-	var slip := false
-
-
-var terrain: Terrain
+var spec: TruckSpec  # set before the truck enters the tree; the pickup if not
 var awd := false
 var diff_lock := false
 var low_range := false
 var has_cargo := false
 var cargo := ""  # what is on the bed (a job's kind: plain, timed, fragile, heavy); "" nothing
-var fuel := FUEL_CAPACITY
+var fuel := 0.0  # a full tank once in the tree
 var autodrive := false
 var autodrive_path := PackedVector2Array()
 var autodrive_speed := 9.0
@@ -68,10 +29,8 @@ var throttle_input := 0.0
 var steer_input := 0.0
 var handbrake := false
 
-var wheels: Array[Wheel] = []
 var winch: Winch
 var audio: TruckAudio
-var _steer := 0.0
 var _reset_requested := false
 var teleports := 0  # how many times teleport() has moved the truck: no jolt, a jump
 var _reset_transform := Transform3D()
@@ -80,17 +39,30 @@ var _lights: Array[SpotLight3D] = []
 
 
 func _ready() -> void:
-	mass = BASE_MASS
+	if spec == null:
+		spec = TruckSpec.pickup()
+	mass = spec.mass
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0.0, -0.1, 0.0)
+	center_of_mass = spec.center_of_mass
 	can_sleep = false
 	angular_damp = 0.4
-	_build_body()
+	rest_length = spec.rest_length
+	spring_k = spec.spring_k
+	damping = spec.damping
+	anti_roll = spec.anti_roll
+	fuel = spec.fuel_capacity
+	for b in spec.shapes:
+		_add_box_shape(b.size, b.pos)
+	call("_build_" + spec.body)
+	for l in spec.lights:
+		_add_light(l)
 	winch = Winch.new()
 	winch.vehicle = self
+	winch.mount = spec.winch_mount
 	add_child(winch)
-	for m in [Vector3(-0.95, 0.2, -1.55), Vector3(0.95, 0.2, -1.55), Vector3(-0.95, 0.2, 1.45), Vector3(0.95, 0.2, 1.45)]:
-		_add_wheel(m)
+	for w in spec.wheels:
+		_add_wheel(w.mount, w.radius, w.width, w.steer, w.drive2)
+	axles = spec.axles
 	audio = TruckAudio.new()
 	audio.vehicle = self
 	add_child(audio)
@@ -99,7 +71,7 @@ func _ready() -> void:
 func set_cargo(on: bool, kind := "plain") -> void:
 	has_cargo = on
 	cargo = kind if on else ""
-	mass = BASE_MASS + ((HEAVY_MASS if kind == "heavy" else CARGO_MASS) if on else 0.0)
+	mass = spec.mass + (float(spec.cargo_mass.get(kind, spec.cargo_mass.get("plain", 0.0))) if on else 0.0)
 	var look: String = kind if kind in _loads else "crates"
 	for k in _loads:
 		_loads[k].visible = on and k == look
@@ -151,8 +123,8 @@ func _physics_process(delta: float) -> void:
 	_read_input()
 	var basis := global_transform.basis
 	forward_speed = -linear_velocity.dot(basis.z)
-	var steer_limit := lerpf(MAX_STEER, 0.25, clampf(absf(forward_speed) / MAX_SPEED_HIGH, 0.0, 1.0))
-	_steer = move_toward(_steer, steer_input * steer_limit, STEER_SPEED * delta)
+	var steer_limit := lerpf(spec.max_steer, 0.25, clampf(absf(forward_speed) / spec.max_speed_high, 0.0, 1.0))
+	steer = move_toward(steer, steer_input * steer_limit, spec.steer_speed * delta)
 
 	drive = 0.0
 	var brake := 0.0
@@ -173,27 +145,22 @@ func _physics_process(delta: float) -> void:
 	if fuel <= 0.0:
 		drive = 0.0
 
-	var vmax := MAX_SPEED_REVERSE if drive < 0.0 else (MAX_SPEED_LOW if low_range else MAX_SPEED_HIGH)
-	var engine := ENGINE_FORCE * (LOW_RANGE_MULT if low_range else 1.0)
+	var vmax := spec.max_speed_reverse if drive < 0.0 else (spec.max_speed_low if low_range else spec.max_speed_high)
+	var engine := spec.engine_force * (spec.low_mult if low_range else 1.0)
 	var total_drive := drive * engine * clampf(1.0 - absf(forward_speed) / vmax, 0.0, 1.0)
 
-	var space := get_world_3d().direct_space_state
-	for w in wheels:
-		_update_suspension(w, space, basis.y, delta)
-	_apply_anti_roll(wheels[0], wheels[1], basis.y)
-	_apply_anti_roll(wheels[2], wheels[3], basis.y)
+	_update_wheels(delta)
 
 	# Split the torque between the wheels.
 	var driven := 0
 	for w in wheels:
-		w.traction = w.load * w.surface.grip if w.contact else 0.0
-		if awd or not w.front:
+		if awd or w.drive2:
 			driven += 1
 	for w in wheels:
-		w.request = total_drive / driven if (awd or not w.front) else 0.0
-	for axle in [[0, 1], [2, 3]]:
-		var a: Wheel = wheels[axle[0]]
-		var b: Wheel = wheels[axle[1]]
+		w.request = total_drive / driven if (awd or w.drive2) else 0.0
+	for axle in axles:
+		var a: Wheel = wheels[axle.x]
+		var b: Wheel = wheels[axle.y]
 		if diff_lock:
 			a.allowed = a.traction
 			b.allowed = b.traction
@@ -205,29 +172,12 @@ func _physics_process(delta: float) -> void:
 	for w in wheels:
 		_apply_tire(w, brake, delta)
 
-	var burn := 0.04 + absf(drive) * 0.45 * (1.2 if awd else 1.0) * (1.15 if low_range else 1.0) * (1.5 if cargo == "heavy" else 1.0)
+	var burn := 0.04 + absf(drive) * 0.45 * spec.burn * (1.2 if awd else 1.0) * (1.15 if low_range else 1.0) * (1.5 if cargo == "heavy" else 1.0)
 	fuel = maxf(fuel - burn * delta, 0.0)
 
 
 func _process(delta: float) -> void:
-	var up := global_transform.basis.y
-	for w in wheels:
-		w.pivot.position = w.mount + Vector3(0.0, -(w.dist - WHEEL_RADIUS), 0.0)
-		if w.front:
-			w.pivot.rotation.y = _steer
-		w.spin_angle = wrapf(w.spin_angle + w.spin_speed * delta, -PI, PI)
-		w.spin.rotation.x = -w.spin_angle
-		var spraying := w.contact and w.slip and (w.surface.snow > 0.05 or w.surface.mud > 0.1)
-		w.spray.emitting = spraying
-		if spraying:
-			w.spray.global_position = w.point + up * 0.15
-			w.spray.direction = Vector3(0.0, 1.0, 1.2 * signf(w.request))
-			w.spray.color = Color(0.3, 0.22, 0.15) if w.surface.mud > w.surface.snow else _layer_spray()
-
-
-## What flies off a spinning wheel that is not mud: snow, sand or dust, as the valley has it.
-func _layer_spray() -> Color:
-	return terrain.valley.layer_color.lightened(0.15) if terrain else Color(0.9, 0.93, 1.0)
+	_animate_wheels(delta)
 
 
 func _read_input() -> void:
@@ -304,87 +254,8 @@ func _autodrive_input() -> void:
 	throttle_input = -0.6 if err < -1.5 else clampf(err * 0.5, 0.0, 1.0)
 
 
-func _update_suspension(w: Wheel, space: PhysicsDirectSpaceState3D, up: Vector3, delta: float) -> void:
-	var origin := global_transform * w.mount
-	var ray_len := REST_LENGTH + WHEEL_RADIUS
-	var q := PhysicsRayQueryParameters3D.create(origin, origin - up * ray_len)
-	q.exclude = [get_rid()]
-	var hit := space.intersect_ray(q)
-	var prev := w.compression
-	if hit.is_empty():
-		w.contact = false
-		w.compression = 0.0
-		w.dist = ray_len
-		w.load = 0.0
-		return
-	w.contact = true
-	w.point = hit.position
-	w.normal = hit.normal
-	w.dist = origin.distance_to(w.point)
-	w.compression = ray_len - w.dist
-	if terrain:
-		w.surface = terrain.sample(w.point)
-	var comp_vel := clampf((w.compression - prev) / delta, -5.0, 5.0)
-	w.load = maxf(SPRING_K * w.compression + DAMPING * comp_vel, 0.0)
-	apply_force(up * w.load, w.point - global_position)
-
-
-func _apply_anti_roll(a: Wheel, b: Wheel, up: Vector3) -> void:
-	if not (a.contact and b.contact):
-		return
-	var f := (a.compression - b.compression) * ANTI_ROLL
-	apply_force(up * f, global_transform * a.mount - global_position)
-	apply_force(-up * f, global_transform * b.mount - global_position)
-
-
-func _apply_tire(w: Wheel, brake: float, delta: float) -> void:
-	w.slip = false
-	if not w.contact:
-		var free_spin := signf(w.request) * SLIP_SPIN if w.request != 0.0 else 0.0
-		w.spin_speed = lerpf(w.spin_speed, free_spin, delta * 3.0)
-		return
-	var basis := global_transform.basis
-	var steer := _steer if w.front else 0.0
-	var n := w.normal
-	var fwd := (-basis.z).rotated(basis.y, steer)
-	var right := basis.x.rotated(basis.y, steer)
-	fwd = (fwd - n * fwd.dot(n)).normalized()
-	right = (right - n * right.dot(n)).normalized()
-	var vel := point_velocity(w.point)
-	var v_long := vel.dot(fwd)
-	var v_lat := vel.dot(right)
-	var wheel_mass := mass * 0.25
-
-	var f_long := 0.0
-	if brake > 0.0:
-		f_long = -v_long * wheel_mass / delta * brake
-	elif w.request != 0.0:
-		if absf(w.request) > w.allowed:
-			w.slip = true
-			f_long = signf(w.request) * w.allowed * 0.85
-		else:
-			f_long = w.request
-	var f_lat := -v_lat * wheel_mass / delta * 0.5
-
-	var tire := Vector2(f_long, f_lat)
-	if tire.length() > w.traction:
-		tire = tire.normalized() * w.traction
-	var roll := w.surface.rolling * w.load * clampf(v_long * 8.0, -1.0, 1.0)
-	apply_force(fwd * (tire.x - roll) + right * tire.y, w.point - global_position)
-
-	w.spin_speed = signf(w.request) * SLIP_SPIN if w.slip else v_long / WHEEL_RADIUS
-	if terrain and (w.surface.snow > 0.02 or w.surface.mud > 0.05):
-		terrain.compact(w.point, 0.08 if w.slip else 0.25)
-
-
-func point_velocity(p: Vector3) -> Vector3:
-	return linear_velocity + angular_velocity.cross(p - global_transform * center_of_mass)
-
-
-func _build_body() -> void:
-	_add_box_shape(Vector3(1.9, 1.0, 4.5), Vector3(0.0, 0.3, 0.0))
-	_add_box_shape(Vector3(1.9, 0.5, 1.4), Vector3(0.0, 1.03, -0.5))
-
+## The pickup's look (TruckSpec.body "pickup"): an orange cab and bed, the loads on the bed.
+func _build_pickup() -> void:
 	var gfx := Node3D.new()
 	add_child(gfx)
 	Psx.box(gfx, Vector3(1.5, 0.25, 4.4), Vector3(0.0, -0.05, 0.0), DARK)
@@ -425,60 +296,15 @@ func _build_body() -> void:
 		gfx.add_child(_loads[k])
 		_loads[k].visible = false
 
-	for side in [-1.0, 1.0]:
-		var l := SpotLight3D.new()
-		l.position = Vector3(0.6 * side, 0.45, -2.3)
-		l.rotation.x = -0.08
-		l.light_color = Color(1.0, 0.88, 0.65)
-		l.light_energy = 4.0
-		l.spot_range = 32.0
-		l.spot_angle = 38.0
-		add_child(l)
-		_lights.append(l)
 
-
-func _add_box_shape(size: Vector3, pos: Vector3) -> void:
-	var shape := BoxShape3D.new()
-	shape.size = size
-	var cs := CollisionShape3D.new()
-	cs.shape = shape
-	cs.position = pos
-	add_child(cs)
-
-
-func _add_wheel(mount: Vector3) -> void:
-	var w := Wheel.new()
-	w.mount = mount
-	w.front = mount.z < 0.0
-	w.dist = REST_LENGTH + WHEEL_RADIUS
-	w.pivot = Node3D.new()
-	w.pivot.position = mount
-	add_child(w.pivot)
-	w.spin = Node3D.new()
-	w.pivot.add_child(w.spin)
-	var tire := Psx.mesh(w.spin, Psx.cylinder(WHEEL_RADIUS, WHEEL_RADIUS, 0.42, 10), Vector3.ZERO, DARK)
-	tire.rotation.z = PI * 0.5
-	var rim := Psx.mesh(w.spin, Psx.cylinder(0.28, 0.28, 0.44, 8), Vector3.ZERO, Color(0.55, 0.55, 0.58))
-	rim.rotation.z = PI * 0.5
-	Psx.box(w.spin, Vector3(0.46, 0.08, 0.2), Vector3(0.0, 0.18, 0.0), Color(0.75, 0.3, 0.1))
-
-	w.spray = CPUParticles3D.new()
-	w.spray.emitting = false
-	w.spray.amount = 24
-	w.spray.lifetime = 0.7
-	w.spray.local_coords = false
-	w.spray.spread = 25.0
-	w.spray.initial_velocity_min = 2.5
-	w.spray.initial_velocity_max = 4.5
-	w.spray.gravity = Vector3(0.0, -9.8, 0.0)
-	w.spray.scale_amount_min = 0.6
-	w.spray.scale_amount_max = 1.2
-	var bm := BoxMesh.new()
-	bm.size = Vector3.ONE * 0.12
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.vertex_color_use_as_albedo = true
-	bm.material = m
-	w.spray.mesh = bm
-	add_child(w.spray)
-	wheels.append(w)
+## A headlight at pos, in the body's frame, shining ahead.
+func _add_light(pos: Vector3) -> void:
+	var l := SpotLight3D.new()
+	l.position = pos
+	l.rotation.x = -0.08
+	l.light_color = Color(1.0, 0.88, 0.65)
+	l.light_energy = 4.0
+	l.spot_range = 32.0
+	l.spot_angle = 38.0
+	add_child(l)
+	_lights.append(l)

@@ -23,8 +23,10 @@ func _ready() -> void:
 	camera.top_level = true
 
 
+## Straight behind the truck, as far back as its size asks (a new truck, or the first).
 func snap_to_target() -> void:
-	global_position = target.global_position + Vector3(0.0, 1.6, 0.0)
+	distance = target.spec.camera_distance
+	global_position = target.global_position + Vector3(0.0, target.spec.camera_height, 0.0)
 	yaw = target.global_rotation.y
 
 
@@ -47,7 +49,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if target == null:
 		return
-	var tpos := target.global_position + Vector3(0.0, 1.6, 0.0)
+	var tpos := target.global_position + Vector3(0.0, target.spec.camera_height, 0.0)
 	global_position = global_position.lerp(tpos, 1.0 - exp(-delta * 8.0))
 	_orbit_cooldown -= delta
 	if not _orbiting and _orbit_cooldown <= 0.0 and target.forward_speed > 1.5:

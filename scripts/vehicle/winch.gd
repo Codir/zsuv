@@ -10,10 +10,10 @@ const DAMPING := 6000.0
 const REEL_SPEED := 1.4
 const MIN_LENGTH := 2.0
 const CAR_MIN_LENGTH := 0.6  # a car comes right up to the bumper
-const MOUNT := Vector3(0.0, 0.25, -2.4)
 const SEGMENTS := 10
 
 var vehicle: Vehicle
+var mount := Vector3(0.0, 0.25, -2.4)  # on the truck's front, in its frame (TruckSpec.winch_mount)
 var anchors := PackedVector3Array()
 var bodies: Array[StuckCar] = []  # cars that can be hooked; candidates after the anchors
 var attached := false
@@ -38,11 +38,11 @@ func _ready() -> void:
 	_marker = Psx.box(self, Vector3(0.35, 0.35, 0.35), Vector3.ZERO, Color(1.0, 0.85, 0.2), 2.5)
 	_marker.top_level = true
 	_marker.visible = false
-	Psx.box(self, Vector3(0.5, 0.3, 0.25), MOUNT + Vector3(0.0, 0.0, 0.1), Color(0.3, 0.3, 0.32))
+	Psx.box(self, Vector3(0.5, 0.3, 0.25), mount + Vector3(0.0, 0.0, 0.1), Color(0.3, 0.3, 0.32))
 
 
 func mount_position() -> Vector3:
-	return vehicle.global_transform * MOUNT
+	return vehicle.global_transform * mount
 
 
 func toggle() -> void:

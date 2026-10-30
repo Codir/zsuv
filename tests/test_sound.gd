@@ -35,7 +35,7 @@ func test_revs_climb_with_speed_and_drop_at_a_shift(t: TCase) -> void:
 	var a := v.audio
 	var c: Contracts = t.world.contracts
 	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw)
-	v.fuel = Vehicle.FUEL_CAPACITY
+	v.fuel = v.spec.fuel_capacity
 	t.ok(a.idle.playing and a.growl.playing, "the engine is not running")
 	t.ok(absf(a.idle.pitch_scale - 1.0) < 0.1, "idles at pitch %.2f" % a.idle.pitch_scale)
 	v.drive_along(t.world.roads[0].slice(1))
@@ -70,7 +70,7 @@ func test_labours_at_full_throttle_going_nowhere(t: TCase) -> void:
 	var a := v.audio
 	var farm: Vector2 = t.world.locations.farm.pos
 	await t.place(farm + Vector2(0.0, -4.0), 0.0)
-	v.fuel = Vehicle.FUEL_CAPACITY
+	v.fuel = v.spec.fuel_capacity
 	t.ok(a.labour < 0.1, "labours at rest: %.2f" % a.labour)
 	v.freeze = true
 	v.awd = true
@@ -94,7 +94,7 @@ func test_labours_at_full_throttle_going_nowhere(t: TCase) -> void:
 func test_tyres_crunch_snow_and_squelch_mud_when_they_roll(t: TCase) -> void:
 	var v: Vehicle = t.world.vehicle
 	var a := v.audio
-	v.fuel = Vehicle.FUEL_CAPACITY
+	v.fuel = v.spec.fuel_capacity
 	# Deep snow, standing, then rolling.
 	var dir := Vector2(1.0, 0.0)
 	var p := _snowfield(t.world.terrain, dir)
@@ -136,7 +136,7 @@ func test_the_engine_dies_on_an_empty_tank(t: TCase) -> void:
 	await t.ticks(150)
 	t.ok(not a.running, "runs on an empty tank")
 	t.ok(not a.idle.playing and not a.growl.playing, "still heard on an empty tank")
-	v.fuel = Vehicle.FUEL_CAPACITY
+	v.fuel = v.spec.fuel_capacity
 	await t.ticks(30)
 	t.ok(a.idle.playing and a.growl.playing, "does not start again with fuel")
 
@@ -146,7 +146,7 @@ func test_the_winch_motor_runs_only_while_reeling(t: TCase) -> void:
 	var a := v.audio
 	var winch := v.winch
 	await t.place(Vector2(-40.0, -60.0), 0.0)
-	v.fuel = Vehicle.FUEL_CAPACITY
+	v.fuel = v.spec.fuel_capacity
 	if not t.ok(winch.candidate >= 0, "no anchor in range"):
 		return
 	winch.toggle()

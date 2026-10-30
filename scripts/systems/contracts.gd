@@ -143,7 +143,7 @@ func take(o: Dictionary) -> void:
 	board_open = false
 	clock = 0.0
 	integrity = 1.0
-	vehicle.fuel = Vehicle.FUEL_CAPACITY
+	vehicle.fuel = vehicle.spec.fuel_capacity
 	_velocities.clear()
 	if o.kind == "stuck":
 		_spawn_car(o.ditch)
@@ -247,7 +247,7 @@ func _process(_delta: float) -> void:
 	elif _near(_depot):
 		if not slow:
 			prompt = "Stop at the depot"
-		elif not job.is_empty() and vehicle.fuel < Vehicle.FUEL_CAPACITY - 0.5:
+		elif not job.is_empty() and vehicle.fuel < vehicle.spec.fuel_capacity - 0.5:
 			prompt = "[E] Refuel, job board"
 		else:
 			prompt = "[E] Job board"
@@ -313,7 +313,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func recover() -> void:
 	money -= RECOVER_COST
-	vehicle.fuel = maxf(vehicle.fuel, Vehicle.FUEL_CAPACITY * 0.5)
+	vehicle.fuel = maxf(vehicle.fuel, vehicle.spec.fuel_capacity * 0.5)
 	vehicle.teleport(spawn_pos, spawn_yaw)
 	message.emit("The tow truck dragged you back to the depot. -$%d" % RECOVER_COST)
 
@@ -324,8 +324,8 @@ func _interact() -> void:
 	if not job.is_empty() and job.kind != "stuck" and _near(job.loc):
 		_deliver()
 	elif _near(_depot):
-		if not job.is_empty() and vehicle.fuel < Vehicle.FUEL_CAPACITY - 0.5:
-			vehicle.fuel = Vehicle.FUEL_CAPACITY
+		if not job.is_empty() and vehicle.fuel < vehicle.spec.fuel_capacity - 0.5:
+			vehicle.fuel = vehicle.spec.fuel_capacity
 			message.emit("Tank is full")
 		board_open = not board_open
 

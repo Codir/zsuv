@@ -87,7 +87,7 @@ func show_message(text: String) -> void:
 func _process(delta: float) -> void:
 	if vehicle == null:
 		return
-	var fuel_bars := roundi(vehicle.fuel / Vehicle.FUEL_CAPACITY * 10.0)
+	var fuel_bars := roundi(vehicle.fuel / vehicle.spec.fuel_capacity * 10.0)
 	_status.text = "%3d km/h  %s  %s  DIFF:%s\nFUEL %s%s %2d L\n$ %d%s" % [
 		roundi(absf(vehicle.forward_speed) * 3.6),
 		"LOW " if vehicle.low_range else "HIGH",

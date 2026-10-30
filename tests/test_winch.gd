@@ -7,7 +7,7 @@ func test_winch_pulls(t: TCase) -> void:
 	var winch := v.winch
 	await t.place(Vector2(-40.0, -60.0), 0.0)
 	v.set_cargo(true)
-	v.fuel = Vehicle.FUEL_CAPACITY
+	v.fuel = v.spec.fuel_capacity
 	if not t.ok(winch.candidate >= 0, "no anchor in range"):
 		return
 	t.ok(winch.prompt().begins_with("[F] Winch to anchor"), "prompt: " + winch.prompt())

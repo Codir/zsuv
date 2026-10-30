@@ -16,8 +16,10 @@ const MAX_RPM := 2000.0
 const LAUNCH_RPM := 400.0  # over idle at full throttle with the truck standing: the clutch slips
 ## The top speed of each gear, m/s: four in high range, two in low range (more revs for the
 ## speed: the truck sounds like it is working), and reverse.
-const HIGH_GEARS: Array[float] = [3.5, 7.0, 11.5, Vehicle.MAX_SPEED_HIGH]
-const LOW_GEARS: Array[float] = [2.5, Vehicle.MAX_SPEED_LOW]
+# Each gear's top speed as a share of the truck's top speed in high and in low range (the pickup:
+# 3.5, 7, 11.5 and 18 m/s; 2.5 and 5.5).
+const HIGH_GEARS: Array[float] = [3.5 / 18.0, 7.0 / 18.0, 11.5 / 18.0, 1.0]
+const LOW_GEARS: Array[float] = [2.5 / 5.5, 1.0]
 const DOWNSHIFT := 0.8  # down a gear below this share of the lower gear's top speed
 const ENGINE_DB := 0.0
 const SNOW_DB := -1.0
@@ -52,7 +54,7 @@ func _ready() -> void:
 	var front := Vector3(0.0, 0.4, -1.7)
 	idle = _player(IDLE, &"Engine", front)
 	growl = _player(LABOUR, &"Engine", front)
-	motor = _player(MOTOR, &"Sfx", Winch.MOUNT)
+	motor = _player(MOTOR, &"Sfx", vehicle.spec.winch_mount)
 	snow = _player(_randomizer("snow", SNOW_HITS), &"Sfx", Vector3.ZERO)
 	mud = _player(_randomizer("mud", MUD_HITS), &"Sfx", Vector3.ZERO)
 	snow.max_polyphony = 4
@@ -73,7 +75,9 @@ func _engine(delta: float) -> void:
 	var v := vehicle
 	var speed := absf(v.forward_speed)
 	var throttle := absf(v.drive)
-	var gears := LOW_GEARS if v.low_range else HIGH_GEARS
+	var gears: Array[float] = []
+	for share in LOW_GEARS if v.low_range else HIGH_GEARS:
+		gears.append(share * (v.spec.max_speed_low if v.low_range else v.spec.max_speed_high))
 	if v.drive < 0.0 or v.forward_speed < -0.5:
 		gear = -1
 	else:
@@ -82,11 +86,11 @@ func _engine(delta: float) -> void:
 			gear += 1
 		while gear > 1 and speed < gears[gear - 2] * DOWNSHIFT:
 			gear -= 1
-	var top := Vehicle.MAX_SPEED_REVERSE if gear < 0 else gears[gear - 1]
+	var top := v.spec.max_speed_reverse if gear < 0 else gears[gear - 1]
 	var tread := speed
 	for w in v.wheels:
-		if v.awd or not w.front:
-			tread = maxf(tread, absf(w.spin_speed) * Vehicle.WHEEL_RADIUS)
+		if v.awd or w.drive2:
+			tread = maxf(tread, absf(w.spin_speed) * w.radius)
 	var target := minf(maxf(IDLE_RPM + throttle * LAUNCH_RPM, tread / top * SHIFT_RPM), MAX_RPM)
 	var work := throttle * (0.3 + 0.7 * (1.0 - clampf(speed / top, 0.0, 1.0)))
 	running = v.fuel > 0.0
@@ -103,7 +107,7 @@ func _engine(delta: float) -> void:
 		return
 	if not idle.playing:
 		_start_engine()
-	var pitch := clampf(rpm / IDLE_RPM, 0.4, MAX_RPM / IDLE_RPM)
+	var pitch := clampf(rpm / IDLE_RPM, 0.4, MAX_RPM / IDLE_RPM) * v.spec.engine_pitch
 	var g := _gain * lerpf(0.7, 1.0, clampf(maxf(throttle, (rpm - IDLE_RPM) / (SHIFT_RPM - IDLE_RPM)), 0.0, 1.0))
 	idle.pitch_scale = pitch
 	growl.pitch_scale = pitch
@@ -125,7 +129,7 @@ func _tyres(delta: float) -> void:
 	var snow_depth := 0.0
 	var mud_depth := 0.0
 	for w in vehicle.wheels:
-		var tread := absf(w.spin_speed) * Vehicle.WHEEL_RADIUS
+		var tread := absf(w.spin_speed) * w.radius
 		if not w.contact or tread < MIN_TREAD:
 			continue
 		var s := w.surface
