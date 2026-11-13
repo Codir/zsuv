@@ -49,7 +49,7 @@ Khutir Road's, and they change as the plan lands.
 | R | flip upright |
 | Right mouse + drag, wheel | orbit and zoom the camera |
 | F1 | the help: a short hint in the corner, then every key, then none |
-| Esc | back to the valleys |
+| Esc | back to the title |
 
 Keys are physical, so they sit in the same place on any keyboard layout.
 

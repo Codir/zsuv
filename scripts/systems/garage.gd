@@ -1,7 +1,7 @@
 class_name Garage
 extends RefCounted
 ## What the garage at a depot sells, cheapest first: a trailer on its own, or a truck with the
-## trailer it comes with, each once, from the wallet the valleys are bought from; and what a job
+## trailer it comes with, each once, from the wallet; and what a job
 ## needs of the rig in play (docs/trucks.md). The pickup is everyone's from the start.
 
 

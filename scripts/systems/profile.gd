@@ -1,19 +1,23 @@
 class_name Profile
 extends RefCounted
-## What a player keeps between drives: the money, the valleys bought, the sky picked for each,
-## the records, the trucks and trailers bought and the truck picked. Saved to user:// on every change (in a browser that is its IndexedDB); a profile
-## with no path is kept in memory only, as the tests and the captures use it.
+## What a player keeps between drives: the money, the records, the trucks and trailers bought,
+## the truck picked and where they were last. Saved to user:// on every change (in a browser that
+## is its IndexedDB); a profile with no path is kept in memory only, as the tests and the captures
+## use it. docs/plan.md §11 is what it becomes.
 
 const PATH := "user://zsuv.cfg"
 
 var path := ""
 var money := 0
-var owned := PackedStringArray(["khutir"])
-var skies := {}  # valley id -> Weather.Kind
 var records := {}  # job key -> {time, medal}
-var last := "khutir"
+var last := "steppe"  # the valley the game was in; a new game starts in the steppe
 var rigs := PackedStringArray()  # the trucks and trailers bought (TruckSpec, TrailerSpec ids)
 var truck := "pickup"  # the truck the garage puts at the depot
+
+
+## Whether there is a save at at to continue.
+static func exists(at := PATH) -> bool:
+	return at != "" and FileAccess.file_exists(at)
 
 
 static func open(at := PATH) -> Profile:
@@ -27,16 +31,14 @@ static func open(at := PATH) -> Profile:
 	var money: Variant = cfg.get_value("progress", "money", p.money)
 	if typeof(money) in [TYPE_INT, TYPE_FLOAT]:
 		p.money = int(money)
-	p.owned = _ids(cfg.get_value("progress", "owned", p.owned), p.owned)
 	p.rigs = _ids(cfg.get_value("progress", "rigs", p.rigs), p.rigs)
 	p.truck = _value(cfg, "truck", TYPE_STRING, p.truck)
 	if not p.has_rig(p.truck) or TruckSpec.find(p.truck) == null:
 		p.truck = "pickup"
 	p.last = _value(cfg, "last", TYPE_STRING, p.last)
-	p.skies = _value(cfg, "skies", TYPE_DICTIONARY, p.skies)
+	if Valley.find(p.last) == null:
+		p.last = "steppe"
 	p.records = _value(cfg, "records", TYPE_DICTIONARY, p.records)
-	if not "khutir" in p.owned:
-		p.owned.append("khutir")
 	return p
 
 
@@ -61,42 +63,11 @@ func save() -> void:
 		return
 	var cfg := ConfigFile.new()
 	cfg.set_value("progress", "money", money)
-	cfg.set_value("progress", "owned", owned)
 	cfg.set_value("progress", "last", last)
-	cfg.set_value("progress", "skies", skies)
 	cfg.set_value("progress", "records", records)
 	cfg.set_value("progress", "rigs", rigs)
 	cfg.set_value("progress", "truck", truck)
 	cfg.save(path)
-
-
-func owns(valley_id: String) -> bool:
-	return valley_id in owned
-
-
-## Why valley v cannot be bought yet ("" when it can): they open in order, for money.
-func cannot_buy(v: Valley) -> String:
-	if owns(v.id):
-		return "owned"
-	var all := Valley.all()
-	for i in all.size():
-		if all[i].id == v.id:
-			if i > 0 and not owns(all[i - 1].id):
-				return "open %s first" % all[i - 1].title
-			break
-	if money < v.price:
-		return "$%d more to earn" % (v.price - money)
-	return ""
-
-
-## Buys valley v if it can: true when it did.
-func buy(v: Valley) -> bool:
-	if cannot_buy(v) != "":
-		return false
-	money -= v.price
-	owned.append(v.id)
-	save()
-	return true
 
 
 ## Whether the truck or trailer id is the player's (the pickup always is).
@@ -131,15 +102,3 @@ func record(key: String) -> Dictionary:
 	if typeof(best) != TYPE_DICTIONARY or typeof(best.get("time")) not in [TYPE_INT, TYPE_FLOAT]:
 		return {}
 	return best
-
-
-func sky(valley_id: String) -> Weather.Kind:
-	var kind: Variant = skies.get(valley_id, Weather.Kind.OWN)
-	if typeof(kind) != TYPE_INT or kind < 0 or kind >= Weather.Kind.size():
-		return Weather.Kind.OWN
-	return kind
-
-
-func set_sky(valley_id: String, kind: Weather.Kind) -> void:
-	skies[valley_id] = kind
-	save()

@@ -4,7 +4,7 @@ extends Node3D
 const POST_SHADER := preload("res://shaders/post_dither.gdshader")
 const TOW_HOME := 30.0  # m from the spawn: a trailer further off than this the tow brings back
 
-signal leave  # Esc: back to the valleys (scripts/game.gd)
+signal leave  # Esc: back to the title (scripts/game.gd)
 
 var valley: Valley  # set before the scene enters the tree; the khutir valley if not
 var profile: Profile  # the same; a profile in memory if not

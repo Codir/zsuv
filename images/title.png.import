@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cpjo5ue3spyff"
-path="res://.godot/imported/steppe.png-8792c0d087a15d17783e790d784c96b5.ctex"
+uid="uid://bvy0432a75rug"
+path="res://.godot/imported/title.png-5fed1d34c042d533601bd35ed11a0a68.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://previews/steppe.png"
-dest_files=["res://.godot/imported/steppe.png-8792c0d087a15d17783e790d784c96b5.ctex"]
+source_file="res://images/title.png"
+dest_files=["res://.godot/imported/title.png-5fed1d34c042d533601bd35ed11a0a68.ctex"]
 
 [params]
 

@@ -10,7 +10,6 @@
 #   ./godot.sh web                   export Web and serve it on http://localhost:8060
 #   ./godot.sh capture               record the trailer scenes into capture/trailer/ (tools/make_media.py)
 #   ./godot.sh soundcheck            record the game's mix on a scripted drive into capture/soundcheck.wav
-#   ./godot.sh previews              render the valleys screen's pictures into previews/
 # Works with the bash 3.2 of a stock Mac as well as Git Bash on Windows.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -81,7 +80,5 @@ case "$cmd" in
     cat "$out/done.txt";;
   soundcheck) fetch; imported; out="$(pwd -W 2>/dev/null || pwd)/capture/soundcheck.wav"
     ${LIMIT:+$LIMIT 300} "$BIN" --headless --path . -s res://tests/soundcheck.gd -- --out="$out" 2>&1 | grep -v "^Godot Engine\|^autodrive pos";;
-  previews) fetch; imported; out="$(pwd -W 2>/dev/null || pwd)/previews"
-    ${LIMIT:+$LIMIT 600} "$BIN" --path . -s res://scripts/capture/previews.gd -- --out="$out" 2>&1 | grep "^previews"; imported;;
-  *) sed -n '2,14p' godot.sh; exit 1;;
+  *) sed -n '2,13p' godot.sh; exit 1;;
 esac

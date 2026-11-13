@@ -1,5 +1,5 @@
 extends Node
-## The game: the valleys screen, then a valley in play; Esc in a valley comes back to the valleys.
+## The game: the title, then the world in play; Esc in play comes back to the title.
 ## --valley=<id> goes straight into a valley, and so do --autodrive, --capture=..., --maptest and
 ## --winchtest (the khutir valley), with a profile kept in memory.
 
@@ -8,7 +8,7 @@ const DIRECT := ["--autodrive", "--maptest", "--winchtest", "--capture="]
 
 var profile_path := Profile.PATH  # the tests keep theirs apart
 var profile: Profile
-var screen: StartScreen
+var screen: TitleScreen
 var world: Node
 
 
@@ -26,14 +26,24 @@ func _ready() -> void:
 		enter(v if v else Valley.khutir(), Weather.Kind.OWN)
 	else:
 		profile = Profile.open(profile_path)
-		show_valleys()
+		show_title()
 
 
-func show_valleys() -> void:
-	screen = StartScreen.new()
-	screen.profile = profile
+func show_title() -> void:
+	screen = TitleScreen.new()
+	screen.can_continue = Profile.exists(profile_path)
 	add_child(screen)
-	screen.drive.connect(enter)
+	screen.start.connect(_start)
+
+
+## New game wipes the save and starts in the steppe (docs/plan.md §1); Continue goes back to
+## where the save was. Until the biomes are one map, that is the valley it was in.
+func _start(fresh: bool) -> void:
+	if fresh:
+		profile = Profile.new()
+		profile.path = profile_path
+	var v := Valley.find(profile.last)
+	enter(v if v else Valley.steppe(), Weather.Kind.OWN)
 
 
 func enter(v: Valley, kind: Weather.Kind) -> void:
@@ -51,7 +61,7 @@ func enter(v: Valley, kind: Weather.Kind) -> void:
 
 
 ## A key let go outside the window or the browser frame never reaches the game; main.gd lets go
-## of every key in a valley, and this does on the valleys screen, or the truck would drive off
+## of every key in a valley, and this does on the title, or the truck would drive off
 ## with nothing pressed in the next valley.
 func _notification(what: int) -> void:
 	if world == null and (what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT):
@@ -63,4 +73,4 @@ func _notification(what: int) -> void:
 func _leave() -> void:
 	world.queue_free()
 	world = null
-	show_valleys()
+	show_title()
