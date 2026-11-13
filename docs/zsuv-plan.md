@@ -6,7 +6,11 @@ stations by hauling in resources and fuel. You break up the ground: dig it, and 
 bridges to open the map. A scout car carries nothing: you only drive it, to explore. The owner
 builds it in a local session. After reading the first draft, the owner asked for more of the
 off-road genre: the engine flooding in water, the interactions between trucks, and a winch aimed
-with the mouse (§8).
+with the mouse (§8). After the second draft: hauling for money between fixed points is not the
+game. Fuel runs out, so you cannot go just anywhere; you build fuel stations, and for them you
+bring concrete in a mixer, timber and the rest. The player decides what is needed where, and
+builds production too: a sawmill in a forest on the way, so timber does not come from far.
+Nobody knows what is out there until they drive to it, and a goal pulls them on (§1, §5, §6).
 
 This file lists **only what changes** from Khutir Road 0.3.0 (commit `9682b06`). Anything it does
 not name stays as it is: the raycast wheels and the tyres on snow, mud and ice, the five rigs,
@@ -46,30 +50,52 @@ code and its tests win, and this file is corrected.
 ## 1. SHIFT, and what the player does
 
 **The pitch.** It is spring after the floods. Landslides have *shifted* the hillsides onto the
-roads, the river took the bridge, and the villages up the valley are cut off. You are the road
-crew: scout the valley, dig through the slides, haul gravel, timber, concrete and fuel, and build
-outposts, fuel stations, roads and bridges until the valley is open again. You shift the land
-back: every cubic metre you dig is carried somewhere and dumped. The HUD counts the m³ shifted,
-and the end card shows the total.
+roads, the river took the bridges, and the upper village at the far end of the valley is cut off.
+You are the road crew sent from the railhead: get a road through to the village. Nobody knows
+what the valley looks like now. You find out by driving it.
+
+**The goal** is set in the first minute. The upper village calls on the radio. Its rough place is
+marked on the paper map ("about here"), and the HUD's arrow points at it. To finish, a truck brings
+the village what it asks for (fuel 800 L and parts 2) along a road you made passable. Smaller
+things pull you along the way:
+- radio masts that show the land around them once repaired;
+- ruins worth rebuilding;
+- trucks left in the floods, to bring back to life;
+- the village's calls as you get nearer.
+
+**The limit is fuel, not money.** There is no money in this game. A tank lasts a couple of
+kilometres, and past that you need a fuel station out there, with fuel in it.
+- A fuel station needs concrete. Concrete is mixed at a concrete plant and sets in its mixer in
+  5 minutes.
+- The ravine's bridge needs timber, and the timber is far. So you build a sawmill in a forest on
+  the way, keep it in fuel, and haul its timber from there.
+- **What to build, and where, is the player's call.** The game says what a building needs, never
+  where it goes.
+
+**You shift the land to do it.** You dig through the slides, level a spot for a building, fill a
+ravine, and spread gravel into a road. The HUD counts the m³ shifted, and the end card shows the
+total.
 
 This uses the theme three ways. *Zsuv* means both shift and landslide, you move earth, and the
 gearbox gets gears you shift by hand (§8).
 
 **The first ten minutes** carry the jam score, because most voters play for 5-15 minutes:
 
-1. You start at the base camp in the scout. The paper map (M) is blank paper except for the
-   ground around the camp. You drive out, and the map draws itself as you go. You find the
-   quarry, the river with its bridge gone, and the north road buried under a landslide.
-2. Back at the camp, the tractor and its tipper stand by the garage: **E** beside it and you step
-   across, leaving the scout parked. At the landslide,
-   hold **B**: the tractor's front bucket bites into the slide and fills the tipper. You drive off
-   the road, hold **V** to tip, and the heap pours out behind. A few loads later, the road is
-   through.
-3. Over the ridge the map opens: a forestry, a khutir, and the stakes of an outpost to build.
+1. **The village calls.** You start at the railhead in the scout. The paper map (M) is blank paper
+   except around the camp and the village's mark. You drive out, and the map draws itself as you
+   go: stony ground for a quarry, the river with its bridge gone, the north road buried under a
+   landslide. The fuel gauge falls.
+2. **The slide.** Back at the camp, the tractor and its tipper stand by the garage: **E** beside it
+   and you step across, leaving the scout parked. At the landslide, hold **B**: the tractor's front
+   bucket bites into the slide and fills the tipper. You drive off the road, hold **V** to tip, and
+   the heap pours out behind. A few loads later, the road is through.
+3. **The first decision.** Over the ridge are a thick forest, a ruined sawmill, and a 6x6 left in
+   the mud with an empty tank. It is too far to work from the railhead on one tank. Where does the
+   first fuel station go?
 
-**The whole arc** is about 45-60 minutes. Four regions are opened by five barriers. Sites are
-built from four resources. The game ends when the mountain village is reached and supplied, then
-play goes on.
+**The whole arc** is about 60 minutes. Four regions are opened by five barriers. You build from
+five resources, with production you place yourself. The game ends when the village gets its fuel
+and parts, then play goes on.
 
 ## 2. The fork: a separate project
 
@@ -111,41 +137,56 @@ The owner's local session does this first, in this order:
 - **What goes:** the five valleys, the valleys screen, buying valleys, and picking a sky.
   `Valley.all()` becomes the one map, `Valley.zsuv()`. The `Valley` class stays as the map's data,
   so `Terrain`, `WorldBuilder` and the tests keep their shape. The five valleys' place builders
-  (`_build_sawmill`, `_build_forestry`, `_build_koliba`…) stay, reused for the new map's places.
+  (`_build_sawmill`, `_build_forestry`, `_build_koliba`…) stay, reused for the ruins, the
+  railhead and the village, and for the buildings the player puts up.
 - **Weather and season:** spring after the floods, an overcast morning, mud in the lows and snow
   above about 25 m only (`layer_from`, as Zakarpattia has it). One sky, `Weather` as it is.
 
 ```
  -z (north)
  +-----------------------------+-----------------------------+
- | NW  THE FOREST SIDE         | NE  THE HIGH VILLAGE (end)  |
- |  forestry (timber)          |  mountain village           |
- |  khutir                     |  weather station            |
- |  outpost site O1 + pump ===ravine G1===> (fill or bridge) |
- |  gravel road site R1 (bog)  |          ^ landslide L2     |
+ | NW  THE FOREST SIDE         | NE  THE UPPER VILLAGE (goal)|
+ |  thick forest               |  the village                |
+ |  a ruined sawmill           |  a gravel deposit           |
+ |  a 6x6 left in the mud      |  a radio mast on the ridge  |
+ |  a radio mast on a hill ===ravine G1===> (bridge or fill) |
+ |  a washed-out road R1 (bog) |          ^ landslide L2     |
  |~~ hillside: landslide L1 ~~~|~~~~~~~~ steep slope ~~~~~~~~|
  +------------------- the river, north to south -------------+
- | SW  BASE CAMP (start)       | SE  ACROSS THE RIVER        |
- |  depot, pump, garage        |  fuel depot (fuel)          |
- |  concrete yard (concrete)   |  village (supply orders)    |
- |  quarry (gravel)  ==bridge site B1==> fuel station F1     |
+ | SW  THE RAILHEAD (start)    | SE  ACROSS THE RIVER        |
+ |  fuel and parts, no end     |  the railway yard: a semi   |
+ |  a concrete plant, a garage |  a pine forest              |
+ |  a gravel deposit           |  an old fuel depot, 3000 L  |
+ |              ==old bridge B1 (gone)==>                    |
  +-----------------------------+-----------------------------+
  +z (south)
 ```
+
+None of these is built by the game but the railhead. What the player finds is what can be built
+on or with: forests, gravel deposits, ruins, crossings (an old bridge's abutments), washed-out
+roads, radio masts, and trucks.
 
 ### The barriers, and what opens each
 
 | Barrier | Between | What it is | Opened by |
 |---|---|---|---|
 | L1, landslide | SW to NW | a mound over the north road, ~3 m high, ~16 m along it, ~40 m³ | digging it out (tractor) |
-| B1, river bridge | SW to SE | the river in a wide bed, too deep to drive, its bridge gone | concrete ×2, timber ×2, gravel ×1 |
-| R1, washed-out road | in NW | ~60 m of deep mud between the landslide and the outpost site, where a loaded pickup bogs | a gravel road (§5): about 2 loads spread |
-| G1, ravine | NW to NE | the river's upper course, ~10 m wide, ~5 m deep, steep sides | filling it (~80 m³ of soil, dug from its own banks) **or** a timber bridge (timber ×2, gravel ×1): the player's choice |
+| R1, washed-out road | in NW | ~60 m of deep mud, where a loaded truck bogs | a gravel road (§5): about 2 loads spread |
+| G1, ravine | NW to NE | the river's upper course, ~10 m wide, ~5 m deep, steep sides | a timber bridge (timber 3) **or** filling it (~80 m³ of soil, dug from its own banks): the player's choice |
+| B1, river crossing | SW to SE | the river in a wide bed, too deep to drive, its bridge gone | a bridge (concrete 2, timber 3), or a 6x6 with a snorkel through the shallows (§8) |
 | L2, landslide | SE to NE | a bigger slide on the switchbacks, ~90 m³ | digging it out |
 
-**The critical path needs only the starting rigs:** L1 dug out, R1 gravelled, outpost O1 built,
-G1 filled, and the village. The river bridge, SE and L2 are the faster, richer route for players
-who buy the 6x6 and the semi.
+**The critical path** needs only the trucks you start with and the 6x6 you find:
+1. dig out L1;
+2. put a fuel station in NW and stock it;
+3. bring the 6x6 back to life;
+4. build a sawmill in the NW forest (or rebuild the old one) and bridge G1 with its timber, or
+   fill G1 instead;
+5. put a fuel station in NE;
+6. deliver to the village.
+
+The river, SE and L2 are optional. They are a richer route, with the semi, a second forest and
+the old fuel depot.
 
 ### What the terrain needs (`scripts/world/terrain.gd`)
 
@@ -205,16 +246,19 @@ who buy the 6x6 and the semi.
   |---|---|
   | The scout | 90 m, up to 150 m when it stands 15 m or more above the ground within 60 m (on a hilltop) |
   | Any other truck | 40 m |
-  | A built base or fuel station | 80 m around it |
+  | Any building of yours | 60 m around it |
+  | A radio mast, repaired | 250 m around it |
 
 - **The paper map (M):** fogged paper is drawn blank with a pencil hatch, the revealed part as
   today. The whole map at 0.47 px/m fits the 240 px map. The mouse wheel or **Z** zooms to 256 m
   about the truck, so marks stay readable at 480x270.
-- **Discovery.** A place, source or site whose centre comes into the revealed area is *found*:
-  - a message ("Found: Quarry");
+- **Discovery.** A thing whose centre comes into the revealed area is *found*: a forest, a
+  gravel deposit, a ruin, a crossing, a washed-out road, a radio mast, a truck or the village.
+  Finding it gives:
+  - a message ("Found: a ruined sawmill");
   - its marker pole in the world;
-  - its mark on the map, plus its needs for a site;
-  - its line on the board.
+  - its mark on the map;
+  - its line in the map's ledger (§9).
 
   Nothing unfound is shown anywhere.
 - **The scout's track.** The trail the map already draws behind the truck (`_trail`) is kept for
@@ -265,105 +309,117 @@ m³ shifted.
   churns it: mud (`snow_img` G) at the wheel grows by 0.01 a tick, up to 1. The dirt tracks that
   get the most traffic turn to bog, and gravel does not churn. That makes a gravel road worth
   building. Real ruts in the heights are a stretch (§13).
+- **Levelling a spot.** A building needs level ground (§5). Where the player wants one on a slope,
+  they level it with the bucket first. A building does not flatten its own pad.
+- **A quarry digs its own pit.** Each load of gravel it makes takes the same volume off the ground
+  inside its footprint, through `set_heights`. The pit is seen growing, and the quarry stops when
+  it is 4 m deep.
 
-## 5. Building: sites
+## 5. Infrastructure, built where the player chooses
 
-### The sites
+### Placing a building
 
-A **site** is a place on the map with stakes and a sign: what it becomes and what it needs.
-Sites are data in the map, as places are:
+- **P**, stopped, opens the list of what can be built (keys 1-7). The building picked shows its
+  footprint, which follows the mouse cursor on the ground within 40 m of the truck. It uses the
+  same ray as the winch's aim (§8). The mouse wheel turns it, left click places it, and Esc
+  cancels.
+- **Green or red.** The footprint is green where the building can go and red where it cannot, with
+  the reason:
+  - "Not level: 1.4 m. Level it with the bucket (§4)": more than 0.6 m between its highest and
+    lowest corner;
+  - on a road, in water, on ice, or within 6 m of another building or a found place;
+  - what the building needs around it: a sawmill needs 12 trees within 40 m ("Only 5 trees
+    here"); a quarry needs a gravel deposit.
+- **Placed, it is a site:** stakes and a sign, with its needs in the ledger. Trees and rocks inside
+  its footprint go. P beside a site with nothing delivered yet takes it down again.
+- **Building it.** E at the site, stopped with a load it needs, unloads that load (a load in a
+  trailer comes off only with the trailer hitched, as today). When every need is in, the building
+  stands. The stakes go and a message says what it does. A short puff of dust is a nice extra.
 
-```gdscript
-"o1": {"name": "Forest Outpost", "pos": Vector2(...), "radius": 12.0, "site": "outpost",
-       "needs": {"parts": 2, "gravel": 2}, "pays": 800}
-```
+### What can be built
 
-| Site | Needs (units) | Built, it gives |
-|---|---|---|
-| **Outpost** (base) | parts 2, gravel 2 (+ timber 1 for the far ones) | **a depot**: the board, the garage (any truck owned is driven from here), a pump with a fuel stock, the tow's destination, a spot for trailers. Its pad is levelled when built. |
-| **Fuel station** | parts 1, gravel 1, then fuel | **a pump** with a fuel stock |
-| **Bridge** | concrete 2, timber 2, gravel 1 (the river); timber 2, gravel 1 (the ravine) | **a deck over the gap span**: a StaticBody3D of boxes (deck, rails, piers or trestles) at the road's level at both ends. The road's gap span becomes passable. |
-| **Landslide** | digging, no deliveries | the road under it is clear: done when 85% of the slide above the road's level in the road's corridor (7 m wide) is gone and the corridor is drivable (below) |
-| **Ravine fill** | soil, dumped in | done when the corridor across it is drivable; then its surface becomes a road |
-| **Gravel road** | gravel, spread (V) | done when 90% of its staked corridor is covered. Then the corridor is **graded**: its profile is smoothed the way `_profile` smooths a road (14 m, 22% at most), it is marked as road, the mud and soft layer go, and it no longer churns. |
+| Building | Needs (loads) | Where | Burns | What it does |
+|---|---|---|---|---|
+| **Fuel station** | concrete 1, parts 1 | level ground | | Holds 2000 L of fuel, brought in with E. E there, stopped, fills a tank from it. With nothing in it, it says "Dry: bring fuel". |
+| **Sawmill** | parts 2, timber 1, gravel 1 | level ground, 12 or more trees within 40 m | 30 L a load | Makes timber: a load every 2 minutes while it has fuel and trees. It fells the trees nearest it, and they go from the world and the map. It holds 3 loads. With no trees left in reach it stops ("Felled out"), and the next sawmill goes further on. |
+| **Quarry** | parts 1, timber 1 | on a gravel deposit | 20 L a load | Makes gravel: a load every 90 s, digging its pit (§4). It holds 3 loads. |
+| **Concrete plant** | parts 2, timber 2, gravel 1 | level ground | 10 L a load | Makes concrete from gravel brought to it (it holds 4), one for one, poured into a mixer under its chute. Concrete sets in 5 minutes, so a plant closer to the work is often worth building. |
+| **Outpost** | parts 2, timber 2, concrete 1 | level ground, 20x16 m | | A base (below): a garage, where the tow takes you, a yard that keeps any 6 loads, and a 1000 L tank. |
+| **Bridge** | over the ravine: timber 3; over the river: concrete 2, timber 3 | only at a crossing found (an old bridge's abutments) | | A deck over the gap: a StaticBody3D of boxes (deck, rails, piers or trestles) at the road's level at both ends. The road's gap span becomes passable. |
+| **Gravel road** | gravel, spread with V | a washed-out stretch found (its corridor staked) | | Done when 90% of the corridor is covered. Then the corridor is **graded**: its profile is smoothed the way `_profile` smooths a road (14 m, 22% at most), it is marked as road, the mud and soft layer go, and it no longer churns. |
+| **Ravine fill** | soil, dumped in | at the ravine G1 | | Done when the corridor across it is drivable. Its surface then becomes a road. |
+| **Radio mast** (found broken) | parts 1 | as found | | Shows the map 250 m around it. |
+| **The upper village** (the goal) | fuel 800 L, parts 2 | as found | | The end card (§9). |
+
+A **landslide** needs no deliveries. It is clear when 85% of the slide above the road's level in
+the road's corridor (7 m wide) is gone, and the corridor is drivable.
 
 **Drivable**, for a landslide, a fill or a road: along the corridor's centre line no metre climbs
-more than 0.4 m, and across its width it is level to 0.5 m. The same check as
-`test_terrain_shape.gd`, run on the live heights. A road site whose corridor is too steep says
-where ("Too steep 40 m along: dig or fill there first"). That is where earthworks come into road
+more than 0.4 m, and across its width it is level to 0.5 m. This is the same check as
+`test_terrain_shape.gd`, run on the live heights. A road whose corridor is too steep says where
+("Too steep 40 m along: dig or fill there first"). That is where earthworks come into road
 building.
 
-### Delivering
+### The railhead, ruins and production
 
-- **A unit** is one load of a resource, so a site's needs are counted in loads. The bigger rigs
-  carry more per trip (§6).
-- **E at a site**, stopped with a load it needs, unloads it into the site's stock (a load in a
-  trailer comes off only with the trailer hitched, as today). Each unit pays $100 times the
-  site's pay. When every need is met, the site is **built on the spot**: the stakes go, the
-  structure stands, the site pays its `pays`, and a message says what it opened. A short dust
-  puff is a nice extra.
-- **Sites accept any load they need**, whoever's it is. A load is not bound to a site; the map
-  shows every site's needs.
+- **The railhead** is the one place built from the start. It has:
+  - fuel and parts that never run out;
+  - a concrete plant, with 2 loads of gravel in it;
+  - a garage;
+  - 4 loads of timber in its yard, enough for the first buildings.
+- **Ruins** found on the map cost less. The old sawmill in NW needs only parts 1 to run again.
+  The old fuel depot in SE still holds 3000 L.
+- **Production goes on while the player is away.** Buildings work in game time wherever the
+  player is, so a sawmill left with fuel fills up. Its timers are saved (§11).
+- **The loads' looks** are Khutir Road's, reused: the bulk heaps in the tipper, the logs on a bed
+  or the semi-trailer, the crates and barrels on the pickup. A tank on the 6x6's bed and the
+  mixer's drum are new.
 
 ### More than one base
 
 Khutir Road has one depot: `Contracts._depot`, `spawn_pos`, and `main.gd` parking the trailers
-about the spawn. Here the base camp is the first base and each outpost built is another.
+about the spawn. Here the railhead is the first base and each outpost built is another.
 
-- `_near(_depot)` becomes "near any built base". The board and the garage say which base they are
-  at.
-- **T (tow)** takes the truck to the **nearest built base**: $100 plus $1 per 20 m.
-- **The garage** puts a truck that is in the garage at the base it is opened at, with its
-  trailers parked about that base's spawn. `_parking` already works about a spawn. Trucks and
-  trailers out on the map stay where they were left (§8); the tow brings the truck it tows, and
-  its trailer, to the base it tows to.
+- `_near(_depot)` becomes "near any base". The garage says which base it is at.
+- **T (tow)** takes the truck being driven, with its trailer, to the **nearest base**. The load on
+  the truck is lost; that is what a tow costs.
+- **The garage** puts a truck that is in the garage at the base it is opened at, with its trailers
+  parked about that base's spawn. `_parking` already works about a spawn. Trucks and trailers out
+  on the map stay where they were left (§8).
 
-## 6. Resources, sources and the board
+## 6. Resources: what is hauled, on what
 
-| Resource | Where it is loaded (E at the source, stopped) | Rig and load kind | Units a trip |
-|---|---|---|---|
-| Gravel | the quarry (SW) | tractor + tipper (bulk) | 1 |
-| Soil | anywhere, dug (§4) | tractor + tipper (bulk) | n/a: m³ |
-| Parts (tools, panels) | the base camp, any outpost | pickup (plain); pickup + trailer (double) | 1; 2 |
-| Fuel (barrels) | the base camp, the fuel depot (SE) | pickup (plain); pickup + trailer (double) | 1 = 400 L; 2 |
-| Concrete (blocks, rings) | the concrete yard at the base camp | 6x6 (heavy) | 1 |
-| Timber (logs, beams) | the forestry (NW) | 6x6 (on its bed, 3500 kg); semi (long) | 1; 2 |
+Five resources, plus the soil you dig. Every building's needs are counted in **loads**, except
+fuel, which is counted in litres.
 
-Loading is free. A source is a place with `gives` in the map's data, built by its own
-`_build_<kind>`: the quarry is new, and the forestry, the yard and the fuel depot reuse the old
-builders.
+| Resource | Comes from | Carried by |
+|---|---|---|
+| **Fuel** | the railhead (no end), the old fuel depot (SE), any building's tank | pickup: barrels, 400 L, or 800 L with its trailer; 6x6: a tank on its bed, 2000 L |
+| **Parts** (nails, pipes, pumps, sheet: the hardware) | the railhead (no end), an outpost's yard | pickup: 1 load, or 2 with its trailer |
+| **Gravel** | a quarry, the railhead's first 2 | tractor + tipper: 1 load |
+| **Timber** | a sawmill, the railhead's first 4 | tractor + farm trailer: 1 load; 6x6: 1; semi: 3 |
+| **Concrete** | a concrete plant | the mixer: 1 load, which sets in 5 minutes (§7) |
+| Soil | dug anywhere (§4) | tractor + tipper, in m³ |
 
-**Fuel is a stock.**
-- The base camp's pump never runs dry.
-- An outpost's pump and a fuel station start empty. Each fuel unit delivered adds 400 L.
-- **E at a pump**, stopped, fills the tank from the stock. With an empty stock, it says "Dry:
-  bring fuel".
-- The heavy rigs burn a lot (the 6x6 1.8 times), so the far regions need their pumps stocked.
-  That is the "заправка" in the brief.
+- **Loading:** E at a building's yard (or the railhead's), stopped, with a truck that carries that
+  resource and has room. One load goes on, and fuel fills to what the truck carries.
+- **Unloading:** E at a site that needs the load, or at a building that takes it: fuel into any
+  building's tank, gravel into a concrete plant, any load into an outpost's yard (up to 6).
+- **Fuel is the frontier.** Today's burn is 0.04 L/s idling, up to 0.45 L/s at full throttle,
+  times the truck's burn. A pickup's 80 L goes about 2 km of road, less off it in low range. The
+  far corner and back is out of reach on one tank. The buildings burn fuel too (the sawmill, the
+  quarry, the plant), so a working sawmill needs fuel brought to it. If the tanks reach too far
+  in playtests, raise the burn rather than the map.
+- **No money, anywhere.** The job board goes, with all its job kinds and their pay, the medals and
+  records, the stuck cars, the wallet and the prices. Things are paid for in loads and fuel
+  instead:
+  - The garage's repair and addons cost parts from the base's yard.
+  - Fetching a truck to a base costs 50 L from the base's tank.
+  - The tow costs the load on the truck.
 
-**The board** (E at a base) shows two lists:
-- **Supply orders** are Khutir Road's jobs as they are (plain, double, heavy, bulk, long),
-  offered only to places found in a region already opened, i.e. one whose barrier on the way
-  from this base is done. Reconnecting a village opens its orders, and they are the steady
-  income.
-- **Sites** lists each site found, with its stock against its needs ("Forest Outpost: parts 1/2,
-  gravel 0/2").
+## 7. The trucks: two new, two to find
 
-**What goes from the jobs:** timed jobs with their medals and records, fragile loads, and stuck
-cars with their ditches. They go to keep the scope down, and their tests go with them.
-
-**Prices** (garage, one wallet as today):
-
-| Rig | Price |
-|---|---|
-| The scout, the pickup, the tractor + tipper | owned from the start |
-| The trailer | $400 |
-| The 6x6 | $2500 |
-| The semi + semi-trailer | $3500 |
-
-The player starts with $300. The garage's addons (snorkel, chains, long winch) are in §8.
-
-## 7. The scout
+### The scout
 
 A new `TruckSpec`, `TruckSpec.scout()`, with a body of its own (`Vehicle._build_scout`):
 
@@ -375,15 +431,42 @@ A new `TruckSpec`, `TruckSpec.scout()`, with a body of its own (`Vehicle._build_
 | Top speed | about 65 km/h on the flat, as measured (the pickup does 48) |
 | Turns in | about 4.5 m |
 | Fuel | 45 L, burns 0.5 times the pickup's |
-| Carries | **nothing**: `cargo_mass` empty, `tows` empty, no hitch. The board says "SCOUT: carries nothing" against every order, and a source or a site says so on E. |
+| Carries | **nothing**: `cargo_mass` empty, `tows` empty, no hitch. E at a yard or a site says "The scout carries nothing". |
 | Winch | yes, at the front, 20 m: it is light and gets itself out |
 | Intake | 0.8 m, 1.6 m with the snorkel (§8): it floods first, so the scout finds the fords, it does not take them |
 | Camera | closer (8 m), lower |
 | Sound | the pickup's recordings, pitched up (`engine_pitch` about 1.3) |
 | Its job | revealing (§3): 90-150 m against 40 m; its track is kept and drawn for the others to follow |
 
-The game starts in the scout. `Profile.truck` defaults to `"scout"`, and the pickup and the
-tractor stand parked at the base camp, out on the map (§8).
+### The mixer
+
+A new `TruckSpec`, `TruckSpec.mixer()`, on the semi truck's chassis and wheels
+(`Vehicle._build_mixer`):
+
+| | |
+|---|---|
+| Look | the semi truck's cab, a drum behind it that turns while it carries concrete, a chute at the back |
+| Wheels | 6, 6x4, low range |
+| Mass | 9000 kg empty, 6000 kg more loaded |
+| Top speed | about 45 km/h |
+| Fuel | 200 L, burns 1.6 times |
+| Carries | concrete only, 1 load, loaded under a concrete plant's chute |
+| Concrete sets | 5 minutes after loading. The HUD counts it down. At zero the load is lost ("The concrete set"). E at a site that needs it pours it. |
+| Winch | yes, 24 m |
+| Intake | 1.3 m |
+
+### What you start with, what you find
+
+- **At the railhead from the start:** the scout (you are in it), the pickup with its trailer, the
+  tractor with its farm trailer (the tipper, with the loader, §4), and the mixer.
+  `Profile.truck` defaults to `"scout"`.
+- **Out on the map, to be found:**
+  - **The 6x6**, left in the mud in NW, with an empty tank and 20% condition.
+  - **The semi** with its semi-trailer, at the railway yard in SE (optional).
+
+  A truck found is yours once it runs. Fuel it from barrels (E beside it, §8). If its condition
+  is 0, a load of parts beside it (E) brings it to 50%.
+- **The garage sells nothing.** Every truck is either there from the start or found.
 
 ## 8. From the off-road genre: the trucks' mechanics
 
@@ -445,7 +528,7 @@ the stuck car. The player cannot choose, and it often takes the wrong tree.
 - **The cable's length is the truck's own** (`TruckSpec.winch_length`, in place of `RANGE`):
   - scout and pickup: 20 m;
   - tractor: 18 m;
-  - 6x6 and semi: 24 m;
+  - 6x6, semi and mixer: 24 m;
   - the long winch addon: +10 m and 1.3 times the pull.
 - **In the code:**
   - The trees are cylinder shapes in one body, and the ray's `shape` index finds the tree.
@@ -471,13 +554,12 @@ Today one truck is in play. The garage's "drive" removes it and puts another at 
   - **E** beside a parked truck of yours (within 5 m, stopped) steps you across into it. The
     scout drives up to the tractor, and you take the tractor on.
 - **The garage** (Tab at a base) drives a truck that is in the garage. A truck out on the map is
-  listed as "out at <nearest place>". You can switch to it, or **fetch it to this base** for $150:
-  it is set down there, as the tow does.
-- **The tow (T)** takes the truck being driven, with its trailer, to the nearest base. The others
-  stay put.
-- **The load belongs to the truck.** The job in hand, the load and a trailer's load move from
-  `Contracts` (one `job`) onto the vehicle and its trailer. Sites and orders read whichever truck
-  is there.
+  listed as "out at <nearest place>". You can switch to it, or **fetch it to this base** for 50 L
+  from the base's tank: it is set down there, as the tow does.
+- **The tow (T)** takes the truck being driven, with its trailer, to the nearest base, and its
+  load is lost (§5). The others stay put.
+- **The load belongs to the truck.** The load and a trailer's load move from `Contracts` (one
+  `job`) onto the vehicle and its trailer. Buildings and sites read whichever truck is there.
 - Only the truck being driven reveals the fog (§3).
 
 ### Water and the engine
@@ -495,9 +577,9 @@ or none.
 - **The engine floods.** Each truck has an air intake (`TruckSpec.intake`, a point in its frame).
   Its height above the ground:
 
-  | Pickup | Scout | Tractor | 6x6 | Semi |
-  |---|---|---|---|---|
-  | 0.9 m | 0.8 m | 1.3 m | 1.5 m | 1.2 m |
+  | Pickup | Scout | Tractor | 6x6 | Semi | Mixer |
+  |---|---|---|---|---|---|
+  | 0.9 m | 0.8 m | 1.3 m | 1.5 m | 1.2 m | 1.3 m |
 
   - Water over the intake for 1 s and the engine dies ("Engine flooded"). The truck cannot drive.
   - It runs again once the intake is out of the water, at the cost of a quarter of its
@@ -511,14 +593,16 @@ or none.
 
 ### Truck to truck
 
-Once trucks stay on the map and the winch can take them, three things become possible:
+Once trucks stay on the map and the winch can take them, four things become possible:
 
 - **Winch one truck out with another.** Park a heavy truck on firm ground, aim at the stuck one
   and reel in.
 - **Refuel one truck from another.** A pickup carrying fuel barrels (§6), stopped within 6 m of
   another truck: **E** pours fuel into it until its tank is full or the barrels are empty. A load
-  that is partly used counts for less at a pump.
+  that is partly used holds what is left, and pours that into a fuel station.
 - **Step across** from one truck into another (above).
+- **Bring a found truck back to life:** fuel it from barrels, and with a load of parts beside it,
+  E brings its condition to 50% (§7).
 
 ### A gearbox you shift
 
@@ -546,18 +630,20 @@ for the sound: `truck_audio.gd` shifts through four gears in high and two in low
   - under 50%, the engine pulls 0.8 times;
   - under 25%, it pulls 0.6 times and the fuel leaks (0.05 L/s);
   - at 0% it will not run.
-- **Repair** is at a base's garage: Tab, then a line "Repair: $2 a %". The tow does not repair.
+- **Repair** is at a base's garage: Tab, then a line "Repair: a load of parts for each 50%",
+  taken from the base's yard (at the railhead, parts never run out). The tow does not repair.
 - The HUD shows the condition beside the fuel.
 
 ### Addons in the garage
 
-Each addon is bought once per truck, from the garage's list under that truck:
+Each addon is fitted once per truck, from the garage's list under that truck, for a load of
+parts from the base's yard:
 
-| Addon | Price | What it does |
-|---|---|---|
-| Snorkel | $300 | the intake on the roof (above) |
-| Chains | $200 | more grip on snow and ice (ice 0.15 → 0.4); a little slower on a road |
-| Long winch | $250 | +10 m of cable, 1.3 times the pull |
+| Addon | What it does |
+|---|---|
+| Snorkel | the intake on the roof (above) |
+| Chains | more grip on snow and ice (ice 0.15 → 0.4); a little slower on a road |
+| Long winch | +10 m of cable, 1.3 times the pull |
 
 A truck shows the ones it has: a snorkel as a pipe up beside the windscreen, chains drawn on the
 tyres.
@@ -567,11 +653,19 @@ tyres.
 - **Title screen** (replaces `start_screen.gd`): ZSUV, a still of the valley behind it,
   **Continue** / **New game** (New asks before it wipes a save). `scripts/ui/icons.gd`,
   `scripts/capture/previews.gd` and `./godot.sh previews` go, as do the valleys screen's tests.
+- **The board is gone. The map's ledger takes its place.** Beside the paper map is a list of
+  every building and site found, one line each, with what it holds, what it needs, its fuel and
+  what it is doing ("Sawmill: timber 2/3, 140 L, 31 trees left"). Hovering a mark on the map
+  shows its line.
+- **Clicking the map:**
+  - a truck's mark: you drive that truck (§8);
+  - anything else: a waypoint, and the HUD's arrow points there instead of at the village.
+    Click the waypoint again to clear it.
 - **HUD**, in addition:
   - the m³ shifted;
   - with the tipper, its load ("SOIL 6.4/10 m³");
-  - near a site, its needs;
-  - near a pump, its stock;
+  - near a building or a site: what it holds, what it needs, and what E does there;
+  - in the mixer, the concrete's countdown;
   - the gear ("A3", "L1"), the truck's condition beside the fuel, and the water's depth against
     the intake while in water (§8).
   The three-line hint in the corner becomes: drive, **B** dig / **V** tip with the tractor, **M**
@@ -582,15 +676,16 @@ tyres.
   | Key | |
   |---|---|
   | B / V | the tractor's bucket / tip the tipper (§4) |
+  | P, then 1-7 and left click | place a building; the wheel turns it (§5) |
   | F, then left click | aim the winch, hook what is under the cursor; F again hooks what the winch picks itself (§8) |
   | N | gearbox auto / manual (§8) |
   | , / . | shift down / up in manual (§8) |
   | E beside your parked truck | step across into it; with fuel barrels, refuel it (§8) |
-  | M, then click a truck | drive that truck (§8) |
+  | M, then click a truck | drive that truck (§8); click anywhere else for a waypoint |
   | Z, or the wheel on the map | zoom the map (§3) |
-- **The end:** when the mountain village takes its first supply order, an end card shows "The
-  valley is open", with the m³ shifted, the metres of road built, the bridges, the time played
-  and the money. Esc closes it, and play goes on.
+- **The end:** when the upper village has its fuel and parts, an end card shows "The valley is
+  open", with the m³ shifted, the metres of road built, the bridges, the buildings, the trees
+  felled, the fuel burnt and the time played. Esc closes it, and play goes on.
 - **All text in English**, as `test_english.gd` holds now. A Ukrainian version is not in scope.
 
 ## 10. What stays as it is
@@ -603,20 +698,18 @@ keys.
 
 ## 11. What is saved (`Profile`, `user://zsuv.cfg`)
 
-As today: the money and the rigs bought. New:
-
-- **every truck owned:** in the garage or out on the map; if out, where it stands, its fuel,
-  condition, load, gear mode, whether its engine is flooded, and its trailer if hitched; its
-  addons; the truck being driven;
+Khutir Road's money, rigs bought, valleys, skies and records go. Saved:
 
 - `map_version`;
+- **every truck:** found or not; in the garage or out on the map; if out, where it stands, its
+  fuel, condition, load, gear mode, whether its engine is flooded, and its trailer if hitched; its
+  addons; and which truck is being driven;
+- **every building and site:** its kind, where it stands and which way it faces, whether it is
+  built, what has been delivered, its stock, its fuel, and its production timer;
 - the fog mask (compressed bytes);
-- the scout's track;
-- per site: its stock and whether it is built;
-- per pump: its stock;
-- the bases built;
+- the scout's track and the waypoint;
 - where each owned trailer stands, if not hitched;
-- the trees and rocks gone;
+- the trees and rocks gone, the ones the sawmills felled among them;
 - the stats (m³ shifted, metres of road, time played).
 
 **Earthworks:**
@@ -631,8 +724,6 @@ A third of the map dug over is still well under 1 MB in IndexedDB.
 digging, when B or V is let go, and when the window loses focus. **A save loads the generated
 map, then lays the earthworks over it.**
 
-Cut: the valleys owned, the skies and the records.
-
 ## 12. Tests
 
 The shared world becomes the one map. The harness, the error trap and the watchdog stay, and the
@@ -643,8 +734,8 @@ watchdog's time is raised if the bigger map needs it.
   - The map builds within its budget, with nothing on its roads.
   - Every road open from the start drives both ways in 4x4.
   - Every barrier stops a truck as built (the landslide, the river, the ravine).
-  - With every site built by a test hook, every road drives both ways, bridges included, for
-    every rig that the map's `no` lists allow.
+  - With every crossing bridged and every slide cleared by a test hook, every road drives both
+    ways, bridges included, for every rig that the map's `no` lists allow.
 - `test_earthworks.gd`:
   - A bite lowers the ground by what it puts in the tipper, and a dump raises it by what came
     out, both to 2%.
@@ -653,21 +744,37 @@ watchdog's time is raised if the bigger map needs it.
   - The slump leaves no step over 0.8 m.
   - A tree in the way goes.
   - **The tractor digs L1 out with B and V, and then the pickup drives the north road through.**
-- `test_sites.gd`:
-  - Each unit delivered counts and pays.
-  - A site builds when its needs are met.
-  - A built outpost is a depot: board, garage, pump, tow destination, trailers parked there.
-  - A pump's stock fills a tank and runs dry.
+- `test_building.gd`:
+  - Placing (`place(kind, at, yaw)`, as the cursor does): green on level ground, red with the
+    right reason on a slope, a road, water, too near another building, too few trees, or off a
+    deposit.
+  - Levelled with the bucket, a slope takes a building.
+  - Each load delivered counts, and a site builds when its needs are met.
+  - A site with nothing delivered can be taken down.
+  - A built outpost is a base: garage, tank, the tow's destination, a yard of 6, trailers parked
+    there.
   - A gravel road is laid by spreading with V, is graded, and does not churn.
   - The ravine fill completes when the corridor is drivable.
   - A bridge carries every rig both ways, with road grip on its deck.
+  - The village takes its fuel and parts, and the end card shows.
+- `test_production.gd`:
+  - A sawmill with fuel makes a load every 2 minutes, fells the trees nearest it, stops when full,
+    out of fuel or felled out, and keeps going while the player is away.
+  - A quarry makes gravel and its pit deepens by the volume.
+  - A concrete plant turns gravel into concrete in a mixer under its chute.
+  - A fuel station fills a tank from its stock and runs dry.
+  - The tow loses the load; repair and addons take parts from the yard.
+- `test_mixer.gd`:
+  - The mixer drives as specified.
+  - Its concrete sets after 5 minutes and is lost.
+  - Poured in time, it counts at the site.
 - `test_fog.gd`:
   - Each vehicle reveals its radius, and the scout more on a hill.
   - Places are found once revealed, and not before.
   - The fog and the track survive a save and a load.
 - `test_scout.gd`:
   - It drives and turns as specified.
-  - It takes no order, no load and no trailer.
+  - It takes no load and no trailer.
   - Its winch pulls it out.
 - `test_water.gd`:
   - The water drags a truck and slows it, and the river's current pushes it downstream.
@@ -682,6 +789,7 @@ watchdog's time is raised if the bigger map needs it.
   - The garage fetches a truck out on the map.
   - The tow takes only the truck being driven.
   - A pickup with barrels refuels another truck.
+  - A found truck runs once fuelled, and parts beside it bring its condition up.
 - `test_gearbox.gd`:
   - Auto reaches today's top speeds.
   - In manual, first gear of low range climbs what auto spins on.
@@ -700,30 +808,55 @@ watchdog's time is raised if the bigger map needs it.
   - Too far, the ground, or ground in between: refused, with the reason.
   - F twice hooks what the winch picks itself, as today.
   - Hooked to a parked truck, the winch pulls both, and the parked one wakes.
-- `test_garage` gets the addons, repair and fetching a truck.
-- `test_contracts` loses timed, fragile and stuck.
-- `test_garage` checks the parking about every base.
+- `test_garage` sells nothing now. It fits addons, repairs and fetches a truck for parts and
+  fuel, and checks the parking about every base.
 - `test_world`, `test_terrain_shape` and `test_trucks` use the map's size, not 256.
 - `test_english` covers the new strings.
 
-**Removed:** `test_valleys.gd`, `test_stuck_car.gd`, and the valleys screen's part of
-`test_start.gd`.
+**Removed:** `test_contracts.gd` (the jobs and their pay are gone), `test_valleys.gd`,
+`test_stuck_car.gd`, and the valleys screen's part of `test_start.gd`.
 
 ## 13. Order of work, to 2026-12-01
 
 The days are the owner's. Every milestone ends with the tests green and a web build that runs.
-**All of this plan is more than 16 days of work for one person**, so the cut list below decides
-what ships, and it is decided on Nov 24 at the latest.
+
+**This plan is about 26 days of work, and there are 15 to Nov 29:**
+
+| Part | Days |
+|---|---|
+| The fork, the renames, the title screen (§2) | 1 |
+| The map, the fog, the scout (§3, §7) | 3 |
+| Earthworks (§4) | 3 |
+| Placing and building: sites, bridges, gravel roads (§5) | 3 |
+| Production, fuel, the mixer, loads on the trucks (§5-§7) | 3 |
+| Trucks on the map, the winch by mouse, truck to truck, found trucks (§8) | 3.5 |
+| Water and the engine flooding (§8) | 2 |
+| The gearbox, condition, addons (§8) | 3 |
+| The ledger, HUD, saving, the end (§9, §11) | 2 |
+| Content, tuning, web performance, release | 3 |
+
+So it runs as **three streams, each in its own local session and branch**. Khutir Road 0.3.0 was
+built this way: `rigs/trucks` and `rigs/trailers` were made side by side and merged.
+
+- **A, the land** (`land/*`): the map, the fog, earthworks, the water's level, crossings, gravel
+  roads, the ravine fill, the quarry's pit.
+- **B, the trucks** (`trucks/*`): the scout and the mixer, trucks on the map, loads on the
+  trucks, the winch by mouse, truck to truck, found trucks, water and flooding, the gearbox,
+  condition, addons.
+- **C, the infrastructure** (`build/*`): placing, sites, production, fuel, the railhead, outposts
+  as bases, the ledger, the goal and the end, saving. It starts on Khutir Road's 256 m map and
+  moves onto A's map at the first merge.
+
+The owner merges and plays each merge. That is the narrow part, so merges have fixed days.
 
 | When | Milestone |
 |---|---|
-| Nov 14 (day 0) | Read the jam's FAQ (§0); stop if pre-jam code is not allowed. The fork and the renames (§2), the itch page drafted. The title screen in place of the valleys screen. |
-| Nov 15-17 | The 512 m map from data: the size made a variable, chunked collision, rivers with their water level, slides, gap spans; the content laid out roughly; web build time measured (≤ 8 s or fix it, §3). The scout's spec and body. Fog and discovery. **Playable: scout the whole map.** |
-| Nov 18-20 | Earthworks: `set_heights` with collision, texture and map updates; the loader and the tipper (B, V); volume, slump, limits, trees; the works image; the landslide site. **Playable: dig through L1.** This is the heart of the theme, so give it the time. |
-| Nov 21-22 | The winch aimed with the mouse, to anything solid and to vehicles. Trucks left on the map, switched to from the map and by E; the load on the truck. Refuelling from barrels. **Playable: leave the scout by the slide, step into the tractor, winch it off the bank where you point.** |
-| Nov 23-24 | Water: drag, lift, the current, the engine flooding, the snorkel. Condition and repair, simply. **Playable: drown a truck in the river and winch it out.** |
-| Nov 25-26 | Sites: stakes, E to deliver, stock, built effects. Outposts as bases. Pumps with fuel stock. Gravel road by spreading, and grading. The ravine fill. The board's two lists, prices. The end card. Saving all of it. |
-| Nov 27-28 | Content and tuning along the critical path, playtests from a new save to the end. Web performance. Only if all of that is done: the gearbox by hand, chains and the long winch, wear. |
+| Nov 14 (day 0) | Read the jam's FAQ (§0); stop if pre-jam code is not allowed. The fork and the renames (§2), the itch page drafted, the title screen. The three branches made. |
+| Nov 15-19 | **A:** the 512 m map, the fog, rivers, slides, gap spans; web build time measured (≤ 8 s or fix it, §3); earthworks: `set_heights`, the loader and the tipper, volume, slump, limits. **B:** the scout and the mixer, trucks on the map, loads on the trucks, the winch by mouse, truck to truck. **C:** placing (P), sites, deliveries, fuel in litres, fuel stations, the railhead's yard, production on timers. |
+| Nov 20 | **Merge.** Playable: scout, dig through L1, place a fuel station and pour the concrete into it before it sets. |
+| Nov 21-23 | **A:** crossings and bridges, gravel roads, the ravine fill, the quarry's pit. **B:** water and flooding, the snorkel, condition and repair, found trucks. **C:** the sawmill felling trees, the quarry, the concrete plant and the mixer's clock, outposts, the ledger and waypoints, the goal and the end card, saving all of it. |
+| Nov 24 | **Merge, and the cut decision** (below). Playable: from a new game to the village. |
+| Nov 25-28 | Content along the critical path, playtests of the whole arc, tuning fuel and rates, web performance. Only if all that is done: the gearbox by hand, chains and the long winch, wear. |
 | Nov 29 | **Release 0.1.0** (the `release-itch` skill), the itch page with screenshots and a GIF, **submitted to the jam**. |
 | Nov 30 - Dec 1 | Buffer: fixes as 0.1.x. **Nothing new after Nov 30.** The deadline is Dec 1, 13:37 PST. |
 
@@ -731,25 +864,35 @@ what ships, and it is decided on Nov 24 at the latest.
 1. The gearbox shifted by hand (auto stays as today; the theme still has the earthworks).
 2. The ground wearing (churn).
 3. Chains and the long winch (the snorkel stays, with the water).
-4. The SE region, the river bridge and L2, so the 6x6 and the semi lose their place in the chain
-   (the river stays, to drown in and to ford).
-5. The ravine's timber-bridge choice (keep the fill).
-6. Condition and repair (a flooded engine then just restarts out of the water).
-7. Map zoom, and fuel station F1.
+4. The SE region: the river bridge, L2, the semi and the old fuel depot. The river stays, to
+   drown in and to ford.
+5. Concrete plants away from the railhead (the railhead's stays).
+6. Outposts: the garage stays only at the railhead, and the tow always goes there.
+7. Condition and repair: found trucks need only fuel, and a flooded engine just restarts out of
+   the water.
+8. Radio masts.
+9. The ravine fill (keep the timber bridge: it is what the sawmill is for).
+10. Map zoom.
 
 **Never cut:**
-- the scout and the fog;
-- digging and tipping, one landslide, one outpost with a pump, one gravel road;
-- the winch aimed with the mouse;
-- trucks staying on the map;
-- water with the engine flooding;
-- the end card.
+- the scout and the fog, the goal and the end card;
+- fuel that runs out, and fuel stations the player places;
+- a sawmill in a forest the player picks, and the timber bridge over the ravine;
+- the mixer and its concrete that sets;
+- digging and tipping, one landslide, one gravel road;
+- the winch aimed with the mouse, trucks staying on the map, water with the engine flooding.
+
+Even that list is a lot for 15 days. If Nov 20's merge is not playable, the never-cut list itself
+gets shorter, in the same order from its bottom.
 
 **Stretch, after the jam:**
 - real ruts in the heights from heavy wheels;
 - a dozer blade on the 6x6;
 - roads the player lays out: the scout drives the line with a key held and leaves stakes, and the
   stakes become a gravel road site;
+- bridges placed anywhere a gap is short enough, not only at the old crossings;
+- more materials and longer chains: logs and planks apart, cement, steel;
+- what is where, shuffled from a seed for each new game;
 - cranes and loose cargo, logs loaded by hand, cargo that can fall off;
 - things that break: fences, poles, signs;
 - a cab view;
@@ -763,14 +906,22 @@ what ships, and it is decided on Nov 24 at the latest.
    the game). Check itch.io for a clash before the page goes up.
 2. **The jam's rules on pre-jam code and AI** (§0), on day 0. They decide whether the plan stands.
 3. **The repository:** its name, public (required), and a licence if the jam expects one.
-4. **The start:** the scout, pickup and tractor owned, $300 (§6). Or should the tractor be the
-   first thing earned?
+4. **The start:** the scout, the pickup with its trailer, the tractor with its tipper and the
+   mixer at the railhead; the 6x6 and the semi found (§7). No money at all (§6). Is that right,
+   or should some trucks be earned somehow?
 5. **"Слідувати"** in the brief is read here as *to explore*: the scout reveals the map, and its
    track is kept for the haulers to follow. If it meant a truck that follows you on its own (a
    convoy), that is a separate system and a stretch.
 6. **"Залив двигуна"** is read as the engine flooding in deep water (§8). If it meant something
    else, such as starting and stopping the engine by hand, say so.
 7. **What from the genre is a must** for the jam: §8's table is a proposal, and the owner picks.
-8. **The mouse winch in Khutir Road first?** It touches only `winch.gd`, the HUD and the input
+8. **The goal:** a truck brings the upper village fuel and parts by a road you made. Its name and
+   what it asks for are the owner's.
+9. **Five resources** (fuel, parts, gravel, timber, concrete) for the jam. Nails and the rest are
+   "parts". More materials and longer chains come after the jam (§13).
+10. **Production goes on while the player is away** (§5). The other way is that a building works
+    only while the player is near it.
+11. **Three streams in three local sessions** (§13), or one stream with a deeper cut.
+12. **The mouse winch in Khutir Road first?** It touches only `winch.gd`, the HUD and the input
    (plus the trees' shape list in `world_builder.gd`). It can ship as Khutir Road 0.3.1 before
    the fork, so both games have it and the fork starts with it.
