@@ -34,16 +34,22 @@ code and its tests win, and this file is corrected.
   the deadline, **and** the game must be submitted on the jam's itch.io page. A push to GitHub on
   its own does not enter the game.
 - **Any engine, language or library** may be used.
-- **Not confirmed, so check it on day 0, before anything else.** Neither page could be read from
-  this session, and search did not show the 2026 FAQ. Read the jam's pinned FAQ for three things:
-  1. **Pre-jam code.** Is a game built on a team's own project from before November allowed? In
-     2025 the host pinned "guidelines on using code/ideas from before the start of the jam". If
-     2026 forbids it, this plan does not fit the jam as written, and the owner decides what to do
-     before any work starts.
-  2. **AI-made work.** Khutir Road was made with an AI agent, and the jam's rules on that need
-     checking.
-  3. **A licence.** Is one required or expected?
-- **Disclose the base either way.** The README and the itch page both say: "Built on Khutir Road
+- **The rules, read on day 0 (2026-11-14)** from the jam's page, GitHub's post and the pinned FAQ
+  (https://itch.io/jam/game-off-2026/topic/7290154/frequently-asked-questions-faq):
+  1. **Pre-jam code is not forbidden, but the game is meant to be made in November.** Templates,
+     starter projects, libraries and reusable code are welcome, but "the vast majority of your
+     game's development should happen during the submission period", and not "an old game with
+     only minor changes". The host asks teams to be transparent about what came before. No number
+     is given for "majority". The owner decided, 2026-11-14, to fork as planned: the new work
+     (§3-§9) far outweighs the base, and the disclosure below is how the base is declared.
+  2. **AI-assisted work is allowed** (code, art, audio) and does not affect the score, but the
+     submission form asks about it, and the answer says how the game was made.
+  3. **No licence is required.** The source has to be public on GitHub; the licence is the
+     team's choice.
+  4. **Judged** by the entrants in six categories: Overall, Gameplay, Graphics, Audio, Innovation
+     and Theme interpretation. Code quality is not judged. After voting opens, only critical
+     fixes, and each one is noted on the page.
+- **Disclose the base.** The README and the itch page both say: "Built on Khutir Road
   (October 2026): the driving, the trucks, the sound. New for Game Off: …". The commit the fork
   starts from gets the tag `base-khutir-road-0.3.0`, so `git diff base-khutir-road-0.3.0..main`
   shows exactly what was made during the jam (§2).
@@ -108,9 +114,9 @@ have to be a good game on their own.
 The owner's local session does this first, in this order:
 
 1. **A new public GitHub repository** (owner's account, name as the title, e.g. `zsuv`). Its
-   history starts from Khutir Road's: push this repository's `main` there as `main`, then tag
-   `base-khutir-road-0.3.0` on that commit. The history keeps the October dates, so it shows what
-   came before the jam.
+   history starts from Khutir Road's: push this repository's `main` there as `main`, and tag
+   `base-khutir-road-0.3.0` on Khutir Road 0.3.0's last code commit (`9682b06`); only this plan
+   comes after it. The history keeps the October dates, so it shows what came before the jam.
 2. **Rename everything that names Khutir Road:**
    - `project.godot`: `config/name`, `config/description`, and `config/version="0.1.0"`.
    - `export_presets.cfg`: the `KhutirRoad.*` export paths, `product_name`, `file_description`,
