@@ -4,16 +4,18 @@ The owner's brief, 2026-11-13: a new, separate project built on this one, entere
 is running now (GitHub's Game Off 2026). One map that opens up over time. You build bases and fuel
 stations by hauling in resources and fuel. You break up the ground: dig it, and build roads and
 bridges to open the map. A scout car carries nothing: you only drive it, to explore. The owner
-builds it in a local session.
+builds it in a local session. After reading the first draft, the owner asked for more of the
+off-road genre: the engine flooding in water, the interactions between trucks, and a winch aimed
+with the mouse (§8).
 
 This file lists **only what changes** from Khutir Road 0.3.0 (commit `9682b06`). Anything it does
-not name stays as it is: the driving and the raycast wheels, the five rigs, the hitch, the winch,
-the tow, the sound, the PSX look, the tests harness, the CI and the exports. Every number below is
+not name stays as it is: the raycast wheels and the tyres on snow, mud and ice, the five rigs,
+the hitch, the winch's pull, the sound, the PSX look, the tests harness, the CI and the exports. Every number below is
 a first guess, to be tuned in playtests. Where this file and the code disagree after a change, the
 code and its tests win, and this file is corrected.
 
 **Working title: Zsuv** (Зсув). In Ukrainian the word means a shift, and also a landslide
-(*зсув ґрунту*, a "soil shift"). The title is the owner's call (§13).
+(*зсув ґрунту*, a "soil shift"). The title is the owner's call (§14).
 
 ## 0. The jam: Game Off 2026
 
@@ -51,14 +53,15 @@ back: every cubic metre you dig is carried somewhere and dumped. The HUD counts 
 and the end card shows the total.
 
 This uses the theme three ways. *Zsuv* means both shift and landslide, you move earth, and the
-gearbox already has its shifts (low range, G).
+gearbox gets gears you shift by hand (§8).
 
 **The first ten minutes** carry the jam score, because most voters play for 5-15 minutes:
 
 1. You start at the base camp in the scout. The paper map (M) is blank paper except for the
    ground around the camp. You drive out, and the map draws itself as you go. You find the
    quarry, the river with its bridge gone, and the north road buried under a landslide.
-2. Back at the camp, the garage (Tab) gives you the tractor and its tipper. At the landslide,
+2. Back at the camp, the tractor and its tipper stand by the garage: **E** beside it and you step
+   across, leaving the scout parked. At the landslide,
    hold **B**: the tractor's front bucket bites into the slide and fills the tipper. You drive off
    the road, hold **V** to tip, and the heap pours out behind. A few loads later, the road is
    through.
@@ -154,8 +157,10 @@ who buy the 6x6 and the semi.
   - Terrain's rim: `smoothstep(100, 126)` becomes `HALF - 28` to `HALF - 2`.
   - The tests: `test_terrain_shape`, `test_world`, `test_garage`.
 - **Two new ground features in `base_height`/`generate`:**
-  - **`river`**: a gully with a flat water plane at its bottom. Past 0.8 m of water the engine
-    floods and dies, as on an empty tank, and T tows. It needs no new water physics.
+  - **`river`**: a gully with water in it: a level along its course and a current, read by
+    `Terrain.water_level(p)`, with a flat water plane drawn at that level. Ponds and flooded lows
+    are lakes without ice. What water does to a truck (drag, lift, the current, the engine
+    flooding) is in §8.
   - **`slide`**: a mound of loose earth laid over a road after the road's shelf. Its loose layer
     is set in the works image (below), so it is soft until dug.
   - A road can also have **gap spans** (a bridge site): no shelf is cut there, so the ground
@@ -187,7 +192,7 @@ who buy the 6x6 and the semi.
      over every flat.
   2. Failing that, **bake** the generated heights and ground images at export: `./godot.sh bake`
      writes them into `res://map/`, and the game loads them.
-- **The map's version.** Earthworks are saved as changes to the generated map (§10). Any change
+- **The map's version.** Earthworks are saved as changes to the generated map (§11). Any change
   to the generator moves `MAP_VERSION`. A save from another version drops its earthworks and
   says so in a message.
 
@@ -224,7 +229,7 @@ The core of the theme, and the first thing to make fun.
 
 **The tractor gets a front loader**: two arms and a 2.2 m bucket, built from boxes like its body.
 The bucket hangs low while B is held and rises when B is let go. It is the only rig that digs (a
-dozer blade on the 6x6 is a stretch, §12). Its farm trailer becomes **a tipper**. It already
+dozer blade on the 6x6 is a stretch, §13). Its farm trailer becomes **a tipper**. It already
 carries bulk; soil and gravel are bulk loads now.
 
 | Key | Action |
@@ -241,7 +246,7 @@ m³ shifted.
 
 - **Volume is kept.** What a bite takes off the heights (1 m² cells, so the sum of the drops is
   in m³) is exactly what goes into the load. What is dumped raises the ground by exactly the
-  load. The tests hold this to 2% (§11).
+  load. The tests hold this to 2% (§12).
 - **It slumps.** After every bite or dump, the 9x9 m around it is relaxed. A metre of ground more
   than 0.8 m above its neighbour sheds half the difference downhill, in three passes. Heaps take
   a natural slope, and a cut has no wall the wheels' rays could snag on.
@@ -259,7 +264,7 @@ m³ shifted.
 - **The ground wears.** A heavy rig (over 5 t with its load) spinning a wheel (slip) in mud
   churns it: mud (`snow_img` G) at the wheel grows by 0.01 a tick, up to 1. The dirt tracks that
   get the most traffic turn to bog, and gravel does not churn. That makes a gravel road worth
-  building. Real ruts in the heights are a stretch (§12).
+  building. Real ruts in the heights are a stretch (§13).
 
 ## 5. Building: sites
 
@@ -308,9 +313,10 @@ about the spawn. Here the base camp is the first base and each outpost built is 
 - `_near(_depot)` becomes "near any built base". The board and the garage say which base they are
   at.
 - **T (tow)** takes the truck to the **nearest built base**: $100 plus $1 per 20 m.
-- **The garage** puts the truck at the base it is opened at, with its trailers parked about that
-  base's spawn. `_parking` already works about a spawn. The trailers a player owns stay where they
-  were left; the tow brings a trailer to the base it tows to.
+- **The garage** puts a truck that is in the garage at the base it is opened at, with its
+  trailers parked about that base's spawn. `_parking` already works about a spawn. Trucks and
+  trailers out on the map stay where they were left (§8); the tow brings the truck it tows, and
+  its trailer, to the base it tows to.
 
 ## 6. Resources, sources and the board
 
@@ -355,7 +361,7 @@ cars with their ditches. They go to keep the scope down, and their tests go with
 | The 6x6 | $2500 |
 | The semi + semi-trailer | $3500 |
 
-The player starts with $300.
+The player starts with $300. The garage's addons (snorkel, chains, long winch) are in §8.
 
 ## 7. The scout
 
@@ -370,15 +376,193 @@ A new `TruckSpec`, `TruckSpec.scout()`, with a body of its own (`Vehicle._build_
 | Turns in | about 4.5 m |
 | Fuel | 45 L, burns 0.5 times the pickup's |
 | Carries | **nothing**: `cargo_mass` empty, `tows` empty, no hitch. The board says "SCOUT: carries nothing" against every order, and a source or a site says so on E. |
-| Winch | yes, at the front: it is light and gets itself out |
+| Winch | yes, at the front, 20 m: it is light and gets itself out |
+| Intake | 0.8 m, 1.6 m with the snorkel (§8): it floods first, so the scout finds the fords, it does not take them |
 | Camera | closer (8 m), lower |
 | Sound | the pickup's recordings, pitched up (`engine_pitch` about 1.3) |
 | Its job | revealing (§3): 90-150 m against 40 m; its track is kept and drawn for the others to follow |
 
 The game starts in the scout. `Profile.truck` defaults to `"scout"`, and the pickup and the
-tractor are in the garage.
+tractor stand parked at the base camp, out on the map (§8).
 
-## 8. Screens, HUD and keys
+## 8. From the off-road genre: the trucks' mechanics
+
+The owner, 2026-11-13, after reading this plan: bring over much more of what SnowRunner-style
+games have. That means the engine flooding in water, the interactions between trucks and with the
+world, and a winch hooked where the player points the mouse, not where the truck picks. These are
+the genre's mechanics, built this game's own way. No game's names, interface, maps or art are
+copied.
+
+**Khutir Road already has:**
+- 4x4 and 2WD, the diff lock, low range, the headlights;
+- the winch (to what it picks), trailers on a hitch;
+- refuelling, the tow, setting upright;
+- the paper map, mud and snow that pack into ruts;
+- a garage of rigs.
+
+**What comes over**, in the order it is worth building:
+
+| Mechanic | For the jam? | About |
+|---|---|---|
+| The winch aimed with the mouse, to trees, rocks, buildings and vehicles | must | 1.5 days |
+| Trucks left out on the map, switched between | must | 2-3 days |
+| Water: depth, drag, the river's current, the engine flooding, the snorkel | must | 2 days |
+| Truck to truck: winching one out with another, refuelling one from barrels, stepping across | must, and cheap once the two above are in | half a day |
+| A gearbox shifted by hand (the theme's own word) | should | 1-1.5 days |
+| Condition and repair | should | 1 day |
+| Addons in the garage: the snorkel (a must, with the water), chains, a long winch | should | 1 day |
+| Cranes and loose cargo, logs loaded by hand, things that break (fences, poles), a cab view | after the jam | |
+
+That is 7-10 more days of work on top of §3-§6. The schedule (§13) is rebuilt around it, and
+its cut list says what gives way.
+
+### The winch, aimed with the mouse
+
+Today **F** hooks the tree or rock that `Winch._find_candidate` scores best ahead within 16 m, or
+the stuck car. The player cannot choose, and it often takes the wrong tree.
+
+- **F starts aiming.** A crosshair follows the mouse. The cursor stays free (not captured), and
+  the right button still orbits the camera. A ray from the camera through the cursor finds what
+  is under it. It uses `Camera3D.project_ray_origin`/`project_ray_normal` at
+  `get_viewport().get_mouse_position()`, which the 480x270 stretch already maps.
+  - **A tree, rock, building, bridge or post:** the hook goes there. On a tree it goes 1 m up the
+    trunk.
+  - **A vehicle** (a parked truck of yours, a trailer): the hook goes on it, at the point under
+    the cursor. It is pulled as the stuck car is today, with the pull on both.
+  - **The ground, water or sky:** nothing to hook ("Nothing to hook: a tree, a rock or a truck").
+- **The preview.** While aiming, a dashed line runs from the winch to the point. The marker is
+  **yellow** when it can hook and **red** when it cannot, with the reason:
+  - "Too far: 24 m, the cable is 20";
+  - "The ground is in the way" (a ray from the winch to the point meets the terrain);
+  - "Too close".
+- **The keys while aiming:**
+  - **Left click** hooks.
+  - **F** again, without a click, hooks what the winch would pick by itself, as today. The quick
+    way stays for the keyboard, and the old tests keep working.
+  - **Esc** cancels the aim. It does not leave the game while aiming.
+- **Hooked**, it works as today: **Shift** reels in, **F** unhooks, and the HUD shows the length
+  and the pull. The cable runs from the front mount in any direction, even back over the cab.
+- **The cable's length is the truck's own** (`TruckSpec.winch_length`, in place of `RANGE`):
+  - scout and pickup: 20 m;
+  - tractor: 18 m;
+  - 6x6 and semi: 24 m;
+  - the long winch addon: +10 m and 1.3 times the pull.
+- **In the code:**
+  - The trees are cylinder shapes in one body, and the ray's `shape` index finds the tree.
+    WorldBuilder keeps a shape-to-tree list, so a felled tree's shape goes too (§4). Rocks work
+    the same way. Any other StaticBody3D the world builder made counts as a building.
+  - `anchor_body: StuckCar` becomes any `RigidBody3D`, with the hook as a point in its frame.
+    `hook_point()` becomes `body.global_transform * local`.
+  - `Winch.aim(origin, dir)` does what the cursor does, so the tests and the capture director can
+    aim without a mouse.
+
+### Trucks out on the map
+
+Today one truck is in play. The garage's "drive" removes it and puts another at the depot
+(`main.gd`, `set_truck`).
+
+- **Every truck a player owns stays where it was left.** Its engine is off, its handbrake on, its
+  lights off and its trailer hitched. Its load, fuel and condition are its own. More than 80 m
+  from the truck being driven it is frozen (`freeze`), and it wakes when the driven truck comes
+  near, hits it or hooks it.
+- **Switching:**
+  - On the paper map (M), click a truck's mark. The camera cuts to it, and you drive it from
+    there.
+  - **E** beside a parked truck of yours (within 5 m, stopped) steps you across into it. The
+    scout drives up to the tractor, and you take the tractor on.
+- **The garage** (Tab at a base) drives a truck that is in the garage. A truck out on the map is
+  listed as "out at <nearest place>". You can switch to it, or **fetch it to this base** for $150:
+  it is set down there, as the tow does.
+- **The tow (T)** takes the truck being driven, with its trailer, to the nearest base. The others
+  stay put.
+- **The load belongs to the truck.** The job in hand, the load and a trailer's load move from
+  `Contracts` (one `job`) onto the vehicle and its trailer. Sites and orders read whichever truck
+  is there.
+- Only the truck being driven reveals the fog (§3).
+
+### Water and the engine
+
+The map has the river, ponds and flooded lows (§3). Water is a level over the ground, from the
+map's data. `Terrain.water_level(p)` gives the river's level along its course, or a pond's level,
+or none.
+
+- **Depth, drag and lift.** Each wheel in water feels drag against its motion, growing with depth
+  and speed: driving into the river fast throws you about and slows you hard. The truck's body
+  gets lift for the part of it under water, at half its volume's worth. It is not afloat, but it
+  is lighter, so it has less grip. Spray comes off the wheels, as in mud.
+- **The current.** The river flows, with its direction and speed in the map's data, faster in the
+  narrows. It pushes a truck in it downstream, more the deeper it is.
+- **The engine floods.** Each truck has an air intake (`TruckSpec.intake`, a point in its frame).
+  Its height above the ground:
+
+  | Pickup | Scout | Tractor | 6x6 | Semi |
+  |---|---|---|---|---|
+  | 0.9 m | 0.8 m | 1.3 m | 1.5 m | 1.2 m |
+
+  - Water over the intake for 1 s and the engine dies ("Engine flooded"). The truck cannot drive.
+  - It runs again once the intake is out of the water, at the cost of a quarter of its
+    condition. It gets out by the winch (which works off the battery) or by the tow.
+  - A flooded engine with no condition left starts only after the tow.
+- **The snorkel** (an addon, below) lifts the intake to the roof: 2.2 m on the 6x6, 1.6 m on the
+  pickup and the scout. With it, a 6x6 can ford the river's shallows downstream if the current
+  lets it. That makes a second way into SE besides the bridge, and it is earned.
+- **The HUD** shows the depth against the intake while in water ("WATER 0.7 / 0.9 m"), red when
+  close. The engine sound stops when it floods, and a splash plays when a truck goes in.
+
+### Truck to truck
+
+Once trucks stay on the map and the winch can take them, three things become possible:
+
+- **Winch one truck out with another.** Park a heavy truck on firm ground, aim at the stuck one
+  and reel in.
+- **Refuel one truck from another.** A pickup carrying fuel barrels (§6), stopped within 6 m of
+  another truck: **E** pours fuel into it until its tank is full or the barrels are empty. A load
+  that is partly used counts for less at a pump.
+- **Step across** from one truck into another (above).
+
+### A gearbox you shift
+
+This is the theme's own word. Today the drive has only two ranges (G), and the gears exist only
+for the sound: `truck_audio.gd` shifts through four gears in high and two in low, for the ear.
+
+- **The gears become real.** `Vehicle` owns the gear. Each gear has its top speed (the audio's
+  shares of the range's top speed) and pulls with the range's force times how much lower it is
+  geared, so first gear pulls hardest. `truck_audio.gd` reads the gear instead of guessing it.
+- **Auto** (as today, and the default) shifts up and down by speed, as the sound does now. With
+  the wheels spinning in mud it shifts up and loses pull, and that is why manual exists.
+- **Manual:** **N** switches to it, and **,** and **.** shift down and up. **G** still picks the
+  range. In first gear of low range a truck crawls through what bogs it in auto.
+- **With auto, nothing measured changes:** the top speeds and pulls stay as they are, and
+  `test_trucks.gd` holds them.
+- The HUD shows the gear: "A3", "L1", "M2", "R", "N".
+
+### Condition and repair
+
+- **Every truck has a condition**, 100% when new. It loses some to:
+  - hard knocks: 0.4% per m/s² over 38, the same jolt the fragile load measures today;
+  - a flooded engine: 25%;
+  - rolling over: 10%.
+- **Low condition costs power:**
+  - under 50%, the engine pulls 0.8 times;
+  - under 25%, it pulls 0.6 times and the fuel leaks (0.05 L/s);
+  - at 0% it will not run.
+- **Repair** is at a base's garage: Tab, then a line "Repair: $2 a %". The tow does not repair.
+- The HUD shows the condition beside the fuel.
+
+### Addons in the garage
+
+Each addon is bought once per truck, from the garage's list under that truck:
+
+| Addon | Price | What it does |
+|---|---|---|
+| Snorkel | $300 | the intake on the roof (above) |
+| Chains | $200 | more grip on snow and ice (ice 0.15 → 0.4); a little slower on a road |
+| Long winch | $250 | +10 m of cable, 1.3 times the pull |
+
+A truck shows the ones it has: a snorkel as a pipe up beside the windscreen, chains drawn on the
+tyres.
+
+## 9. Screens, HUD and keys
 
 - **Title screen** (replaces `start_screen.gd`): ZSUV, a still of the valley behind it,
   **Continue** / **New game** (New asks before it wipes a save). `scripts/ui/icons.gd`,
@@ -387,26 +571,43 @@ tractor are in the garage.
   - the m³ shifted;
   - with the tipper, its load ("SOIL 6.4/10 m³");
   - near a site, its needs;
-  - near a pump, its stock.
+  - near a pump, its stock;
+  - the gear ("A3", "L1"), the truck's condition beside the fuel, and the water's depth against
+    the intake while in water (§8).
   The three-line hint in the corner becomes: drive, **B** dig / **V** tip with the tractor, **M**
   map.
-- **Keys:** B (bucket), V (tip) and Z (map zoom) are new. All are free today and set as physical
-  keys in `_setup_input`. The help card (F1) and the README's table get them.
+- **Keys:** these are new, all free today, set as physical keys in `_setup_input`. The help card
+  (F1) and the README's table get them.
+
+  | Key | |
+  |---|---|
+  | B / V | the tractor's bucket / tip the tipper (§4) |
+  | F, then left click | aim the winch, hook what is under the cursor; F again hooks what the winch picks itself (§8) |
+  | N | gearbox auto / manual (§8) |
+  | , / . | shift down / up in manual (§8) |
+  | E beside your parked truck | step across into it; with fuel barrels, refuel it (§8) |
+  | M, then click a truck | drive that truck (§8) |
+  | Z, or the wheel on the map | zoom the map (§3) |
 - **The end:** when the mountain village takes its first supply order, an end card shows "The
   valley is open", with the m³ shifted, the metres of road built, the bridges, the time played
   and the money. Esc closes it, and play goes on.
 - **All text in English**, as `test_english.gd` holds now. A Ukrainian version is not in scope.
 
-## 9. What stays as it is
+## 10. What stays as it is
 
-The driving model, every rig's spec but the tractor's new loader, the hitch and the trailers'
-spots, the winch, R (upright), Esc, the PSX shaders and the dither, the sound and
+The driving model (with water, the real gears and condition added, §8), every rig's spec but the
+tractor's new loader and the new winch lengths and intakes, the hitch and the trailers' spots, the
+winch's pull and reel, R (upright), Esc, the PSX shaders and the dither, the sound and
 `./godot.sh soundcheck`, the CI's tests and exports, `godot.sh`, and the controls being physical
 keys.
 
-## 10. What is saved (`Profile`, `user://zsuv.cfg`)
+## 11. What is saved (`Profile`, `user://zsuv.cfg`)
 
-As today: the money, the rigs bought, the truck picked. New:
+As today: the money and the rigs bought. New:
+
+- **every truck owned:** in the garage or out on the map; if out, where it stands, its fuel,
+  condition, load, gear mode, whether its engine is flooded, and its trailer if hitched; its
+  addons; the truck being driven;
 
 - `map_version`;
 - the fog mask (compressed bytes);
@@ -414,7 +615,7 @@ As today: the money, the rigs bought, the truck picked. New:
 - per site: its stock and whether it is built;
 - per pump: its stock;
 - the bases built;
-- where each owned trailer stands;
+- where each owned trailer stands, if not hitched;
 - the trees and rocks gone;
 - the stats (m³ shifted, metres of road, time played).
 
@@ -432,7 +633,7 @@ map, then lays the earthworks over it.**
 
 Cut: the valleys owned, the skies and the records.
 
-## 11. Tests
+## 12. Tests
 
 The shared world becomes the one map. The harness, the error trap and the watchdog stay, and the
 watchdog's time is raised if the bigger map needs it.
@@ -468,10 +669,38 @@ watchdog's time is raised if the bigger map needs it.
   - It drives and turns as specified.
   - It takes no order, no load and no trailer.
   - Its winch pulls it out.
-- `test_profile` (in `test_start.gd`'s place): everything in §10 round-trips, and a save from
+- `test_water.gd`:
+  - The water drags a truck and slows it, and the river's current pushes it downstream.
+  - The intake under water for 1 s floods the engine. Out of the water, the engine runs again
+    with 25% less condition.
+  - With the snorkel, the 6x6 fords the shallows.
+  - A truck on the bridge stays dry.
+- `test_fleet.gd`, the trucks on the map:
+  - A truck left stays where it was, with its fuel, load and trailer.
+  - Switching works from the map and by E beside a truck.
+  - A truck far off is frozen, and wakes when near, hit or hooked.
+  - The garage fetches a truck out on the map.
+  - The tow takes only the truck being driven.
+  - A pickup with barrels refuels another truck.
+- `test_gearbox.gd`:
+  - Auto reaches today's top speeds.
+  - In manual, first gear of low range climbs what auto spins on.
+  - The sound's gear is the gearbox's.
+- `test_condition.gd`:
+  - Knocks, a flood and rolling over cost what §8 says.
+  - The power drops with condition.
+  - Repair at the garage brings it back.
+- `test_profile` (in `test_start.gd`'s place): everything in §11 round-trips, and a save from
   another `map_version` drops its earthworks without an error.
 
 **Changed:**
+- `test_winch.gd`:
+  - Aiming (`Winch.aim`) hooks the tree under the ray, not the one the winch would pick: one
+    beside the truck, and one behind it.
+  - Too far, the ground, or ground in between: refused, with the reason.
+  - F twice hooks what the winch picks itself, as today.
+  - Hooked to a parked truck, the winch pulls both, and the parked one wakes.
+- `test_garage` gets the addons, repair and fetching a truck.
 - `test_contracts` loses timed, fragile and stuck.
 - `test_garage` checks the parking about every base.
 - `test_world`, `test_terrain_shape` and `test_trucks` use the map's size, not 256.
@@ -480,40 +709,55 @@ watchdog's time is raised if the bigger map needs it.
 **Removed:** `test_valleys.gd`, `test_stuck_car.gd`, and the valleys screen's part of
 `test_start.gd`.
 
-## 12. Order of work, to 2026-12-01
+## 13. Order of work, to 2026-12-01
 
 The days are the owner's. Every milestone ends with the tests green and a web build that runs.
+**All of this plan is more than 16 days of work for one person**, so the cut list below decides
+what ships, and it is decided on Nov 24 at the latest.
 
 | When | Milestone |
 |---|---|
 | Nov 14 (day 0) | Read the jam's FAQ (§0); stop if pre-jam code is not allowed. The fork and the renames (§2), the itch page drafted. The title screen in place of the valleys screen. |
-| Nov 15-17 | The 512 m map from data: the size made a variable, chunked collision, rivers, slides, gap spans; the content laid out roughly; web build time measured (≤ 8 s or fix it, §3). The scout's spec and body. Fog and discovery. **Playable: scout the whole map.** |
-| Nov 18-21 | Earthworks: `set_heights` with collision, texture and map updates; the loader and the tipper (B, V); volume, slump, limits, trees; the works image; the landslide site. **Playable: dig through L1.** This is the heart of the theme, so give it the time. |
-| Nov 22-25 | Sites: stakes, E to deliver, stock, built effects. Outposts as depots (more than one base). Pumps with fuel stock. Gravel road by spreading, and grading. The river bridge and the ravine (fill or bridge). The board's two lists, prices. The end card. Saving all of it. |
-| Nov 26-28 | Content and tuning: places, needs and pay along the critical path, playtests from a new save to the end (45-60 min). Wear (churn). Web performance. |
+| Nov 15-17 | The 512 m map from data: the size made a variable, chunked collision, rivers with their water level, slides, gap spans; the content laid out roughly; web build time measured (≤ 8 s or fix it, §3). The scout's spec and body. Fog and discovery. **Playable: scout the whole map.** |
+| Nov 18-20 | Earthworks: `set_heights` with collision, texture and map updates; the loader and the tipper (B, V); volume, slump, limits, trees; the works image; the landslide site. **Playable: dig through L1.** This is the heart of the theme, so give it the time. |
+| Nov 21-22 | The winch aimed with the mouse, to anything solid and to vehicles. Trucks left on the map, switched to from the map and by E; the load on the truck. Refuelling from barrels. **Playable: leave the scout by the slide, step into the tractor, winch it off the bank where you point.** |
+| Nov 23-24 | Water: drag, lift, the current, the engine flooding, the snorkel. Condition and repair, simply. **Playable: drown a truck in the river and winch it out.** |
+| Nov 25-26 | Sites: stakes, E to deliver, stock, built effects. Outposts as bases. Pumps with fuel stock. Gravel road by spreading, and grading. The ravine fill. The board's two lists, prices. The end card. Saving all of it. |
+| Nov 27-28 | Content and tuning along the critical path, playtests from a new save to the end. Web performance. Only if all of that is done: the gearbox by hand, chains and the long winch, wear. |
 | Nov 29 | **Release 0.1.0** (the `release-itch` skill), the itch page with screenshots and a GIF, **submitted to the jam**. |
 | Nov 30 - Dec 1 | Buffer: fixes as 0.1.x. **Nothing new after Nov 30.** The deadline is Dec 1, 13:37 PST. |
 
 **If it is late on Nov 24, cut in this order:**
-1. The ground wearing (churn).
-2. The SE region and the river bridge (B1 and L2, so the 6x6 and semi go with them).
-3. The ravine's timber-bridge choice (keep the fill).
-4. Map zoom.
-5. Fuel station F1.
+1. The gearbox shifted by hand (auto stays as today; the theme still has the earthworks).
+2. The ground wearing (churn).
+3. Chains and the long winch (the snorkel stays, with the water).
+4. The SE region, the river bridge and L2, so the 6x6 and the semi lose their place in the chain
+   (the river stays, to drown in and to ford).
+5. The ravine's timber-bridge choice (keep the fill).
+6. Condition and repair (a flooded engine then just restarts out of the water).
+7. Map zoom, and fuel station F1.
 
-**Never cut:** the scout and fog, digging and tipping, one landslide, one outpost with a pump,
-one gravel road, the end card.
+**Never cut:**
+- the scout and the fog;
+- digging and tipping, one landslide, one outpost with a pump, one gravel road;
+- the winch aimed with the mouse;
+- trucks staying on the map;
+- water with the engine flooding;
+- the end card.
 
 **Stretch, after the jam:**
 - real ruts in the heights from heavy wheels;
 - a dozer blade on the 6x6;
 - roads the player lays out: the scout drives the line with a key held and leaves stakes, and the
   stakes become a gravel road site;
-- leaving trucks out on the map and switching between them;
+- cranes and loose cargo, logs loaded by hand, cargo that can fall off;
+- things that break: fences, poles, signs;
+- a cab view;
+- more tyres and addons, and addons for trailers;
 - a working day, morning to dusk, as a "shift";
 - a Ukrainian translation.
 
-## 13. Decisions for the owner
+## 14. Decisions for the owner
 
 1. **The name.** *Zsuv* is the working title (the Ukrainian for shift and for landslide, which is
    the game). Check itch.io for a clash before the page goes up.
@@ -524,3 +768,9 @@ one gravel road, the end card.
 5. **"Слідувати"** in the brief is read here as *to explore*: the scout reveals the map, and its
    track is kept for the haulers to follow. If it meant a truck that follows you on its own (a
    convoy), that is a separate system and a stretch.
+6. **"Залив двигуна"** is read as the engine flooding in deep water (§8). If it meant something
+   else, such as starting and stopping the engine by hand, say so.
+7. **What from the genre is a must** for the jam: §8's table is a proposal, and the owner picks.
+8. **The mouse winch in Khutir Road first?** It touches only `winch.gd`, the HUD and the input
+   (plus the trees' shape list in `world_builder.gd`). It can ship as Khutir Road 0.3.1 before
+   the fork, so both games have it and the fork starts with it.
