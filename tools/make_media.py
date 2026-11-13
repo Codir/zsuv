@@ -3,10 +3,10 @@
 
   python tools/make_media.py [--src capture/trailer] [--out media] [--only trailer,shots,cover,gif]
 
-  media/trailer/khutir-road-trailer.mp4   1920x1080, 30 fps, H.264 + AAC (a generated wind bed)
+  media/trailer/zsuv-trailer.mp4   1920x1080, 30 fps, H.264 + AAC (a generated wind bed)
   media/screenshots/NN-name.png           1920x1080
   media/cover.png                         630x500, the itch.io cover
-  media/khutir-road.gif                   480x270 loop for the itch page and the README
+  media/zsuv.gif                   480x270 loop for the itch page and the README
 
 Everything is drawn at the game's own 480x270 and blown up with nearest-neighbour, so the
 captions and the title are the same crisp pixels as the HUD, set in the game's font. The MP4 is
@@ -263,9 +263,9 @@ def main():
     if "cover" in only:
         make_cover(a.src, os.path.join(a.out, "cover.png"))
     if "gif" in only:
-        make_gif(a.src, os.path.join(a.out, "khutir-road.gif"))
+        make_gif(a.src, os.path.join(a.out, "zsuv.gif"))
     if "trailer" in only:
-        make_trailer(a.src, os.path.join(a.out, "trailer", "khutir-road-trailer.mp4"), a.blender)
+        make_trailer(a.src, os.path.join(a.out, "trailer", "zsuv-trailer.mp4"), a.blender)
 
 
 if __name__ == "__main__":

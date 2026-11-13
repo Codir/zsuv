@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One entry point for Khutir Road. Godot 4.7.2 lives in tools/godot/ (not in git); `fetch` puts it
+# One entry point for Zsuv. Godot 4.7.2 lives in tools/godot/ (not in git); `fetch` puts it
 # there, or point GODOT at an existing binary (GODOT=/path/to/Godot_v4.7.2-stable_win64_console.exe).
 #   ./godot.sh fetch                 download Godot 4.7.2 (+ export templates) for this OS
 #   ./godot.sh run [-- --autodrive]  play (args after -- go to the game)
@@ -46,9 +46,9 @@ imported() { mkdir -p builds capture && touch builds/.gdignore capture/.gdignore
 out_for() {
   case "$1" in
     Web) echo builds/web/index.html;;
-    Windows) echo builds/windows/KhutirRoad.exe;;
-    Linux) echo builds/linux/KhutirRoad.x86_64;;
-    macOS) echo builds/macos/KhutirRoad.zip;;
+    Windows) echo builds/windows/Zsuv.exe;;
+    Linux) echo builds/linux/Zsuv.x86_64;;
+    macOS) echo builds/macos/Zsuv.zip;;
   esac
 }
 

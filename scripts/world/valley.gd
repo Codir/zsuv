@@ -2,7 +2,7 @@ class_name Valley
 extends RefCounted
 ## One valley: its places and roads, the shape of its ground, what lies on it (snow or dust, mud,
 ## ice), its trees, colours and price. Valley.all() lists the five in the order they open, easiest
-## first, with more places to deliver to as they go (docs/valleys.md); every one is 256 m square.
+## first, with more places to deliver to as they go (docs/valleys.md at the tag base-khutir-road-0.3.0; docs/plan.md §3 turns them into biomes); every one is 256 m square.
 
 const DITCH_LENGTH := 10.0
 const DITCH_WIDTH := 2.4  # from its middle to where it meets the ground

@@ -1,6 +1,6 @@
 ---
 name: player-comments
-description: Use for Khutir Road's itch.io comments: reading them (the game's page, the jam pages), what players ask for and which of it goes into the next version, and answering them. "збери коментарі", "що пишуть гравці", "відповідай на коментарі", "read the comments", "reply to players".
+description: Use for Zsuv's itch.io comments: reading them (the game's page, the jam pages), what players ask for and which of it goes into the next version, and answering them. "збери коментарі", "що пишуть гравці", "відповідай на коментарі", "read the comments", "reply to players".
 ---
 
 # Player comments
@@ -21,7 +21,7 @@ candidates, every comment with its status. Read it first; every step below ends 
    The last field is "a reply". A post by Codirs is the owner's answer; the date is the post
    date's `title` (its text is relative, "2 days ago"). Some pages page their comments: follow
    "Next page" to the end. A new jam the game is in shows on the game's page as a link to
-   `itch.io/jam/<jam>/rate/5228452`: add it to Sources.
+   `itch.io/jam/<jam>/rate/<the game's id>`: add it to Sources.
 2. Every comment not in the ledger goes into it, under its page, with its post id, author, date, a
    faithful summary (quote what is short) and status **new**.
    Done when every comment on every source page is in the ledger.

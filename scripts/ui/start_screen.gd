@@ -40,7 +40,7 @@ func _ready() -> void:
 	bg.color = BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
-	var head := _label(Vector2(12, 6), Vector2(240, 14), "KHUTIR ROAD", GOLD)
+	var head := _label(Vector2(12, 6), Vector2(240, 14), "ZSUV", GOLD)
 	head.add_theme_font_size_override("font_size", 12)
 	_money = _label(Vector2(250, 6), Vector2(218, 14), "", INK, HORIZONTAL_ALIGNMENT_RIGHT)
 	var frame := ColorRect.new()

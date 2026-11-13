@@ -1,26 +1,32 @@
-# Khutir Road
+# Zsuv
 
-![Khutir Road](media/khutir-road.gif)
+*Зсув*: Ukrainian for a shift, and for a landslide.
 
-A small orange 4x4, five valleys of Ukraine, and cargo that has to get through. Khutir Road is a
-PSX-style off-road delivery game: haul groceries to a lone *khutir* (a Ukrainian farmstead) in a
-snowbound valley at dusk, then buy your way on to a sunny autumn steppe, Zakarpattia's spring
-vineyards, a foggy Polissia thaw with a road across a frozen lake, and a Carpathian pass at night
-in a blizzard, through snow and mud that pack down into ruts under your wheels. Take jobs from the
-board at the depot: against the clock, fragile, heavy, or a car to winch out of a ditch; buy a
-trailer, a heavy 6x6, a tractor with its trailer or a semi truck in the depot's garage and hitch
-up for the loads they carry (`docs/trucks.md`).
+It is spring after the floods. Landslides have shifted the hillsides onto the roads, the river
+took the bridges, and the upper village, high in the mountains, is cut off. You are the road crew
+sent from the railhead: scout the land nobody has mapped since, dig through the slides, fill the
+washouts, lay gravel, put up fuel stations and sawmills where you choose, pour concrete before it
+sets, and build bridges until a truck gets through to the village.
+
+Made for [GitHub Game Off 2026](https://itch.io/jam/game-off-2026), theme **SHIFT**.
+
+**Built on Khutir Road** (October 2026, by the same author): the driving, the trucks, the sound
+and the PSX look come from it. What was made for Game Off is everything since the tag
+`base-khutir-road-0.3.0`:
+
+```bash
+git diff base-khutir-road-0.3.0..main --stat
+```
+
+The plan for the jam, and what it changes, is in [docs/plan.md](docs/plan.md). Made with an AI
+coding agent (Claude Code) writing the code, the text and the procedural art. The sounds are CC0
+recordings by people (see Credits).
 
 Godot 4.7.2 (GL Compatibility, Jolt Physics), everything procedural; runs on Windows, Linux,
 macOS and in the browser.
 
-Trailer: https://youtu.be/HrOh6fI9AkE ([media/trailer/khutir-road-trailer.mp4](media/trailer/khutir-road-trailer.mp4)) ·
-itch.io: https://codirs.itch.io/psxrunner
-
-| | |
-|---|---|
-| ![](media/screenshots/03-marker-poles.png) | ![](media/screenshots/05-deep-snow.png) |
-| ![](media/screenshots/06-winch.png) | ![](media/screenshots/07-paper-map.png) |
+**In development.** For now the game still plays as Khutir Road did. The controls below are
+Khutir Road's, and they change as the plan lands.
 
 ## Controls
 
@@ -34,19 +40,16 @@ itch.io: https://codirs.itch.io/psxrunner
 | G | low range |
 | H | headlights |
 | E | the job board at the depot, unload at a delivery point, refuel (stopped) |
-| 1 - 5 | take a job from the board (a job in hand is dropped); in the garage, buy or drive |
+| 1 - 5 | take a job from the board; in the garage, buy or drive |
 | Tab | on the board: the garage (trucks and trailers) |
 | C | hitch the trailer behind you, or unhitch it |
 | F | winch to the tree, rock or stuck car ahead; hold Shift to reel in |
 | M | paper map |
-| T | tow back to the depot ($100) |
+| T | tow back to the depot |
 | R | flip upright |
 | Right mouse + drag, wheel | orbit and zoom the camera |
 | F1 | the help: a short hint in the corner, then every key, then none |
 | Esc | back to the valleys |
-
-On the valleys screen: A / D (or the arrows) pick a valley, W / S its sky, Enter drives in or
-buys it; the mouse works too, and names an icon when over it.
 
 Keys are physical, so they sit in the same place on any keyboard layout.
 
@@ -54,7 +57,6 @@ Keys are physical, so they sit in the same place on any keyboard layout.
 
 ```bash
 ./godot.sh run                    # downloads Godot 4.7.2 into tools/godot/ the first time
-./godot.sh run -- --autodrive     # the truck drives the east road by itself
 GODOT=/path/to/Godot_v4.7.2-stable_win64_console.exe ./godot.sh run   # use a Godot you have
 ./godot.sh editor
 ```
@@ -63,18 +65,12 @@ GODOT=/path/to/Godot_v4.7.2-stable_win64_console.exe ./godot.sh run   # use a Go
 
 ```bash
 ./godot.sh check        # every script parses, every shader compiles
-./godot.sh test         # tests/test_*.gd against one shared world, at a fixed 60 fps
+./godot.sh test         # tests/test_*.gd against one shared world, headless and silent, at a fixed 60 fps
 ./godot.sh soundcheck   # record the game's mix on a scripted drive into capture/soundcheck.wav
 ```
 
-The tests build the real valley and drive it: the truck stands on four wheels, drives the road,
-burns fuel and leaves ruts; snow and mud grip less and drag more until packed down; every valley
-builds with nothing on its roads, and every road drives both ways; the job board's jobs pay as
-they should (medals and records, fragile loads breaking on drops, heavy ones drinking, a stuck
-car winched out); the valleys screen buys and drives in, the profile saves; the winch pulls; the
-engine revs through its gears and labours when the truck can't move, the tyres crunch and
-squelch only when they roll; and no text in the game or on screen is left untranslated. Any error the engine logs during a test fails it, and a watchdog ends a run
-that hangs. The soundcheck prints how loud each part of its drive was.
+The tests build the real world and drive it. Any error the engine logs during a test fails it,
+and a watchdog ends a run that hangs.
 
 ## Export
 
@@ -92,14 +88,14 @@ COOP/COEP headers.
 
 Every push to `main` runs `.github/workflows/godot.yml`: the tests, then all four exports (the
 Web build is kept as a 3-day artifact). A `vX.Y.Z` tag also creates a GitHub Release, and each
-export is pushed by butler to its channel of https://codirs.itch.io/psxrunner (`html5`,
-`windows`, `linux`, `mac`), with the Windows, Linux and macOS files attached to the release.
+export is pushed by butler to its channel of https://codirs.itch.io/zsuv (`html5`, `windows`,
+`linux`, `mac`), with the Windows, Linux and macOS files attached to the release.
 
 Needs the `BUTLER_API_KEY` repository secret (an itch.io API key: https://itch.io/user/settings/api-keys);
-the `ITCH_TARGET` repository variable overrides `codirs/psxrunner`. The version is the top entry
-of [CHANGELOG.md](CHANGELOG.md) = `config/version` in `project.godot` = the tag. The
-`release-itch` skill (`.claude/skills/`) walks the whole procedure. On the first release, mark the
-`html5` upload on itch.io as "played in the browser" (viewport 960x540; it scales).
+the `ITCH_TARGET` repository variable overrides `codirs/zsuv`. The version is the top entry of
+[CHANGELOG.md](CHANGELOG.md) = `config/version` in `project.godot` = the tag. The `release-itch`
+skill (`.claude/skills/`) walks the whole procedure. On the first release, mark the `html5`
+upload on itch.io as "played in the browser" (viewport 960x540; it scales).
 
 ## Store media
 
@@ -108,18 +104,8 @@ of [CHANGELOG.md](CHANGELOG.md) = `config/version` in `project.godot` = the tag.
 python tools/make_media.py     # the trailer, screenshots, cover and GIF into media/
 ```
 
-The director runs the game at a fixed frame rate, so every capture is the same. `make_media.py`
-needs Python 3 with Pillow and NumPy, and Blender 4.5 for the MP4 (its FFmpeg is the encoder).
-Copy for the itch.io page is in [media/itch-page.md](media/itch-page.md).
-
-## Valleys
-
-```bash
-./godot.sh previews    # render the valleys screen's pictures into previews/ (needs a window)
-```
-
-[docs/valleys.md](docs/valleys.md) has the five valleys, the jobs and what is saved;
-`scripts/world/valley.gd` holds each valley as data, `scripts/world/weather.gd` the skies.
+`make_media.py` needs Python 3 with Pillow and NumPy, and Blender 4.5 for the MP4. Copy for the
+itch.io page is in [media/itch-page.md](media/itch-page.md).
 
 ## Sound
 
@@ -128,7 +114,8 @@ python tools/make_sounds.py    # cut sounds/source/ (CC0 recordings, never shipp
 ```
 
 Needs Python 3 with NumPy, SciPy and soundfile. [docs/sound.md](docs/sound.md) has the
-recordings, the cuts, how the truck plays them and how loud.
+recordings, the cuts, how the truck plays them and how loud. [docs/trucks.md](docs/trucks.md) has
+the rigs.
 
 ## Credits
 

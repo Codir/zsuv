@@ -4,7 +4,7 @@ extends RefCounted
 ## the records, the trucks and trailers bought and the truck picked. Saved to user:// on every change (in a browser that is its IndexedDB); a profile
 ## with no path is kept in memory only, as the tests and the captures use it.
 
-const PATH := "user://khutir_road.cfg"
+const PATH := "user://zsuv.cfg"
 
 var path := ""
 var money := 0
