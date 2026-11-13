@@ -88,11 +88,11 @@ COOP/COEP headers.
 
 Every push to `main` runs `.github/workflows/godot.yml`: the tests, then all four exports (the
 Web build is kept as a 3-day artifact). A `vX.Y.Z` tag also creates a GitHub Release, and each
-export is pushed by butler to its channel of https://codirs.itch.io/zsuv (`html5`, `windows`,
+export is pushed by butler to its channel of https://codirs.itch.io/zhuv (`html5`, `windows`,
 `linux`, `mac`), with the Windows, Linux and macOS files attached to the release.
 
 Needs the `BUTLER_API_KEY` repository secret (an itch.io API key: https://itch.io/user/settings/api-keys);
-the `ITCH_TARGET` repository variable overrides `codirs/zsuv`. The version is the top entry of
+the `ITCH_TARGET` repository variable overrides `codirs/zhuv`. The version is the top entry of
 [CHANGELOG.md](CHANGELOG.md) = `config/version` in `project.godot` = the tag. The `release-itch`
 skill (`.claude/skills/`) walks the whole procedure. On the first release, mark the `html5`
 upload on itch.io as "played in the browser" (viewport 960x540; it scales).

@@ -132,7 +132,7 @@ jobs:
         if: ${{ !cancelled() && steps.export.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') }}
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
-          ITCH_TARGET: ${{ vars.ITCH_TARGET || 'codirs/zsuv' }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET || 'codirs/zhuv' }}
         run: |
           if [ -z "$BUTLER_API_KEY" ]; then echo "::error::BUTLER_API_KEY secret is not set"; exit 1; fi
           if [ -z "$ITCH_TARGET" ]; then echo "::error::ITCH_TARGET repository variable (user/game) is not set"; exit 1; fi

@@ -9,7 +9,7 @@ at the tag `base-khutir-road-0.3.0`.
 
 | Page | URL |
 |---|---|
-| The game | https://codirs.itch.io/zsuv |
+| The game | https://codirs.itch.io/zhuv |
 | Game Off 2026 | https://itch.io/jam/game-off-2026/rate/<the entry's id, once submitted> |
 
 The owner's account is **Codirs**: a post by Codirs is an answer.

@@ -122,7 +122,7 @@ The owner's local session does this first, in this order:
    - `export_presets.cfg`: the `KhutirRoad.*` export paths, `product_name`, `file_description`,
      and `bundle_identifier` (`com.codirs.zsuv`).
    - `.github/workflows/godot.yml`: the `KhutirRoad*` file and artifact names, and the
-     `ITCH_TARGET` default (`codirs/zsuv`, a new itch.io page; the `BUTLER_API_KEY` secret is set
+     `ITCH_TARGET` default (`codirs/zhuv`, a new itch.io page; the `BUTLER_API_KEY` secret is set
      again in the new repository).
    - `godot.sh`: the header line and the export paths.
    - `Profile.PATH` (`user://zsuv.cfg`), so the two games never share a save in the browser.
