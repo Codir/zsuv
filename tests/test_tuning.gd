@@ -7,8 +7,7 @@ extends RefCounted
 
 const MIXER_SPEED := 8.0  # m/s, loaded, on the roads
 const OFFROAD := 1.3  # a road is this much longer than the straight line between its ends
-const ROAD_SPEED := 10.0  # m/s a pickup averages on the dirt roads
-const THROTTLE := 0.5  # its average throttle there
+const TANK_M := 2000.0  # metres a pickup's tank goes on the roads, as driven (test_fuel.gd: 1.6-2.6 km)
 
 
 ## Metres by road from a to b through the points between (straight lines, made longer).
@@ -45,9 +44,7 @@ func test_the_concrete_reaches_the_river_bridge(t: TCase) -> void:
 
 func test_a_tank_takes_a_pickup_to_the_river_and_back_but_not_to_the_village(t: TCase) -> void:
 	var p := _points(t)
-	var spec := TruckSpec.pickup()
-	var per_s := Vehicle.BURN_IDLE + THROTTLE * Vehicle.BURN * spec.burn  # Vehicle's burn, at that throttle
-	var range_m := spec.fuel_capacity / per_s * ROAD_SPEED
+	var range_m := TANK_M
 	var river_back := _route([p.railhead, p.river]) * 2.0
 	var village_back := _route([p.railhead, p.river, p.bog, p.gorge, p.village]) * 2.0
 	t.note = "a tank goes %.0f m; to the river and back %.0f m, to the village and back %.0f m" % [range_m, river_back, village_back]
