@@ -16,6 +16,7 @@ const MAX_SNOW := 0.8
 const MAX_MUD := 0.4
 const ROAD_HALF_WIDTH := 3.5
 const LOOSE := 0.3  # m: how deep loose earth is soft, as snow that deep
+const SNOW_NEAR := 60.0  # m from the camera to a chunk's middle where its snow is drawn at 0.5 m
 
 signal ground_changed(rect: Rect2i)  # vertices whose heights changed (once a tick at most)
 
@@ -46,7 +47,7 @@ var height_tex: ImageTexture
 var ground_mat: ShaderMaterial
 var snow_mat: ShaderMaterial
 var snow_tex: ImageTexture
-var _chunk_meshes: Array = []  # per chunk, row by row: [its ground mesh, its snow mesh]
+var _chunk_meshes: Array = []  # per chunk, row by row: [its ground mesh, its snow near, its snow far]
 var _chunk_shapes: Array[HeightMapShape3D] = []  # per chunk, row by row
 
 var _track_dirty := false
@@ -787,7 +788,15 @@ func _build_visuals() -> void:
 	for cz in CHUNKS:
 		for cx in CHUNKS:
 			var center := Vector3(-HALF + (cx + 0.5) * CHUNK, 0.0, -HALF + (cz + 0.5) * CHUNK)
-			var pair := [_add_chunk(ground_mesh, ground_mat, center), _add_chunk(snow_mesh, snow_mat, center)]
+			# The snow (or dust) at 0.5 m only near, where the ruts show; further off at 1 m, a quarter
+			# of its triangles: five tiles of it are more than a browser draws (docs/plan.md §13).
+			var near := _add_chunk(snow_mesh, snow_mat, center)
+			near.visibility_range_end = SNOW_NEAR
+			near.visibility_range_end_margin = 4.0
+			var far := _add_chunk(ground_mesh, snow_mat, center)
+			far.visibility_range_begin = SNOW_NEAR
+			far.visibility_range_begin_margin = 4.0
+			var pair := [_add_chunk(ground_mesh, ground_mat, center), near, far]
 			_chunk_meshes.append(pair)
 			_fit_chunk(cx, cz)
 

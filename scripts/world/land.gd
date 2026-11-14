@@ -28,6 +28,8 @@ const OPPOSITE := {"west": "east", "east": "west", "north": "south", "south": "n
 var home: Terrain
 var baked := false  # built from the bake (MapBake), not the generator
 var earthworks: Earthworks  # digging and dumping on it (docs/plan.md §4)
+var timings := {}  # ms build took: ground (the bake or the generator), finish (meshes, collision), world (trees, houses)
+var _t0 := 0
 var fog: Fog  # what has been seen of it (docs/plan.md §3)
 var paper := PackedByteArray()  # the paper map as the bake drew it (MapScreen), or empty
 var tiles: Array[Terrain] = []
@@ -44,6 +46,7 @@ var _bodies: Array[RID] = []
 ## play): every tile's ground (from the bake when there is a current one and use_bake, else
 ## from the generator), the borders, then what is seen, driven on and stands on it.
 func build(home_valley: Valley, use_bake := true) -> void:
+	_t0 = Time.get_ticks_msec()
 	_home_cell = home_valley.cell
 	earthworks = Earthworks.new(self)
 	var valleys := {}
@@ -86,10 +89,12 @@ func build(home_valley: Valley, use_bake := true) -> void:
 	for border in borders:
 		_keep_clear(border.a, border.side, border)
 		_keep_clear(border.b, OPPOSITE[border.side], border)
+	timings.ground = Time.get_ticks_msec() - _t0
 	for t in tiles:
 		add_child(t)
 		t.finish()
 		_bodies.append(t.body.get_rid())
+	timings.finish = Time.get_ticks_msec() - _t0 - timings.ground
 	for b in borders:
 		if b.kind != "land":
 			_water_plane(b)
@@ -110,6 +115,7 @@ func build(home_valley: Valley, use_bake := true) -> void:
 			anchor_points.append(p + t.position)
 		for p in wb.tree_points:
 			tree_points.append(p + t.origin)
+	timings.world = Time.get_ticks_msec() - _t0 - timings.ground - timings.finish
 	fog = Fog.new(self)
 
 

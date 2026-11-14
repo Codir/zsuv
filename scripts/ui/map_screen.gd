@@ -12,6 +12,7 @@ const PAPER := Color(0.93, 0.88, 0.76)
 const INK := Color(0.22, 0.17, 0.12)
 const TRAIL_STEP := 3.0
 const TRAIL_MAX := 3000
+const REDRAW_EVERY := 250  # ms
 const TRACK_COLOR := Color(0.15, 0.35, 0.85, 0.9)
 const FOG_SHADER := """
 shader_type canvas_item;
@@ -53,6 +54,8 @@ var _trail := PackedVector2Array()
 var _trees := PackedVector2Array()
 var _bounds := Rect2()
 var _drawn := false
+var _stale := {}  # Terrain -> Rect2i of its pixels the ground changed in since they were drawn
+var _redrawn := 0
 
 
 func setup(l: Land, v: Vehicle, c: Contracts, locs: Dictionary, trees: PackedVector2Array) -> void:
@@ -150,6 +153,7 @@ func _process(_delta: float) -> void:
 	if vehicle.spec.id == "scout" and (scout_track.is_empty() or scout_track[scout_track.size() - 1].distance_to(p) > TRAIL_STEP):
 		scout_track.append(p)
 	if visible:
+		_redraw_stale()
 		if _fog_dirty:
 			_update_fog()
 		_canvas.queue_redraw()
@@ -329,7 +333,19 @@ static func draw_paper(l: Land) -> PackedByteArray:
 func _on_ground_changed(rect: Rect2i, t: Terrain) -> void:
 	if not _drawn:
 		return
-	_render(t, rect.grow(1).intersection(Rect2i(0, 0, Terrain.SIZE, Terrain.SIZE)))
+	var r := rect.grow(1).intersection(Rect2i(0, 0, Terrain.SIZE, Terrain.SIZE))
+	_stale[t] = _stale[t].merge(r) if _stale.has(t) else r
+
+
+## Draws again what the ground changed in, while the map is open and at most REDRAW_EVERY: a
+## browser cannot redraw and upload the whole map's image every tick a bucket bites.
+func _redraw_stale() -> void:
+	if _stale.is_empty() or Time.get_ticks_msec() - _redrawn < REDRAW_EVERY:
+		return
+	_redrawn = Time.get_ticks_msec()
+	for t in _stale:
+		_render(t, _stale[t])
+	_stale.clear()
 	_tex.update(_img)
 
 
@@ -340,6 +356,8 @@ func _render(t: Terrain, rect: Rect2i) -> void:
 	var stride := Terrain.N
 	var n := Terrain.SIZE
 	var v := t.valley
+	var wet := land.borders.any(func(b: Dictionary) -> bool: return b.kind != "land" and (b.a == t or b.b == t)) \
+		or v.features.any(func(ft: Dictionary) -> bool: return ft.type == "lake" and ft.has("water"))
 	var o := Vector2i((t.origin - Vector2.ONE * Terrain.HALF - _bounds.position).round())
 	for z in range(rect.position.y, rect.end.y):
 		for x in range(rect.position.x, rect.end.x):
@@ -356,7 +374,7 @@ func _render(t: Terrain, rect: Rect2i) -> void:
 			col = col.lerp(Color(0.38, 0.33, 0.28), c.b)
 			col = col.lerp(v.ice_color, 1.0 - c.a)
 			var wp := t.origin + Vector2(x - Terrain.HALF, z - Terrain.HALF)
-			if land.water_level(wp) > hz:
+			if wet and land.water_level(wp) > hz:
 				col = Color(0.3, 0.45, 0.6)
 			col = Color(col.r * shade, col.g * shade, col.b * shade)
 			# A contour line every 3 m.
