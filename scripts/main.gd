@@ -17,6 +17,8 @@ var hud: Hud
 var map_screen: MapScreen
 var builder: WorldBuilder
 var fleet: Fleet  # the trucks out on the map, the one driven among them (docs/plan.md §8)
+var saver: Saver  # the whole game into the profile and back (docs/plan.md §11)
+var end_card: EndCard  # "The valley is open" (docs/plan.md §9)
 var locations: Dictionary
 var roads: Array[PackedVector2Array] = []
 var weather: Weather  # set before the scene enters the tree; the valley's own if not
@@ -98,6 +100,20 @@ func _ready() -> void:
 	fleet.claimed.connect(_claimed)
 	_place_found_trucks()
 
+	contracts.infra = infra
+	contracts.fleet = fleet
+	contracts.goal = {} if infra.village == null else {"name": "The upper village", "pos": infra.village.at}
+	map_screen.infra = infra
+	map_screen.clicked.connect(contracts.toggle_waypoint)
+	end_card = EndCard.new()
+	add_child(end_card)
+	infra.finished.connect(func() -> void: end_card.open(self))
+	saver = Saver.new()
+	saver.name = "Saver"
+	saver.main = self
+	add_child(saver)
+	saver.restore()
+
 	if "--autodrive" in OS.get_cmdline_user_args():
 		vehicle.drive_along(roads[0].slice(1))
 	if "--maptest" in OS.get_cmdline_user_args():
@@ -109,9 +125,16 @@ func _ready() -> void:
 			_capture(arg.get_slice("=", 1))
 
 
-## Where the truck starts: beside the depot, facing the first road out.
+## Where a truck is set down: at the base the tow or the garage last used (Contracts.base), else
+## beside the railhead, facing the first road out. The trailers park about it.
 func _spawn() -> Vector3:
+	if contracts and contracts.base:
+		return contracts.spawn_now().pos
 	return Vector3(valley.spawn.x, land.get_height(valley.spawn.x, valley.spawn.y) + 1.5, valley.spawn.y)
+
+
+func _spawn_yaw() -> float:
+	return contracts.spawn_now().yaw if contracts and contracts.base else valley.spawn_yaw
 
 
 ## A truck of spec at the spawn, in the world (the pickup when spec is null).
@@ -121,7 +144,7 @@ func _truck(spec: TruckSpec) -> Vehicle:
 	v.spec = spec if spec else TruckSpec.pickup()
 	v.land = land
 	v.position = _spawn()
-	v.rotation.y = valley.spawn_yaw
+	v.rotation.y = _spawn_yaw()
 	add_child(v)
 	v.winch.anchors = land.anchor_points
 	if v.spec.id == "tractor":  # its front loader, and the farm trailer is its tipper (docs/plan.md §4)
@@ -148,7 +171,7 @@ func set_truck(spec: TruckSpec) -> void:
 	if v:
 		v.unhitch()
 		v.set_frozen(false)
-		v.set_down(spawn, valley.spawn_yaw)
+		v.set_down(spawn, _spawn_yaw())
 	else:
 		v = _truck(spec)
 	fleet.drive_truck(v)
@@ -323,7 +346,7 @@ func _on_spawn() -> Array[Trailer]:
 	box.size = Vector3(4.0, 3.0, 10.0)
 	var q := PhysicsShapeQueryParameters3D.new()
 	q.shape = box
-	q.transform = Transform3D(Basis(Vector3.UP, valley.spawn_yaw), _spawn() + Vector3(0.0, 0.5, 0.0))
+	q.transform = Transform3D(Basis(Vector3.UP, _spawn_yaw()), _spawn() + Vector3(0.0, 0.5, 0.0))
 	q.exclude = land.bodies()
 	var out: Array[Trailer] = []
 	for hit in get_world_3d().direct_space_state.intersect_shape(q, 8):
@@ -388,11 +411,11 @@ func _parking(t: Trailer, away: Array[RID] = []) -> Transform3D:
 	# 1 fairly level (1.2 m); 2 as steep as a trailer stands still on (1.7 m, 8 degrees along a
 	# semi-trailer); all three with its wheels on the ground and the lane even with it; 3 anywhere
 	# clear; 4 anywhere no trailer is.
-	var best := Transform3D(Basis(Vector3.UP, valley.spawn_yaw), _spawn())
+	var best := Transform3D(Basis(Vector3.UP, _spawn_yaw()), _spawn())
 	var best_grade := 5
 	var best_rects := []
 	for s in spots:
-		var yaw := valley.spawn_yaw + s.z * PI * 0.5
+		var yaw := _spawn_yaw() + s.z * PI * 0.5
 		var turn := Basis(Vector3.UP, yaw)
 		var at := Vector2(s.x, s.y)
 		var rect := _quarter(Rect2(lo.x - 0.5, lo.z - 0.5, hi.x - lo.x + 1.0, hi.z - lo.z + 1.0), int(s.z), at)
@@ -400,7 +423,7 @@ func _parking(t: Trailer, away: Array[RID] = []) -> Transform3D:
 		if rect.intersects(spawn) or ahead.intersects(spawn) or spots_taken.any(func(r: Rect2) -> bool: return r.intersects(rect) or r.intersects(ahead)) \
 				or lanes_taken.any(func(r: Rect2) -> bool: return r.intersects(rect)):
 			continue
-		var p := _spawn() + Basis(Vector3.UP, valley.spawn_yaw) * Vector3(s.x, 0.0, s.y)
+		var p := _spawn() + Basis(Vector3.UP, _spawn_yaw()) * Vector3(s.x, 0.0, s.y)
 		p.y = land.get_height(p.x, p.z)
 		if ends.any(func(e: Vector3) -> bool: var c := p + turn * e; return maxf(absf(c.x), absf(c.z)) > Terrain.HALF - 4.0):
 			continue

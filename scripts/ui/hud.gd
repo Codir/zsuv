@@ -104,15 +104,13 @@ func _process(delta: float) -> void:
 		"░".repeat(10 - fuel_bars),
 		roundi(vehicle.fuel),
 		roundi(vehicle.condition * 100.0),
-		Loads.text(vehicle),
+		vehicle.load_text(),
 	]
 	if vehicle.flooded:
 		_status.text += "\nENGINE FLOODED"
 	elif vehicle.water_depth > 0.05:  # the water against the intake (docs/plan.md §8)
 		var intake := vehicle.water_depth - vehicle.water_over_intake if vehicle.water_over_intake > -INF else 0.0
 		_status.text += "\nWATER %.1f / %.1f m%s" % [vehicle.water_depth, intake, "  !" if vehicle.water_over_intake > -0.25 else ""]
-	if vehicle.load_text() != "":
-		_status.text += "\n" + vehicle.load_text()
 	if vehicle.winch.attached:
 		_status.text += "\nWINCH %4.1f m  pull %2d kN%s" % [
 			vehicle.winch.length, roundi(vehicle.winch.tension / 1000.0), "  <<" if vehicle.winch.reeling else ""]

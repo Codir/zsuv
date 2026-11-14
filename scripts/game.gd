@@ -43,6 +43,7 @@ func _start(fresh: bool) -> void:
 		profile = Profile.new()
 		profile.path = profile_path
 		profile.truck = "scout"  # a new game starts in the scout (docs/plan.md §7)
+		profile.new_game = true  # the railhead's trucks are set out (Saver)
 	var v := Valley.find(profile.last)
 	enter(v if v else Valley.steppe(), Weather.Kind.OWN)
 

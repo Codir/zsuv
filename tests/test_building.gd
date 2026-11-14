@@ -151,8 +151,7 @@ func test_each_load_counts_and_the_site_stands(t: TCase) -> void:
 
 
 ## The milestone for Nov 20: on the steppe, a fuel station placed and built from the railhead's
-## parts and its plant's concrete, poured from a mixer (a stand-in on the pickup's body until the
-## mixer is in), then filled with the railhead's fuel.
+## parts and its plant's concrete, poured into the mixer, then filled with the railhead's fuel.
 func test_a_fuel_station_on_the_steppe_from_the_railheads_loads(t: TCase) -> void:
 	var shared: Vehicle = t.world.vehicle
 	shared.autodrive = true  # deaf to the keys
@@ -191,10 +190,7 @@ func test_a_fuel_station_on_the_steppe_from_the_railheads_loads(t: TCase) -> voi
 	infra.interact()
 	t.eq(site.needs_left(), {"concrete": 1.0}, "the site's needs after the parts")
 	# Concrete from the railhead's plant, into the mixer under its chute.
-	var mixer := TruckSpec.pickup()
-	mixer.id = "mixer"
-	mixer.title = "Mixer"
-	world.set_truck(mixer)
+	world.set_truck(TruckSpec.mixer())
 	await t.ticks(2)
 	v = world.vehicle
 	await _stand(t, world, depot)
@@ -262,10 +258,17 @@ static func _grid(c: Vector2, r: float, step: float) -> PackedVector2Array:
 
 ## Takes every site and building in infra away, and the railhead back as it was.
 static func _clear(infra: Infra) -> void:
-	for s in infra.sites:
+	for s in infra.sites.duplicate():
+		if s == infra.village or s.key != "":  # the goal and the bridges stay, with nothing brought
+			if s.built:
+				s.built = false
+				s._refresh()
+			s.delivered = {}
+			continue
+		infra.sites.erase(s)
 		s.queue_free()
-	infra.sites.clear()
 	infra.felled.clear()
+	infra._felled_seen = 0  # counted again from the earthworks at the next look
 	infra.railhead.stock = Infra.RAILHEAD_STOCK.duplicate()
 	infra.mode = Infra.Mode.NONE
 	infra.yard = []
@@ -292,3 +295,176 @@ static func _wheel(b: MouseButton) -> InputEventMouseButton:
 	ev.button_index = b
 	ev.pressed = true
 	return ev
+
+
+## An outpost built (on the steppe, where there is level ground for it) is a base: its garage
+## opens there, the tow from near it goes there, the trailers park about it, its yard keeps any 6
+## loads and its tank 1000 L.
+func test_a_built_outpost_is_a_base(t: TCase) -> void:
+	var shared: Vehicle = t.world.vehicle
+	shared.autodrive = true
+	var world := await _steppe(t)
+	var infra: Infra = world.infra
+	var c: Contracts = world.contracts
+	var depot: Vector2 = world.locations.depot.pos
+	var at := spot(infra, "outpost", depot, 40.0)
+	if not t.ok(at.x < INF, "no level ground for an outpost"):
+		_done(t, world)
+		return
+	var post := infra.place("outpost", at, 0.0)
+	for res in post.spec.needs:
+		post.deliver(res, float(post.spec.needs[res]))
+	t.ok(post.built, "the outpost is not built")
+	t.eq(infra.bases(), [infra.railhead, post] as Array[Site], "the bases")
+	t.eq(post.deliver("timber", 4.0), 4.0, "timber into the yard")
+	t.eq(post.deliver("parts", 4.0), 2.0, "parts into a yard of 6")
+	t.eq(post.deliver("fuel", 1500.0), 1000.0, "fuel into its tank")
+	await _stand(t, world, _front(post), post.yaw + PI * 0.5)
+	t.ok(c.near_depot(), "the garage does not open at the outpost")
+	t.ok(c.objective_text().begins_with("AT THE OUTPOST"), "objective: " + c.objective_text())
+	t.ok(infra.prompt.ends_with("[Tab] Garage"), "prompt: " + infra.prompt)
+	t.eq(infra.draw(post, "parts", 1.0), 1.0, "parts drawn from the yard")
+	t.eq(infra.draw(infra.railhead, "parts", 5.0), 5.0, "the railhead's parts")
+	# The tow from out past the outpost: to it, with the trailer parked about it.
+	c.give_rigs(PackedStringArray(["trailer"]))
+	var away := at + (at - depot).normalized() * 30.0
+	await _stand(t, world, away)
+	c.recover()
+	await t.ticks(120)
+	var v: Vehicle = world.vehicle
+	var spawn: Vector3 = infra.base_spawn(post).pos
+	var off := Vector2(v.global_position.x, v.global_position.z).distance_to(Vector2(spawn.x, spawn.z))
+	t.note = "the outpost %.0f m from the railhead; the tow set the truck %.1f m from its spot" % [at.distance_to(depot), off]
+	t.ok(off < 4.0, "the tow set the truck %.1f m from the outpost's spot" % off)
+	t.eq(c.base, post, "the base the tow went to")
+	var tr := c._trailer("trailer")
+	t.ok(tr and Vector2(tr.global_position.x, tr.global_position.z).distance_to(post.at) < 45.0,
+		"the trailer is not parked by the outpost")
+	_done(t, world)
+
+
+## The upper village takes its fuel and parts, a load at a time, and the end card shows; Esc
+## closes it and play goes on.
+func test_the_village_takes_its_fuel_and_parts_and_the_end_card_shows(t: TCase) -> void:
+	var infra: Infra = t.world.infra
+	var v: Vehicle = t.world.vehicle
+	var card: EndCard = t.world.end_card
+	_clear(infra)
+	var village := infra.village
+	if not t.ok(village != null, "no upper village on the map"):
+		return
+	t.eq(t.world.contracts.goal.get("pos"), village.at, "the arrow's goal")
+	t.eq(village.needs_left(), {"fuel": 800.0, "parts": 2.0}, "what the village asks for")
+	await t.place(village.at + Vector2(0.0, -village.spec.size.y * 0.5 - 2.0), 0.0, 60)
+	t.eq(infra.here(), village, "the truck is not at the village")
+	t.ok(infra.prompt.begins_with("[E] Bring the village: fuel 800 L, parts 2"), "prompt: " + infra.prompt)
+	for item in [["fuel", 400.0], ["fuel", 400.0], ["parts", 1.0], ["parts", 1.0]]:
+		t.ok(not card.visible, "the end card before the last load")
+		Loads.put(v, item[0], item[1])
+		infra.interact()
+		t.eq(Loads.amount(v, item[0]), 0.0, "%s left on the truck" % item[0])
+	t.ok(village.built, "the village does not have what it asked for: %s" % [village.needs_left()])
+	t.ok(card.visible and card.text.begins_with("THE VALLEY IS OPEN"), "the end card: " + card.text)
+	t.ok(card.text.contains("Fuel burnt") and card.text.contains("Earth shifted"), "the card's counts: " + card.text)
+	t.ok(infra.ledger()[-1] == "Upper village: has all it asked for", "the ledger: %s" % [infra.ledger()])
+	Input.parse_input_event(_key(KEY_ESCAPE))
+	await t.ticks(2)
+	t.ok(not card.visible, "Esc does not close the end card")
+	t.ok(is_instance_valid(t.world) and t.world.is_inside_tree(), "Esc left the world")
+	village.built = false
+	village.delivered = {}
+	_clear(infra)
+
+
+func test_a_click_on_the_map_sets_a_waypoint_and_another_clears_it(t: TCase) -> void:
+	var c: Contracts = t.world.contracts
+	var map: MapScreen = t.world.map_screen
+	var p := Vector2(30.0, -50.0)
+	map.clicked.emit(p)
+	t.eq(c.current_target().get("pos"), p, "the arrow's target")
+	t.ok(c.objective_text().begins_with("WAYPOINT"), "objective: " + c.objective_text())
+	map.clicked.emit(p + Vector2(3.0, 2.0))
+	t.ok(c.target.is_empty(), "a click on the waypoint does not clear it")
+	t.eq(c.current_target(), c.goal, "the arrow points back at")
+
+
+func test_the_ledger_lists_every_building_and_site(t: TCase) -> void:
+	var infra: Infra = t.world.infra
+	_clear(infra)
+	var at := spot(infra, "fuel_station", Vector2(-40.0, -40.0))
+	var site := infra.place("fuel_station", at, 0.0)
+	if not t.ok(site != null, "not placed"):
+		return
+	var lines := infra.ledger()
+	t.ok(lines[0].begins_with("Railhead: timber 4, gravel 2/4") or lines[0].begins_with("Railhead:"), "the railhead's line: " + lines[0])
+	t.ok(lines.has("Fuel station site: needs concrete 1, parts 1"), "the ledger: %s" % [lines])
+	t.world.call("_toggle_map")
+	await t.ticks(3)
+	t.ok(t.world.map_screen.visible, "the map does not open")
+	t.world.call("_toggle_map")
+	_clear(infra)
+
+
+## A steppe world of its own, the shared one's truck deaf to the keys meanwhile.
+static func _steppe(t: TCase) -> Node:
+	var vp := SubViewport.new()
+	vp.own_world_3d = true
+	vp.size = Vector2i(480, 270)
+	var world = SCENE.instantiate()
+	world.valley = Valley.steppe()
+	world.profile = Profile.new()
+	vp.add_child(world)
+	t.tree.root.add_child(vp)
+	await t.ticks(30)
+	return world
+
+
+static func _done(t: TCase, world: Node) -> void:
+	world.get_parent().free()
+	t.world.vehicle.autodrive = false
+
+
+## A bridge over the river: a site at the crossing, built from concrete 2 and timber 3, then a deck
+## that carries a truck across with road grip, high above the water.
+func test_a_bridge_carries_a_truck_across_the_river(t: TCase) -> void:
+	var infra: Infra = t.world.infra
+	var land: Land = t.world.land
+	var v: Vehicle = t.world.vehicle
+	_clear(infra)
+	var bridges := infra.sites.filter(func(s: Site) -> bool: return s.spec.id == "bridge")
+	t.eq(bridges.size(), land.crossings().size(), "a bridge site at every crossing")
+	if bridges.is_empty():
+		return
+	var bridge: Site = bridges[0]
+	t.eq(bridge.needs_left(), {"concrete": 2.0, "timber": 3.0}, "what the bridge needs")
+	t.ok(not infra.take_down(bridge), "a crossing's site is taken down")
+	var a: Vector3 = bridge.ends[0]
+	var b: Vector3 = bridge.ends[1]
+	var dir := Vector2(b.x - a.x, b.z - a.z).normalized()
+	var start := Vector2(a.x, a.z) - dir * 3.0
+	await t.place(start, atan2(-dir.x, -dir.y), 60)
+	t.eq(infra.here(), bridge, "the truck at the bank is not at the bridge site")
+	bridge.deliver("timber", 3.0)
+	bridge.deliver("concrete", 2.0)
+	t.ok(bridge.built, "the bridge does not stand")
+	await t.ticks(2)
+	var deck := bridge.find_children("*", "StaticBody3D", true, false)
+	t.ok(deck.size() == 1, "the bridge has no deck")
+	var water := land.water_level(Vector2((a.x + b.x) * 0.5, (a.z + b.z) * 0.5))
+	var end := Vector2(b.x, b.z) + dir * 12.0
+	v.fuel = v.spec.fuel_capacity
+	v.drive_along(PackedVector2Array([Vector2(b.x, b.z), end]), 6.0)
+	var low := INF
+	for i in 900:
+		await t.tree.physics_frame
+		low = minf(low, v.global_position.y)
+		if Vector2(v.global_position.x, v.global_position.z).distance_to(end) < 4.0:
+			break
+	v.autodrive = false
+	var at := Vector2(v.global_position.x, v.global_position.z)
+	t.note = "%.0f m over, the truck %.1f m over the water at its lowest" % [bridge.spec.size.y - 2.0, low - water]
+	t.ok(at.distance_to(end) < 6.0, "the truck did not get across: %.0f m short" % at.distance_to(end))
+	t.ok(low > water + 0.5, "the truck went down to %.1f m, the water is at %.1f" % [low, water])
+	_clear(infra)
+	await t.ticks(2)
+	t.eq(bridge.find_children("*", "StaticBody3D", true, false).size(), 0, "the deck is still there after the clear")

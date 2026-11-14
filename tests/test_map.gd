@@ -345,6 +345,11 @@ func _barred(tile: Terrain, r: int) -> bool:
 	for ft in tile.valley.features:
 		if ft.type in ["washout", "slide"] and int(ft.road) == r:
 			return true
+		# Deep water over the road: past it only with a snorkel (§8; test_water drives it).
+		if ft.type == "lake" and float(ft.get("water", 0.0)) > 1.0:
+			for p in tile.roads[r]:
+				if p.distance_to(ft.pos) < float(ft.radius) + float(ft.get("shore", 8.0)) * 0.5:
+					return true
 	return false
 
 
@@ -392,6 +397,9 @@ static func _gate_point(side: String, g: float) -> Vector2:
 func _drive(t: TCase, path: PackedVector2Array, limit := 90) -> float:
 	var truck: Vehicle = t.world.vehicle
 	truck.awd = true
+	# A fresh truck each run: the barriers' test floods its engine, and each flood costs a quarter.
+	truck.condition = 1.0
+	truck.flooded = false
 	var a := path[0]
 	var dir := path[1] - a
 	truck.teleport(Vector3(a.x, t.world.land.get_height(a.x, a.y) + 1.2, a.y), atan2(-dir.x, -dir.y))
