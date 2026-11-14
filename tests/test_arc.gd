@@ -46,8 +46,8 @@ func _arc(t: TCase) -> void:
 	var mixer: Vehicle = world.fleet.find("mixer")
 	if not t.ok(pickup and tractor and mixer and pickup.trailer and tractor.trailer, "the railhead's trucks are not set out"):
 		return
-	# The first minute: the village calls, and the arrow points at it, far off.
-	t.ok(c.goal.get("pos") == infra.village.at, "the arrow does not point at the village")
+	# The first minute: the village calls, and the objective names it, far off.
+	t.ok(c.goal.get("pos") == infra.village.at, "the objective is not the village")
 	t.ok(c.objective_text().begins_with("AT THE") or c.objective_text().begins_with("THE UPPER VILLAGE"), "objective: " + c.objective_text())
 	t.ok(_said("The upper village calls"), "no radio call from the village")
 	var ledger_before := infra.ledger().size()

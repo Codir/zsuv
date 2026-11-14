@@ -1,6 +1,6 @@
 class_name Contracts
 extends Node3D
-## The railhead's side of things, with no money in them (docs/plan.md §6): the arrow and the
+## The railhead's side of things, with no money in them (docs/plan.md §6): the objective and the
 ## marker over the railhead, the tow (T), and the garage (Tab at the railhead), which drives a truck
 ## the player has, never sells one. What is hauled, built and made is Infra's (scripts/systems/
 ## infra.gd); the loads on a truck are read through Loads.
@@ -28,10 +28,9 @@ var garage_open := false  # Tab at a base
 var workshop := false  # the garage turned to its workshop (U): upgrades and repair (Upgrades)
 var trailers: Array[Trailer] = []  # the player's, in this valley (scripts/main.gd parks them)
 var target := {}  # a waypoint set on the map ({name, pos}); empty: none
-var goal := {}  # the upper village ({name, pos}): where the arrow points with no waypoint
+var goal := {}  # the upper village ({name, pos}): what the objective names with no waypoint
 
 var _depot: Dictionary
-var _arrow: Node3D
 var _markers := {}  # "depot" -> marker pole
 
 
@@ -40,15 +39,9 @@ func setup(v: Vehicle, t: Land, locations: Dictionary) -> void:
 	land = t
 	_depot = locations.depot
 	_markers["depot"] = _make_marker(_depot, Color(1.0, 0.8, 0.2))
-	_arrow = Node3D.new()
-	add_child(_arrow)
-	var prism := PrismMesh.new()
-	prism.size = Vector3(0.7, 1.1, 0.25)
-	var arrow_mesh := Psx.mesh(_arrow, prism, Vector3.ZERO, Color(1.0, 0.85, 0.2), 1.5)
-	arrow_mesh.rotation.x = -PI * 0.5
 
 
-## Where the arrow points: the waypoint, else the goal, else the railhead.
+## What the objective names: the waypoint, else the goal, else the railhead.
 func current_target() -> Dictionary:
 	if not target.is_empty():
 		return target
@@ -169,13 +162,6 @@ func near_depot() -> bool:
 func _process(_delta: float) -> void:
 	if vehicle == null:
 		return
-	var tpos := _loc_pos(current_target())
-	_arrow.global_position = vehicle.global_position + Vector3(0.0, 3.2, 0.0)
-	var look := Vector3(tpos.x, _arrow.global_position.y, tpos.z)
-	_arrow.visible = _arrow.global_position.distance_to(look) > INTERACT_RADIUS
-	if _arrow.visible:
-		_arrow.look_at(look, Vector3.UP)
-
 	prompt = ""
 	var slow := absf(vehicle.forward_speed) < 2.0
 	if garage_open and not (near_depot() and slow):

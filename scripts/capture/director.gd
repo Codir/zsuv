@@ -13,7 +13,6 @@ var out_dir := ""
 
 var _cam: Callable  # (t: float) -> Transform3D while the director holds the camera
 var _t := 0.0  # seconds into the current scene
-var _hide_arrow := false
 var _log := PackedStringArray()
 
 
@@ -28,8 +27,6 @@ func _process(delta: float) -> void:
 	_t += delta
 	if _cam.is_valid():
 		main.camera_rig.camera.global_transform = _cam.call(_t)
-	if _hide_arrow:
-		main.contracts._arrow.visible = false
 
 
 func _run() -> void:
@@ -199,10 +196,9 @@ func _place(p: Vector2, yaw: float) -> void:
 	await _frames(45)
 
 
-## Cinematic: no dashboard and no guide arrow over the truck.
+## Cinematic: no dashboard.
 func _cinematic(on: bool) -> void:
 	main.hud.visible = not on
-	_hide_arrow = on
 
 
 # --- Cameras: each returns a Callable(t) -> Transform3D, called every frame. ------------------

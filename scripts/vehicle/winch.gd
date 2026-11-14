@@ -310,7 +310,8 @@ func _process(_delta: float) -> void:
 	if aiming and vehicle.driven and DisplayServer.get_name() != "headless":
 		_aim_at_mouse()
 	var bob := Vector3(0.0, 0.3 + sin(Time.get_ticks_msec() / 200.0) * 0.1, 0.0)
-	_marker.visible = not attached and not aiming and candidate >= 0
+	# The winch's own pick (what F again hooks) shows only while aiming, beside the cursor's point.
+	_marker.visible = aiming and not attached and candidate >= 0
 	if _marker.visible:
 		_marker.global_position = candidate_point() + bob
 	var aim_shown: bool = aiming and not aimed.is_empty() and aimed.point != Vector3.INF
