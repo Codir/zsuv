@@ -23,6 +23,8 @@ var _sun: DirectionalLight3D
 var _parked := {}  # trailer -> the spot it was given by the depot, about the spawn: [its footprint, the lane ahead of it, the spot]
 var _fall: CPUParticles3D
 var _sky: Weather  # the sky the land last gave where the truck is (Land.weather_at)
+var _biome := ""  # the biome the truck is in
+var _reveal_t := 0.0
 
 
 func _ready() -> void:
@@ -69,6 +71,10 @@ func _ready() -> void:
 	map_screen = MapScreen.new()
 	add_child(map_screen)
 	map_screen.setup(land, vehicle, contracts, locations, builder.tree_points)
+	# The paper map is blank but around the camp; it draws itself as the truck goes (docs/plan.md §3).
+	land.fog.found.connect(_found)
+	land.fog.reveal(Vector2(valley.spawn.x, valley.spawn.y), Fog.BUILDING)
+	_biome = valley.id
 
 	if "--autodrive" in OS.get_cmdline_user_args():
 		vehicle.drive_along(roads[0].slice(1))
@@ -96,6 +102,12 @@ func _truck(spec: TruckSpec) -> Vehicle:
 	v.rotation.y = valley.spawn_yaw
 	add_child(v)
 	v.winch.anchors = land.anchor_points
+	if v.spec.id == "tractor":  # its front loader, and the farm trailer is its tipper (docs/plan.md §4)
+		var loader := Loader.new()
+		loader.name = "Loader"
+		loader.vehicle = v
+		loader.land = land
+		v.add_child(loader)
 	return v
 
 
@@ -335,9 +347,29 @@ func _process(_delta: float) -> void:
 	if vehicle.autodrive and Engine.get_process_frames() % 30 == 0:
 		print("autodrive pos %s  speed %.1f" % [vehicle.global_position.snapped(Vector3.ONE * 0.1), vehicle.forward_speed])
 	_blend_sky()
+	_reveal(_delta)
 	var cam := camera_rig.camera
 	if _fall:
 		_fall.global_position = cam.global_position - cam.global_transform.basis.z * 10.0 + Vector3(0.0, 8.0, 0.0)
+
+
+## The truck being driven uncovers the map around it, and crossing into a biome shows its name.
+func _reveal(delta: float) -> void:
+	_reveal_t -= delta
+	if _reveal_t > 0.0:
+		return
+	_reveal_t = 0.25
+	var p := Vector2(vehicle.global_position.x, vehicle.global_position.z)
+	land.fog.reveal(p, land.fog.radius_of(vehicle))
+	var here := land.valley_at(p)
+	if here.id != _biome:
+		_biome = here.id
+		hud.show_message(here.biome.to_upper())
+
+
+func _found(thing: Dictionary) -> void:
+	if thing.kind != "biome":
+		hud.show_message("Found: %s" % thing.name)
 
 
 ## Crossing a border, the sky, fog, light and what falls blend into the next biome's over 60 m
@@ -414,6 +446,8 @@ func _setup_input() -> void:
 		"winch": [KEY_F],
 		"winch_reel": [KEY_SHIFT],
 		"hitch": [KEY_C],
+		"dig": [KEY_B],
+		"tip": [KEY_V],
 	}
 	for action in map:
 		if InputMap.has_action(action):

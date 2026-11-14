@@ -58,6 +58,7 @@ var _dirty_chunks: Array[Vector2i] = []
 var works_img: Image  # 0.5 m a pixel: R loose earth, G gravel spread, B bare earth (docs/plan.md §4)
 var works_tex: ImageTexture
 var generated := PackedFloat32Array()  # the heights as the map was made, before any earthworks
+var _ground_made: Image  # the ground image as the map was made
 var _base: FastNoiseLite
 var _profiles: Array[Dictionary] = []  # per road: {at: cumulative length at each point, h: heights every PROFILE_STEP}
 var _seg_road := PackedInt32Array()  # every segment of every road in order: its road,
@@ -673,6 +674,16 @@ func set_heights(rect: Rect2i, values: PackedFloat32Array) -> void:
 	touch(rect)
 
 
+## The ground as the map made it again: every earthwork undone (a save lays its own over it).
+func reset_ground() -> void:
+	heights = generated.duplicate()
+	snow_img.copy_from(_ground_made)
+	works_img.fill(Color(0, 0, 0, 0))
+	_paint_slides()
+	_images_dirty = true
+	touch(Rect2i(0, 0, N, N))
+
+
 ## The vertex at (x, z) is h now (its chunk's collision is rebuilt before the next tick).
 func set_vertex(x: int, z: int, h: float) -> void:
 	heights[z * N + x] = h
@@ -723,15 +734,9 @@ func _noise(s: int, freq: float, octaves: int) -> FastNoiseLite:
 
 func _build_visuals() -> void:
 	generated = heights.duplicate()
+	_ground_made = snow_img.duplicate()
 	works_img = Image.create_empty(TRACK_RES, TRACK_RES, false, Image.FORMAT_RGBA8)
-	for ft in valley.features:  # a slide is loose earth until it is dug or packed
-		if ft.type == "slide":
-			var c: Vector2 = along(int(ft.road), float(ft.s))[0]
-			var reach := float(ft.length) * 0.5 + float(ft.width)
-			for z in range(maxi(floori((c.y - reach + HALF) * 2.0), 0), mini(ceili((c.y + reach + HALF) * 2.0), TRACK_RES - 1) + 1):
-				for x in range(maxi(floori((c.x - reach + HALF) * 2.0), 0), mini(ceili((c.x + reach + HALF) * 2.0), TRACK_RES - 1) + 1):
-					if _cut(ft, Vector2(x * 0.5 - HALF, z * 0.5 - HALF)) > 0.2:
-						works_img.set_pixel(x, z, Color(1.0, 0.0, 0.0, 1.0))
+	_paint_slides()
 	works_tex = ImageTexture.create_from_image(works_img)
 	process_physics_priority = -100  # its collision is up to date before anything moves
 	height_img = Image.create_from_data(N, N, false, Image.FORMAT_RF, heights.to_byte_array())
@@ -838,3 +843,15 @@ func _fill_chunk_shape(cx: int, cz: int) -> void:
 		for x in CHUNK + 1:
 			data[z * (CHUNK + 1) + x] = heights[(cz * CHUNK + z) * N + cx * CHUNK + x]
 	_chunk_shapes[cz * CHUNKS + cx].map_data = data
+
+
+## A slide is loose earth until it is dug or packed.
+func _paint_slides() -> void:
+	for ft in valley.features:
+		if ft.type == "slide":
+			var c: Vector2 = along(int(ft.road), float(ft.s))[0]
+			var reach := float(ft.length) * 0.5 + float(ft.width)
+			for z in range(maxi(floori((c.y - reach + HALF) * 2.0), 0), mini(ceili((c.y + reach + HALF) * 2.0), TRACK_RES - 1) + 1):
+				for x in range(maxi(floori((c.x - reach + HALF) * 2.0), 0), mini(ceili((c.x + reach + HALF) * 2.0), TRACK_RES - 1) + 1):
+					if _cut(ft, Vector2(x * 0.5 - HALF, z * 0.5 - HALF)) > 0.2:
+						works_img.set_pixel(x, z, Color(1.0, 0.0, 0.0, 1.0))

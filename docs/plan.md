@@ -219,7 +219,11 @@ reached, or cannot be worked from. That is the progression (the owner's comparis
 ### Joining the biomes (`scripts/world/terrain.gd`, a new `scripts/world/land.gd`)
 
 - **Each biome stays a `Terrain` of 256 m**, the class as it is, with its constants. Its node is
-  placed at its cell (the cell times 256 m).
+  placed at its cell (the cell times 256 m). **As built:** the world's origin is the middle of the
+  biome the land is built around (`main.valley`): the game builds it around the steppe, so the
+  world is the steppe's own metres; the tests' shared world stays the khutir valley's (the forest),
+  so their coordinates held. The cells, in the steppe's frame: steppe (0, 0), forest (1, 0), swamp
+  (1, -1), foothills (1, -2), mountains (0, -2).
 - **A `Land` node holds the tiles and has Terrain's API in world coordinates:** `get_height`,
   `sample`, `compact`, `road_distance`, `road_height`, and `bodies()` for the rays and queries that
   today exclude `terrain.body`. It finds the tile under a point and hands it the point in that
@@ -231,8 +235,11 @@ reached, or cannot be worked from. That is the progression (the owner's comparis
   border, each tile eases its heights onto the profile, so the two sides meet exactly.
   - Where a road crosses (a **gate**), the profile is the road's level, flat for 16 m, and both
     biomes' roads end at the gate.
-  - **On a river border** the profile is the river's bed. Both tiles carve their half of it, and
-    the water's level runs along it.
+  - **On a river border** (steppe to forest) **or a gorge** (foothills to mountains) there is no
+    profile to meet: both tiles carve their half of the bed from their own ground, down to one
+    level under the lower bank, its last 16 m at each end rising to the ground, and the water's
+    level is one level along it. (As first planned, the banks eased onto a shared profile; it
+    tilted the ground 30 m into the forest, where the trailers park.)
 - **The rim and the boundary walls** go only on the map's outer edges.
 - **The shaders need the tile's origin** (a `tile_origin` uniform). Today they compute the height
   texture's coordinates from the world position, which was the tile's own when there was one.
@@ -246,7 +253,8 @@ reached, or cannot be worked from. That is the progression (the owner's comparis
     `Land.water_level(p)`, with a flat water plane drawn at that level. Ponds and the swamp's
     deep water are lakes without ice. What water does to a truck (drag, lift, the current, the
     engine flooding) is in §8.
-  - **`slide`**: a mound of loose earth laid over a road after the road's shelf. Its loose layer
+  - **`slide`**: a ridge of loose earth laid across a road after the road's shelf (2.8 m high, the
+    foothills' road up from the swamp). Its loose layer
     is set in the works image (below), so it is soft until dug.
   - **`washout`**: a gully cut across a road after the road's shelf.
   - A road can also have **gap spans** (a bridge site): no shelf is cut there, so the ground
@@ -318,6 +326,7 @@ carries bulk; soil and gravel are bulk loads now.
 |---|---|
 | **B** (hold) | Bucket down. While the tractor creeps forward under 6 km/h, the bucket takes a bite of the ground just ahead every 0.4 s: up to 0.15 m off a 2.2 x 1.0 m patch, rounded at the edges. The soil goes into the hitched tipper (an animation of the bucket swinging back is optional); without the tipper, into the bucket itself (1.5 m³). |
 | **B** (tap, bucket full, no tipper) | Drop the bucket's soil just ahead: small fills and ramps. |
+| **B** (hold, backing) | Drag the bucket back at the wheels' level: the humps it passes are shaved into it and the hollows filled from it (1.5 m³ carried at most). How a fill is levelled; the volume is kept. Digging ahead, the bucket's edge goes 0.15 m under the front wheels, so it shaves a heap ahead down to where the tractor stands. |
 | **V** (hold) | Tip the tipper. Its load pours out over about 4 s just behind it. Standing still makes a heap; creeping forward spreads it in a strip, which is how gravel roads are laid (§5). |
 
 **Capacity:** the tipper holds 10 m³, 4000 kg as bulk does today. That is a game scale, not real

@@ -31,6 +31,11 @@ func test_the_bake_matches_the_generator_and_loads_in_a_moment(t: TCase) -> void
 			off += 1 if absi(ga[i] - gb[i]) > 2 else 0
 		t.ok(ga.size() == gb.size() and off == 0, "%s: the baked ground image is stale, %d bytes off" % [id, off])
 	t.eq(bake.borders.size(), made.borders.size(), "borders baked")
+	var paper := MapScreen.draw_paper(fresh)
+	var off_px := 0
+	for i in range(0, mini(paper.size(), bake.paper.size()), 4):
+		off_px += 1 if absi(paper[i] - bake.paper[i]) > 2 else 0
+	t.ok(paper.size() == bake.paper.size() and off_px == 0, "the baked paper map is stale, %d pixels off" % off_px)
 	fresh.free()
 	var t0 := Time.get_ticks_msec()
 	var loaded := Land.new()

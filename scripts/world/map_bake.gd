@@ -11,6 +11,7 @@ const PATH := "res://map/map.res"
 @export var heights := {}  # valley id -> PackedFloat32Array (Terrain.N x Terrain.N)
 @export var grounds := {}  # valley id -> PackedByteArray: the ground image, RGBA8
 @export var borders: Array[Dictionary] = []  # as Land.borders, with ids for its tiles
+@export var paper := PackedByteArray()  # the paper map of it all, RGBA8, a pixel a metre (MapScreen.draw_paper)
 
 
 static func load_current() -> MapBake:

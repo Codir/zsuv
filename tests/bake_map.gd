@@ -7,6 +7,7 @@ func _initialize() -> void:
 	var land := Land.new()
 	land.build(Valley.steppe(), false)
 	var b := land.bake()
+	b.paper = MapScreen.draw_paper(land)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://map"))
 	var err := ResourceSaver.save(b, MapBake.PATH, ResourceSaver.FLAG_COMPRESS)
 	print("baked %d tiles, map version %d, in %d ms: %s" % [b.heights.size(), b.version, Time.get_ticks_msec() - t0,

@@ -28,6 +28,8 @@ const OPPOSITE := {"west": "east", "east": "west", "north": "south", "south": "n
 var home: Terrain
 var baked := false  # built from the bake (MapBake), not the generator
 var earthworks: Earthworks  # digging and dumping on it (docs/plan.md §4)
+var fog: Fog  # what has been seen of it (docs/plan.md §3)
+var paper := PackedByteArray()  # the paper map as the bake drew it (MapScreen), or empty
 var tiles: Array[Terrain] = []
 var builders: Array[WorldBuilder] = []  # per tile, in its order
 var borders: Array[Dictionary] = []  # {a, b (west or north of the two, then the other), side (a's), kind, profile, ...}
@@ -72,6 +74,8 @@ func build(home_valley: Valley, use_bake := true) -> void:
 			t.shape(v, edges)
 	baked = from_bake != null
 	if from_bake:
+		paper = from_bake.paper
+	if from_bake:
 		for b in from_bake.borders:
 			var border := b.duplicate()
 			border.a = _tile(b.a_id)
@@ -100,6 +104,7 @@ func build(home_valley: Valley, use_bake := true) -> void:
 			anchor_points.append(p + t.position)
 		for p in wb.tree_points:
 			tree_points.append(p + t.origin)
+	fog = Fog.new(self)
 
 
 func _cell_of(t: Terrain) -> Vector2i:
@@ -217,14 +222,15 @@ func on_map(p: Vector2, margin := 0.0) -> bool:
 	return true
 
 
-## The water's level at p: a river's or a gorge's along its border; -INF where there is none.
-func water_level(p: Vector2) -> float:
+## The water's level at p: a river's or a gorge's along its border (or margin m off it); -INF where
+## there is none.
+func water_level(p: Vector2, margin := 0.0) -> float:
 	for b in borders:
 		if b.kind == "land":
 			continue
 		var d: float = _across(b, p)
 		var i: float = _along(b, p)
-		if absf(d) < float(b.half) and i >= END and i <= Terrain.SIZE - END:
+		if absf(d) < float(b.half) + margin and i >= END and i <= Terrain.SIZE - END:
 			return b.water_level
 	return -INF
 
@@ -456,3 +462,10 @@ func _water_plane(border: Dictionary) -> void:
 	var m := Psx.mesh(self, plane, at, WATER_COLOR)
 	m.name = "Water_%s_%s" % [a.valley.id, (border.b as Terrain).valley.id]
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+## Every earthwork undone: the ground as the map made it (a save lays its own over it).
+func reset_ground() -> void:
+	for t in tiles:
+		t.reset_ground()
+	earthworks.shifted = 0.0

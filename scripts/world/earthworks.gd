@@ -44,9 +44,10 @@ func why_not(p: Vector2) -> String:
 
 
 ## Takes a bite of the ground at p (world), the bucket facing forward: up to depth off a patch
-## BITE big, rounded at its edges, no deeper than the floor. Returns the m³ taken (0 when it may
-## not dig there: why_not says why).
-func bite(p: Vector2, forward: Vector2, depth := BITE_DEPTH) -> float:
+## BITE big, rounded at its edges, no deeper than the floor nor below blade (the bucket's edge: it
+## shaves what stands above it). Returns the m³ taken (0 when it may not dig there: why_not says
+## why).
+func bite(p: Vector2, forward: Vector2, depth := BITE_DEPTH, blade := -INF) -> float:
 	if why_not(p) != "":
 		return 0.0
 	var f := forward.normalized()
@@ -61,7 +62,7 @@ func bite(p: Vector2, forward: Vector2, depth := BITE_DEPTH) -> float:
 			if w <= 0.0:
 				continue
 			var h := height(x, z)
-			var drop := clampf(minf(depth * w, h - floor_at(x, z)), 0.0, depth)
+			var drop := clampf(minf(depth * w, minf(h - floor_at(x, z), h - blade)), 0.0, depth)
 			if drop <= 0.0:
 				continue
 			set_height(x, z, h - drop)
@@ -74,6 +75,41 @@ func bite(p: Vector2, forward: Vector2, depth := BITE_DEPTH) -> float:
 	slump(p)
 	shifted += taken
 	return taken
+
+
+## The bucket dragged back at level (back-blading): over a patch BITE big at p, what stands above
+## level is shaved into carry (up to most m³ in all) and what lies below is filled from it. Returns
+## what is carried on; the volume is kept.
+func level(p: Vector2, forward: Vector2, at: float, carry: float, most: float) -> float:
+	if why_not(p) != "":
+		return carry
+	var f := forward.normalized()
+	var side := Vector2(-f.y, f.x)
+	var pts: Array[Vector2i] = []
+	for z in range(floori(p.y) - 2, ceili(p.y) + 3):
+		for x in range(floori(p.x) - 2, ceili(p.x) + 3):
+			var d := Vector2(x, z) - p
+			if absf(d.dot(side)) <= BITE.x * 0.5 and absf(d.dot(f)) <= BITE.y * 0.5 + 0.5:
+				pts.append(Vector2i(x, z))
+	var moved := 0.0
+	for v in pts:  # the humps first
+		var h := height(v.x, v.y)
+		var cut := clampf(minf(h - at, most - carry), 0.0, BITE_DEPTH)
+		if cut > 0.0:
+			set_height(v.x, v.y, h - cut)
+			carry += cut
+			moved += cut
+	for v in pts:  # then the hollows
+		var h := height(v.x, v.y)
+		var fill := clampf(minf(at - h, carry), 0.0, BITE_DEPTH)
+		if fill > 0.0:
+			set_height(v.x, v.y, h + fill)
+			carry -= fill
+			moved += fill
+	if moved > 0.0:
+		_paint(p, 1.4, Color(1.0, 0.0, 0.0), Color(1.0, 0.0, 0.0), false)
+		_clear(p)
+	return carry
 
 
 ## Dumps volume m³ at p (world), heaped highest in the middle over DUMP_RADIUS m, no higher than
@@ -167,7 +203,7 @@ func generated(x: int, z: int) -> float:
 ## The lowest the vertex may be dug: FLOOR under the ground as generated, and over a river's water.
 func floor_at(x: int, z: int) -> float:
 	var lowest := generated(x, z) - FLOOR
-	var water := land.water_level(Vector2(x, z))
+	var water := land.water_level(Vector2(x, z), 4.0)  # and not on its bank, where it would flood in
 	if water > -INF:
 		lowest = maxf(lowest, water + OVER_WATER)
 	return lowest
