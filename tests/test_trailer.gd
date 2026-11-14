@@ -235,9 +235,7 @@ func test_the_tow_takes_both_to_the_depot(t: TCase) -> void:
 	var farm: Vector2 = t.world.locations.farm.pos
 	await t.place(farm + Vector2(0.0, -4.0), 0.0, 60)
 	t.ok(v.trailer == tr, "the trailer did not come along to the farm")
-	var money := c.money
 	c.recover()
-	c.money = money
 	await t.ticks(180)
 	var from := Vector2(v.global_position.x - c.spawn_pos.x, v.global_position.z - c.spawn_pos.z).length()
 	var depot: Vector2 = t.world.locations.depot.pos
@@ -264,9 +262,7 @@ func test_the_tow_brings_back_a_trailer_left_on_its_side(t: TCase) -> void:
 	t.ok(tr.global_transform.basis.y.y < 0.7, "the farm trailer did not fall on its side")
 	c.trailers.append(tr)
 	await t.place(farm + Vector2(0.0, -4.0), 0.0, 30)
-	var money := c.money
 	c.recover()
-	c.money = money
 	await t.ticks(180)
 	var depot: Vector2 = t.world.locations.depot.pos
 	var at := Vector2(tr.global_position.x, tr.global_position.z)

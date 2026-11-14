@@ -15,16 +15,14 @@ func test_the_profile_saves_and_loads(t: TCase) -> void:
 	_wipe()
 	t.ok(not Profile.exists(TEST_PATH), "a save before any was made")
 	var p := Profile.open(TEST_PATH)
-	t.eq(p.money, 0, "a new profile's money")
+	t.eq(p.rigs, PackedStringArray(), "a new profile's rigs")
 	t.eq(p.last, "steppe", "a new profile starts in")
-	p.money = 2000
-	p.records["steppe:elevator:timed"] = {"time": 42.5, "medal": 1}
+	p.add_rigs(PackedStringArray(["tractor", "farm"]))
 	p.last = "polissia"
 	p.save()
 	t.ok(Profile.exists(TEST_PATH), "no save after saving")
 	var q := Profile.open(TEST_PATH)
-	t.eq(q.money, 2000, "money")
-	t.eq(q.records.get("steppe:elevator:timed", {}).get("time", 0.0), 42.5, "a record")
+	t.eq(q.rigs, PackedStringArray(["tractor", "farm"]), "rigs")
 	t.eq(q.last, "polissia", "the last valley")
 	t.ok(not Profile.exists(""), "a profile in memory has a save")
 	_wipe()
@@ -38,11 +36,8 @@ func test_a_bad_profile_file_loads_as_defaults(t: TCase) -> void:
 	t.ok(p != null, "a bad file gives no profile")
 	if p == null:
 		return
-	t.eq(p.money, 1500, "money as a float")
 	t.eq(p.last, "steppe", "a valley that is not there")
 	t.eq(p.rigs, PackedStringArray(), "rigs as a string")
-	t.eq(p.record("a"), {}, "a record as a number")
-	t.eq(p.record("b"), {}, "a record with no time")
 	_wipe()
 
 
@@ -91,7 +86,7 @@ func test_new_game_asks_before_it_wipes_a_save(t: TCase) -> void:
 func test_new_game_starts_in_the_steppe_and_continue_where_it_was(t: TCase) -> void:
 	_wipe()
 	var old := Profile.open(TEST_PATH)
-	old.money = 700
+	old.add_rigs(PackedStringArray(["six"]))
 	old.last = "polissia"
 	old.save()
 	var vp := SubViewport.new()
@@ -104,14 +99,14 @@ func test_new_game_starts_in_the_steppe_and_continue_where_it_was(t: TCase) -> v
 	game._start(false)
 	await t.ticks(3)
 	t.eq(game.world.valley.id, "polissia", "Continue went to")
-	t.eq(game.profile.money, 700, "Continue's money")
+	t.ok(game.profile.has_rig("six"), "Continue lost the rigs")
 	game._leave()
 	await t.ticks(2)
 	game._start(true)
 	await t.ticks(3)
 	t.eq(game.world.valley.id, "steppe", "a new game starts in")
-	t.eq(game.profile.money, 0, "a new game's money")
-	t.eq(Profile.open(TEST_PATH).money, 0, "the old save is still there after a new game")
+	t.ok(not game.profile.has_rig("six"), "a new game has the old rigs")
+	t.ok(not Profile.open(TEST_PATH).has_rig("six"), "the old save is still there after a new game")
 	vp.free()
 	_wipe()
 
