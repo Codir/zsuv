@@ -37,6 +37,7 @@ macOS and in the browser.
 | Q | all-wheel drive (4x4) |
 | X | differential lock |
 | G | low range |
+| N | gearbox auto or manual; in manual , and . shift down and up (first gear of low range crawls where auto spins) |
 | H | headlights |
 | E | at a site, bring it the loads it needs; at a building, unload what it takes, fill the tank, or open the list of what can be loaded (stopped); beside your parked truck, step across into it, or pour fuel into it from barrels |
 | 1 - 9 | pick from the list on screen: what to build, what to load, the truck to drive |

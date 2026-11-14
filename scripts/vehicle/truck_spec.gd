@@ -260,7 +260,7 @@ static func semi() -> TruckSpec:
 	s.max_steer = 0.48
 	s.steer_speed = 1.6
 	s.fuel_capacity = 300.0
-	s.burn = 2.2
+	s.burn = 5.6  # tuned (docs/plan.md §6): a tank goes no further than the pickup's at a road pace
 	s.cargo_mass = {}
 	s.tows = ["semi_trailer"]
 	s.winch_mount = Vector3(0.0, -0.2, -3.65)
@@ -350,7 +350,7 @@ static func mixer() -> TruckSpec:
 	s.max_speed_high = 16.0
 	s.max_speed_low = 4.5
 	s.fuel_capacity = 200.0
-	s.burn = 1.6
+	s.burn = 3.0  # tuned as the semi's (docs/plan.md said 1.6)
 	s.cargo_mass = {"concrete": 6000.0}
 	s.tows = []
 	s.hitch = Vector3.ZERO

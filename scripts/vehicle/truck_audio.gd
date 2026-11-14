@@ -1,6 +1,6 @@
 class_name TruckAudio
 extends Node3D
-## The truck's sound: the diesel through a gearbox that exists only for the ear, the tyres
+## The truck's sound: the diesel through the gearbox (Vehicle's, auto or shifted by hand), the tyres
 ## crunching snow and squelching mud, the winch motor. docs/sound.md names the recordings.
 ## Every player streams (PLAYBACK_TYPE_STREAM): as browser samples, loops restarted 10-80 ms late.
 
@@ -14,13 +14,6 @@ const IDLE_RPM := 800.0  # pitch 1: the recording's idle
 const SHIFT_RPM := 1800.0  # at a gear's top speed; above it the next gear takes over
 const MAX_RPM := 2000.0
 const LAUNCH_RPM := 400.0  # over idle at full throttle with the truck standing: the clutch slips
-## The top speed of each gear, m/s: four in high range, two in low range (more revs for the
-## speed: the truck sounds like it is working), and reverse.
-# Each gear's top speed as a share of the truck's top speed in high and in low range (the pickup:
-# 3.5, 7, 11.5 and 18 m/s; 2.5 and 5.5).
-const HIGH_GEARS: Array[float] = [3.5 / 18.0, 7.0 / 18.0, 11.5 / 18.0, 1.0]
-const LOW_GEARS: Array[float] = [2.5 / 5.5, 1.0]
-const DOWNSHIFT := 0.8  # down a gear below this share of the lower gear's top speed
 const ENGINE_DB := 0.0
 const SNOW_DB := -1.0
 const MUD_DB := -3.0
@@ -74,18 +67,11 @@ func _engine(delta: float) -> void:
 	var v := vehicle
 	var speed := absf(v.forward_speed)
 	var throttle := absf(v.drive)
-	var gears: Array[float] = []
-	for share in LOW_GEARS if v.low_range else HIGH_GEARS:
-		gears.append(share * (v.spec.max_speed_low if v.low_range else v.spec.max_speed_high))
-	if v.drive < 0.0 or v.forward_speed < -0.5:
-		gear = -1
-	else:
-		gear = clampi(gear, 1, gears.size())
-		while gear < gears.size() and speed > gears[gear - 1]:
-			gear += 1
-		while gear > 1 and speed < gears[gear - 2] * DOWNSHIFT:
-			gear -= 1
-	var top := v.spec.max_speed_reverse if gear < 0 else gears[gear - 1]
+	# The gear is the gearbox's (Vehicle._gearbox): auto or shifted by hand.
+	gear = -1 if v.drive < 0.0 or v.forward_speed < -0.5 else v.gear
+	var top := v.spec.max_speed_reverse if gear < 0 else v.gear_top(maxi(gear, 1))
+	if gear == 0:  # neutral: the revs follow the throttle alone
+		top = INF
 	var tread := speed
 	for w in v.wheels:
 		if v.awd or w.drive2:

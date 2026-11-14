@@ -101,3 +101,17 @@ its rings only in the full mud below the Polissia forestry.
 - `scripts/systems/garage.gd`: what the garage sells and what a job needs. `Profile` keeps the
   rigs bought and the truck picked; `Contracts` tags the jobs, sells, and swaps the truck through
   `scripts/main.gd`, which also parks the trailers bought by the depot.
+
+## Zsuv's additions (rounds 1-3)
+
+- **The gearbox** is Vehicle's: four gears in high range, two in low (shares of the range's top
+  speed), auto by default, shifting by the fastest driven tread smoothed over 0.8 s; N for
+  manual, `,` and `.` to shift, 0 neutral. A spinning tread runs at most to its gear's top
+  speed (Chassis.spin_limit) and in mud loses grip 2.5 m/s past the ground, to 0.75 of it 4 m/s
+  on: in the Polissia bog the pickup in 2WD makes 12.0 m in 12 s in manual L1, 8.3 m in auto (L2).
+- **Fuel, tuned** (tests/test_fuel.gd): the pickup's tank goes 1.9 km of the forest's road in
+  4x4, the scout's 2.4 km; on a flat at a road pace every heavy rig's tank goes about as far as
+  the pickup's (3.0-3.4 km): the semi now burns 5.6 times the pickup, the mixer 3.0.
+- **Condition:** one knock costs at most 15% (Vehicle.KNOCK_MAX), a flood 25%, rolling over 10%.
+- **Upgrades** (Upgrades, the garage's workshop, U): snorkel, chains, long winch (+10 m, 1.3
+  times the pull), the 6x6's tank, flatbed and tipper bodies; one load of parts each.
