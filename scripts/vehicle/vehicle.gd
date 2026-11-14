@@ -43,12 +43,15 @@ var hooked_by: Winch  # another truck's winch has hold of it: its brakes are off
 var dormant := false  # frozen far from the truck driven (Fleet): no wheels, no engine
 var condition := 1.0  # 0..1 (docs/plan.md §8): knocks, a flooded engine and rolling over cost it; low, it pulls less
 var flooded := false  # water got into its intake: the engine is dead until it is out of the water
+var manual := false  # the gearbox shifted by hand (N); auto shifts itself
+var gear := 1  # forward gears from 1, 0 neutral (manual), -1 reverse
 var lost := false  # left in the floods, not the player's yet: it is once it runs (Fleet, docs/plan.md §7)
 var upgrades := PackedStringArray()  # fitted in a garage (Upgrades)
 var water_over_intake := -INF  # m of water over its intake, less than 0 out of it; -INF no water
 var _under := 0.0  # s its intake has been under water
 var _jolts: Array[Vector3] = []  # its velocity over the last JOLT_TICKS
 var _jolt_wait := 0.0
+var _tread := 0.0  # the fastest driven tread, smoothed over SPIN_SECS: what auto shifts by
 var _teleports_seen := 0
 var _rolled := false  # on its roof or side, since it last stood
 var _snorkel_gfx: Node3D
@@ -401,6 +404,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		diff_lock = not diff_lock
 	elif event.is_action_pressed("toggle_low"):
 		low_range = not low_range
+	elif event.is_action_pressed("toggle_gearbox"):
+		toggle_manual()
+	elif event.is_action_pressed("shift_down"):
+		shift(-1)
+	elif event.is_action_pressed("shift_up"):
+		shift(1)
 	elif event.is_action_pressed("toggle_lights"):
 		set_lights(not _lights[0].visible)
 	elif event.is_action_pressed("winch"):
@@ -451,9 +460,16 @@ func _physics_process(delta: float) -> void:
 		drive = 0.0
 
 	var vmax := spec.max_speed_reverse if drive < 0.0 else (spec.max_speed_low if low_range else spec.max_speed_high)
+	var geared := _gearbox(delta)
+	spin_limit = (spec.max_speed_reverse if gear < 0 else gear_top(maxi(gear, 1))) * 1.2
+	if manual and drive > 0.0:
+		if gear == 0:
+			drive = 0.0  # neutral
+		else:
+			vmax = gear_top(gear)
 	if "chains" in upgrades:
 		vmax *= Upgrades.CHAINS_SPEED
-	var engine := spec.engine_force * (spec.low_mult if low_range else 1.0) * power()
+	var engine := spec.engine_force * (spec.low_mult if low_range else 1.0) * power() * geared
 	var total_drive := drive * engine * clampf(1.0 - absf(forward_speed) / vmax, 0.0, 1.0)
 
 	_update_wheels(delta)
@@ -493,6 +509,87 @@ func _process(delta: float) -> void:
 	_animate_wheels(delta)
 	if _drum and hold.kind == "concrete":
 		_drum.rotate_object_local(Vector3.UP, 1.6 * delta)
+
+
+## The gears' top speeds, as shares of the range's top speed: four in high range, two in low
+## (the pickup: 3.5, 7, 11.5 and 18 m/s; 2.5 and 5.5). docs/plan.md §8 "A gearbox you shift".
+const HIGH_GEARS: Array[float] = [3.5 / 18.0, 7.0 / 18.0, 11.5 / 18.0, 1.0]
+const LOW_GEARS: Array[float] = [2.5 / 5.5, 1.0]
+const DOWNSHIFT := 0.8  # auto: down a gear below this share of the lower gear's top speed
+const MAX_GEARING := 2.5  # a low gear pulls at most this many times what the speed's own gear does
+const SPIN_SECS := 0.8  # auto shifts up for a spin this long, not for a wheel that slips at a launch
+
+
+func gear_shares() -> Array[float]:
+	return LOW_GEARS if low_range else HIGH_GEARS
+
+
+## Gear g's top speed in the range in play (m/s).
+func gear_top(g: int) -> float:
+	var shares := gear_shares()
+	return shares[clampi(g, 1, shares.size()) - 1] * (spec.max_speed_low if low_range else spec.max_speed_high)
+
+
+## The lowest gear whose top speed is at least speed.
+func _gear_for(speed: float) -> int:
+	var shares := gear_shares()
+	for g in range(1, shares.size() + 1):
+		if speed <= gear_top(g):
+			return g
+	return shares.size()
+
+
+## Picks the gear and says how much harder (or softer) it pulls than the gear the truck's speed
+## calls for. Auto shifts by the fastest driven tread, as the ear heard it: rolling, that is the
+## speed's own gear and the pull is the range's, as it always was; with a wheel spinning in mud it
+## shifts up and loses pull. Manual holds the gear N, ',' and '.' chose: a lower one pulls harder
+## (up to MAX_GEARING times), a higher one less, and each tops out at its own top speed.
+func _gearbox(delta: float) -> float:
+	var speed := absf(forward_speed)
+	var now := speed
+	for w in wheels:
+		if (awd and spec.all_wheel) or w.drive2:
+			now = maxf(now, absf(w.spin_speed) * w.radius)
+	# Rolling, the tread is the speed; spinning, it runs ahead of it, and auto follows it in time.
+	_tread = speed if now <= speed + 0.05 else lerpf(_tread, now, 1.0 - exp(-delta / SPIN_SECS))
+	_tread = maxf(_tread, speed)
+	var tread := _tread
+	var own := float(gear_shares()[_gear_for(speed) - 1])
+	if drive < 0.0 or forward_speed < -0.5:
+		if not manual:
+			gear = -1
+		return 1.0
+	if manual:
+		gear = clampi(gear, 0, gear_shares().size())
+		return clampf(own / gear_shares()[maxi(gear, 1) - 1], 0.2, MAX_GEARING)
+	var n := gear_shares().size()
+	gear = clampi(gear, 1, n)
+	while gear < n and tread > gear_top(gear):
+		gear += 1
+	while gear > 1 and tread < gear_top(gear - 1) * DOWNSHIFT:
+		gear -= 1
+	return 1.0  # its pull is the range's; spinning in a higher gear, the tread runs away (spin_limit) and grips less
+
+
+## N: the gearbox auto or manual (manual starts in the gear it is in).
+func toggle_manual() -> void:
+	manual = not manual
+	gear = clampi(gear, 1, gear_shares().size())
+
+
+## ',' and '.': a gear down or up in manual (0 is neutral).
+func shift(by: int) -> void:
+	if manual:
+		gear = clampi(gear + by, 0, gear_shares().size())
+
+
+## The gear as the HUD shows it: "A3" (auto), "L1" (auto in low range), "M2" (manual), "R", "N".
+func gear_text() -> String:
+	if forward_speed < -0.5 or drive < 0.0:
+		return "R"
+	if manual:
+		return "N" if gear == 0 else ("M%d" % gear if not low_range else "ML%d" % gear)
+	return ("L%d" if low_range else "A%d") % maxi(gear, 1)
 
 
 ## Whether the engine runs: fuel in the tank, no water in it, and some condition left.
@@ -578,6 +675,9 @@ func fit(id: String) -> void:
 
 
 func _apply_upgrades() -> void:
+	var long := "long_winch" in upgrades
+	winch.max_length = spec.winch_length + (Upgrades.LONG_WINCH if long else 0.0)
+	winch.pull = Upgrades.LONG_PULL if long else 1.0
 	for w in wheels:
 		w.chains = "chains" in upgrades
 	for b in Upgrades.BODIES:

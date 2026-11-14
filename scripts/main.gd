@@ -608,6 +608,9 @@ func _setup_input() -> void:
 		"hitch": [KEY_C],
 		"dig": [KEY_B],
 		"tip": [KEY_V],
+		"toggle_gearbox": [KEY_N],
+		"shift_down": [KEY_COMMA],
+		"shift_up": [KEY_PERIOD],
 	}
 	for action in map:
 		if InputMap.has_action(action):

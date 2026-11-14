@@ -15,7 +15,7 @@ const HELP_TEXT := """W/S   throttle / brake, reverse
 A/D   steer       SPACE  handbrake
 Q     all-wheel drive 4x4
 X     differential lock
-G     low range
+G     low range  N manual , .
 H     headlights   R  flip upright
 E     load, unload, refuel, build;
       step across to a parked truck
@@ -95,9 +95,10 @@ func _process(delta: float) -> void:
 	if vehicle == null:
 		return
 	var fuel_bars := roundi(vehicle.fuel / vehicle.spec.fuel_capacity * 10.0)
-	_status.text = "%3d km/h  %s  %s  DIFF:%s\nFUEL %s%s %2d L  %d%%\n%s" % [
+	_status.text = "%3d km/h  %s %s  %s  DIFF:%s\nFUEL %s%s %2d L  %d%%\n%s" % [
 		roundi(absf(vehicle.forward_speed) * 3.6),
 		"LOW " if vehicle.low_range else "HIGH",
+		vehicle.gear_text(),
 		_drive_text(),
 		"LOCK" if vehicle.diff_lock else "OPEN",
 		"█".repeat(fuel_bars),

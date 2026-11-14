@@ -12,6 +12,7 @@ const ALL := {
 		"what": "the air intake up on the roof: through deep water"},
 	"chains": {"title": "Chains", "cost": 1, "fits": [],
 		"what": "grip on ice, more bite in snow; 15% slower"},
+	"long_winch": {"title": "Long winch", "cost": 1, "fits": [], "what": "10 m more cable, 1.3 times the pull"},
 	"body_tank": {"title": "Tank body", "cost": 1, "fits": ["six"], "what": "2000 L of fuel"},
 	"body_flatbed": {"title": "Flatbed body", "cost": 1, "fits": ["six"], "what": "timber or parts"},
 	"body_tipper": {"title": "Tipper body", "cost": 1, "fits": ["six"], "what": "gravel or soil"},
@@ -23,6 +24,8 @@ const BODIES := {
 	"body_tipper": {"masses": {"gravel": 4000.0, "soil": 4000.0}, "capacity": {"soil": 10.0}},
 }
 const CHAINS_SPEED := 0.85
+const LONG_WINCH := 10.0  # m more cable
+const LONG_PULL := 1.3
 const REPAIR_STEP := 0.5  # of condition for a load of parts
 
 
