@@ -168,7 +168,7 @@ static func steppe() -> Valley:
 		# The road to the river, cut by a washout, its bridge gone.
 		PackedVector2Array([Vector2(36, -30), Vector2(80, -14), Vector2(128, 0)]),
 	]
-	v.gaps = [v._gap_to_end(4, 22.0)]
+	v.gaps = [v._gap_to_end(4, 14.0)]
 	v.features.append({"type": "washout", "road": 4, "s": 27.0, "width": 2.6, "depth": 3.4, "length": 26.0})
 	v.road_smooth = 14.0
 	v.road_grade = 0.22

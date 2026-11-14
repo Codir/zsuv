@@ -14,7 +14,7 @@ extends Node3D
 ## for 2 x GATE_FLAT m. A river or a gorge needs no profile: both tiles carve their half of its bed
 ## from their own ground, down to one level along it, and the water's level runs along it.
 
-const MAP_VERSION := 2  # moves with any change to what the generator makes (docs/plan.md §3, §11)
+const MAP_VERSION := 3  # moves with any change to what the generator makes (docs/plan.md §3, §11)
 const BAND := 24.0
 const SMOOTH := 20.0
 const GATE_FLAT := 8.0
@@ -499,3 +499,31 @@ func load_earthworks(d: Dictionary) -> bool:
 		earthworks.fell(p)
 	earthworks.shifted = float(d.get("shifted", 0.0))
 	return true
+
+
+## The crossings whose bridges are gone (docs/plan.md §3, §5): over each river or gorge border, the
+## road's two ends at the banks, where a bridge's abutments go, in the world: {a, b (Vector3, on
+## the ground at each bank), kind ("river" or "gorge"), over (the gap, m), biomes ([a's, b's])}.
+func crossings() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for b in borders:
+		if b.kind == "land":
+			continue
+		var ends: Array[Vector3] = []
+		var ids: Array[String] = []
+		for t: Terrain in [b.a, b.b]:
+			for span in t.valley.gaps:
+				var r := int(span.road)
+				var road := t.roads[r]
+				var total := 0.0
+				for i in road.size() - 1:
+					total += road[i].distance_to(road[i + 1])
+				# The bank end of the span: the end of it away from the border.
+				var s := float(span.from) if absf(float(span.to) - total) < absf(float(span.from)) else float(span.to)
+				var p: Vector2 = t.along(r, clampf(s, 0.0, total))[0] + t.origin
+				if absf(_across(b, p)) < float(b.half) + 16.0:
+					ends.append(Vector3(p.x, get_height(p.x, p.y), p.y))
+					ids.append(t.valley.id)
+		if ends.size() == 2:
+			out.append({"a": ends[0], "b": ends[1], "kind": b.kind, "over": Vector2(ends[0].x, ends[0].z).distance_to(Vector2(ends[1].x, ends[1].z)), "biomes": ids})
+	return out

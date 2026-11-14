@@ -238,6 +238,19 @@ func test_the_river_runs_along_its_border(t: TCase) -> void:
 	t.eq(land.water_level(Vector2(x + 30.0, a.origin.y)), -INF, "water 30 m from the river")
 
 
+func test_each_crossing_has_its_two_banks_at_the_roads_level(t: TCase) -> void:
+	var land: Land = t.world.land
+	var cs := land.crossings()
+	t.eq(cs.size(), 2, "crossings: the river and the gorge")
+	for c in cs:
+		t.ok(c.over > 15.0 and c.over < 40.0, "the %s's gap is %.0f m" % [c.kind, c.over])
+		t.ok(absf(c.a.y - c.b.y) < 4.0, "the %s's banks are %.1f m apart in height" % [c.kind, absf(c.a.y - c.b.y)])
+		var mid: Vector3 = (c.a + c.b) * 0.5
+		t.ok(land.get_height(mid.x, mid.z) < minf(c.a.y, c.b.y) - 2.0, "the %s's bed is not under its banks" % c.kind)
+		t.ok(land.water_level(Vector2(mid.x, mid.z)) > land.get_height(mid.x, mid.z), "no water under the %s's crossing" % c.kind)
+	t.note = ", ".join(cs.map(func(c: Dictionary) -> String: return "%s %.0f m" % [c.kind, c.over]))
+
+
 func test_the_sky_blends_across_a_border(t: TCase) -> void:
 	var land: Land = t.world.land
 	for b in land.borders:
