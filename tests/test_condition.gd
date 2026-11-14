@@ -25,7 +25,7 @@ func test_a_hard_landing_costs_condition_and_a_gentle_drive_none(t: TCase) -> vo
 	v.linear_velocity = Vector3(0.0, 9.0, 0.0)  # thrown 4 m up: it lands hard
 	await t.ticks(150)
 	var lost := 1.0 - v.condition
-	t.ok(lost > 0.02 and lost < 0.8, "a 4 m drop cost %.0f%%" % (lost * 100.0))
+	t.ok(lost > 0.05 and lost <= Vehicle.KNOCK_MAX * 3.0, "a 4 m drop cost %.0f%%" % (lost * 100.0))
 	t.note = "a 4 m drop cost %.0f%%" % (lost * 100.0)
 	vp.free()
 

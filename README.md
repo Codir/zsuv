@@ -38,10 +38,11 @@ Khutir Road's, and they change as the plan lands.
 | Q | all-wheel drive (4x4) |
 | X | differential lock |
 | G | low range |
+| N | gearbox auto or manual; in manual , and . shift down and up (first gear of low range crawls where auto spins) |
 | H | headlights |
 | E | the job board at the depot, unload at a delivery point, refuel (stopped); beside your parked truck, step across into it, or pour fuel into it from barrels |
 | 1 - 5 | take a job from the board; in the garage, buy or drive |
-| Tab | on the board: the garage (trucks and trailers) |
+| Tab | at a base: the garage (trucks and trailers); U there turns it to the workshop (upgrades, repair, from the yard's parts) |
 | C | hitch the trailer behind you, or unhitch it |
 | F | aim the winch with the mouse, left click hooks the tree, rock, building or truck under the cursor; F again hooks the nearest ahead; Esc cancels; hold Shift to reel in |
 | M | paper map; click a parked truck's mark to drive it |

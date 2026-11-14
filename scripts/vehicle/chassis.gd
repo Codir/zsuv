@@ -197,8 +197,8 @@ func _apply_tire(w: Wheel, brake: float, delta: float) -> void:
 		if absf(w.request) > w.allowed:
 			w.slip = true
 			# Spinning, it grips less the faster it runs ahead of the ground: up to the gear's top
-			# speed (spin_limit), so a low gear digs in where a high one polishes the mud.
-			var over := clampf((_spin_tread(w) - absf(v_long) - SPIN_FREE) / SPIN_LOSS, 0.0, 1.0)
+			# speed (spin_limit), so in mud a low gear digs in where a high one polishes it.
+			var over := clampf((_spin_tread(w) - absf(v_long) - SPIN_FREE) / SPIN_LOSS, 0.0, 1.0) * clampf(w.surface.mud, 0.0, 1.0)
 			f_long = signf(w.request) * w.allowed * 0.85 * lerpf(1.0, SPIN_GRIP, over)
 		else:
 			f_long = w.request

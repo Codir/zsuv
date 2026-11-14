@@ -21,6 +21,7 @@ const FLOOD_COST := 0.25
 const ROLL_COST := 0.1
 const KNOCK := 38.0  # m/s2 over 50 ms: a hard knock above this costs KNOCK_COST a m/s2
 const KNOCK_COST := 0.004
+const KNOCK_MAX := 0.15  # tuned: one knock, however hard, costs at most this (a 4 m drop cost 61%)
 const JOLT_TICKS := 3
 const LEAK := 0.05  # L/s, under 25%
 
@@ -640,7 +641,7 @@ func _check_water_and_knocks(delta: float) -> void:
 		var jolt := (linear_velocity - then).length() / (delta * JOLT_TICKS)
 		if jolt > KNOCK and _jolt_wait <= 0.0:
 			_jolt_wait = 0.3
-			knock((jolt - KNOCK) * KNOCK_COST)
+			knock(minf((jolt - KNOCK) * KNOCK_COST, KNOCK_MAX))
 	var up := global_transform.basis.y.y
 	if up < 0.0 and not _rolled:
 		_rolled = true
