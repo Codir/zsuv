@@ -92,7 +92,7 @@ func _engine(delta: float) -> void:
 			tread = maxf(tread, absf(w.spin_speed) * w.radius)
 	var target := minf(maxf(IDLE_RPM + throttle * LAUNCH_RPM, tread / top * SHIFT_RPM), MAX_RPM)
 	var work := throttle * (0.3 + 0.7 * (1.0 - clampf(speed / top, 0.0, 1.0)))
-	running = v.fuel > 0.0 and (v.driven or v.autodrive)  # a parked truck's engine is off
+	running = v.engine_runs() and (v.driven or v.autodrive)  # a parked truck's engine is off
 	if not running:
 		target = 0.0
 		work = 0.0

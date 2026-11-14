@@ -217,6 +217,7 @@ func _towing() -> void:
 	for h in vehicle.holds():  # the load on the rig is what the tow costs (docs/plan.md §5)
 		if h.kind in Hold.RESOURCES:
 			h.clear()
+	vehicle.towed()  # water out of its engine (docs/plan.md §8)
 	var hitched := vehicle.trailer
 	vehicle.unhitch()
 	var moved := _on_spawn()

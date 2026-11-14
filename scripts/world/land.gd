@@ -235,6 +235,23 @@ func water_level(p: Vector2, margin := 0.0) -> float:
 	return -INF
 
 
+## The water's current at p (m/s on the map's plane): a river or a gorge flows along its border,
+## from its west or north end, fastest in the middle and slack at the banks (docs/plan.md §8);
+## none where there is no water. Its speed is the border's "current" (a river 2 m/s, a gorge
+## 2.5, if the valley does not say).
+func water_current(p: Vector2) -> Vector2:
+	for b in borders:
+		if b.kind == "land":
+			continue
+		var d: float = _across(b, p)
+		var i: float = _along(b, p)
+		if absf(d) < float(b.half) and i >= END and i <= Terrain.SIZE - END:
+			var speed: float = b.get("current", 2.5 if b.kind == "gorge" else 2.0)
+			var way := Vector2(0.0, 1.0) if b.side == "east" else Vector2(1.0, 0.0)
+			return way * speed * (1.0 - pow(absf(d) / float(b.half), 2.0))
+	return Vector2.ZERO
+
+
 ## The rectangle of the map, in the world's metres.
 func bounds() -> Rect2:
 	var r := Rect2(home.origin - Vector2.ONE * Terrain.HALF, Vector2.ONE * Terrain.SIZE)

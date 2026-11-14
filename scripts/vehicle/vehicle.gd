@@ -16,6 +16,13 @@ const HITCH_AXES := Basis(Vector3.UP, Vector3.BACK, Vector3.RIGHT)
 const HITCH_YAW := 85.0 * PI / 180.0
 const HITCH_PITCH := 30.0 * PI / 180.0
 const HITCH_ROLL := 10.0 * PI / 180.0
+const FLOOD_SECS := 1.0  # water over the intake this long and the engine dies
+const FLOOD_COST := 0.25
+const ROLL_COST := 0.1
+const KNOCK := 38.0  # m/s2 over 50 ms: a hard knock above this costs KNOCK_COST a m/s2
+const KNOCK_COST := 0.004
+const JOLT_TICKS := 3
+const LEAK := 0.05  # L/s, under 25%
 
 
 var spec: TruckSpec  # set before the truck enters the tree; the pickup if not
@@ -34,6 +41,17 @@ var cargo: String:  # what is on the bed (a resource, or a job's kind: plain, ti
 var driven := true  # the player drives it; false: parked out on the map, engine off, handbrake on (Fleet)
 var hooked_by: Winch  # another truck's winch has hold of it: its brakes are off
 var dormant := false  # frozen far from the truck driven (Fleet): no wheels, no engine
+var condition := 1.0  # 0..1 (docs/plan.md §8): knocks, a flooded engine and rolling over cost it; low, it pulls less
+var flooded := false  # water got into its intake: the engine is dead until it is out of the water
+var upgrades := PackedStringArray()  # fitted in a garage (Upgrades)
+var water_over_intake := -INF  # m of water over its intake, less than 0 out of it; -INF no water
+var _under := 0.0  # s its intake has been under water
+var _jolts: Array[Vector3] = []  # its velocity over the last JOLT_TICKS
+var _jolt_wait := 0.0
+var _teleports_seen := 0
+var _rolled := false  # on its roof or side, since it last stood
+var _snorkel_gfx: Node3D
+var _bodies := {}  # the 6x6's body upgrade -> its look
 var fuel := 0.0  # a full tank once in the tree
 var autodrive := false
 var autodrive_path := PackedVector2Array()
@@ -73,12 +91,16 @@ func _ready() -> void:
 	damping = spec.damping
 	anti_roll = spec.anti_roll
 	fuel = spec.fuel_capacity
+	_jolt_wait = 1.5  # set down from a little up: landing is no knock
 	hold.masses = spec.cargo_mass
 	hold.capacity = spec.capacity
 	hold.changed.connect(_on_hold_changed)
+	boxes = spec.shapes
 	for b in spec.shapes:
 		_add_box_shape(b.size, b.pos)
 	call("_build_" + spec.body)
+	if spec.body == "six":
+		_build_six_bodies()
 	for l in spec.lights:
 		_add_light(l)
 	winch = Winch.new()
@@ -423,14 +445,18 @@ func _physics_process(delta: float) -> void:
 			drive = throttle_input
 	elif absf(forward_speed) < 0.8 and not (winch.reeling and winch.anchor_body == null) and hooked_by == null:
 		brake = 1.0  # hold on a slope; let the winch pull the truck, but hold it while it pulls a car
-	if fuel <= 0.0:
+	_check_water_and_knocks(delta)
+	if not engine_runs():
 		drive = 0.0
 
 	var vmax := spec.max_speed_reverse if drive < 0.0 else (spec.max_speed_low if low_range else spec.max_speed_high)
-	var engine := spec.engine_force * (spec.low_mult if low_range else 1.0)
+	if "chains" in upgrades:
+		vmax *= Upgrades.CHAINS_SPEED
+	var engine := spec.engine_force * (spec.low_mult if low_range else 1.0) * power()
 	var total_drive := drive * engine * clampf(1.0 - absf(forward_speed) / vmax, 0.0, 1.0)
 
 	_update_wheels(delta)
+	_apply_water()
 
 	# Split the torque between the wheels.
 	var every := awd and spec.all_wheel
@@ -456,14 +482,134 @@ func _physics_process(delta: float) -> void:
 		_apply_tire(w, brake, delta)
 
 	var burn := 0.04 + absf(drive) * 0.45 * spec.burn * (1.2 if awd else 1.0) * (1.15 if low_range else 1.0) * (1.5 if cargo == "heavy" else 1.0)
-	if driven or autodrive:  # a parked engine is off
+	if (driven or autodrive) and engine_runs():  # a parked engine is off
 		fuel = maxf(fuel - burn * delta, 0.0)
+	if condition < 0.25:  # a tank knocked about leaks
+		fuel = maxf(fuel - LEAK * delta, 0.0)
 
 
 func _process(delta: float) -> void:
 	_animate_wheels(delta)
 	if _drum and hold.kind == "concrete":
 		_drum.rotate_object_local(Vector3.UP, 1.6 * delta)
+
+
+## Whether the engine runs: fuel in the tank, no water in it, and some condition left.
+func engine_runs() -> bool:
+	return fuel > 0.0 and not flooded and condition > 0.0
+
+
+## How hard the engine pulls for its condition: 0.8 times under 50%, 0.6 under 25%.
+func power() -> float:
+	return 0.6 if condition < 0.25 else (0.8 if condition < 0.5 else 1.0)
+
+
+## Where its air intake is now: on the roof with the snorkel fitted.
+func intake_point() -> Vector3:
+	return global_transform * (spec.snorkel if "snorkel" in upgrades else spec.intake)
+
+
+## The engine floods with water over its intake for FLOOD_SECS ("Engine flooded"); once the
+## intake is out of the water it runs again for a quarter of its condition, or with none left only
+## after the tow. Hard knocks (the jolt over 50 ms above KNOCK) and rolling over cost condition too.
+func _check_water_and_knocks(delta: float) -> void:
+	var at := intake_point()
+	var level := land.water_level(Vector2(at.x, at.z)) if land else -INF
+	water_over_intake = level - at.y if level > -INF else -INF
+	if water_over_intake > 0.0:
+		_under += delta
+		if _under >= FLOOD_SECS and not flooded:
+			flooded = true
+			said.emit("Engine flooded")
+	else:
+		_under = 0.0
+		if flooded and condition > 0.0:
+			flooded = false
+			condition = maxf(condition - FLOOD_COST, 0.0)
+			if condition > 0.0:
+				said.emit("The engine runs again: %d%% condition" % roundi(condition * 100.0))
+			else:
+				flooded = true
+				said.emit("The engine is ruined: only the tow can start it")
+	if teleports != _teleports_seen:  # towed or set upright: moved, not knocked
+		_teleports_seen = teleports
+		_jolts.clear()
+		_jolt_wait = 1.5  # it is set down from a little up: landing is no knock
+	_jolts.append(linear_velocity)
+	_jolt_wait -= delta
+	if _jolts.size() > JOLT_TICKS:
+		var then: Vector3 = _jolts.pop_front()
+		var jolt := (linear_velocity - then).length() / (delta * JOLT_TICKS)
+		if jolt > KNOCK and _jolt_wait <= 0.0:
+			_jolt_wait = 0.3
+			knock((jolt - KNOCK) * KNOCK_COST)
+	var up := global_transform.basis.y.y
+	if up < 0.0 and not _rolled:
+		_rolled = true
+		knock(ROLL_COST)
+	elif up > 0.7:
+		_rolled = false
+
+
+## Takes share off its condition.
+func knock(share: float) -> void:
+	condition = maxf(condition - share, 0.0)
+
+
+## The tow brought it in: water out of its engine; a ruined engine is got going (just: 10%).
+func towed() -> void:
+	flooded = false
+	_under = 0.0
+	condition = maxf(condition, 0.1)
+
+
+## Fits upgrade id (Upgrades.fit makes it from parts): the snorkel moves the intake to the roof,
+## the chains go on every tyre, a 6x6 body changes what it carries.
+func fit(id: String) -> void:
+	if id in Upgrades.BODIES:
+		for b in Upgrades.BODIES:
+			var i := upgrades.find(b)
+			if i >= 0:
+				upgrades.remove_at(i)
+	if not id in upgrades:
+		upgrades.append(id)
+	_apply_upgrades()
+
+
+func _apply_upgrades() -> void:
+	for w in wheels:
+		w.chains = "chains" in upgrades
+	for b in Upgrades.BODIES:
+		if b in upgrades:
+			hold.masses = Upgrades.BODIES[b].masses
+			hold.capacity = Upgrades.BODIES[b].capacity
+	for b in _bodies:
+		_bodies[b].visible = b in upgrades
+	if _snorkel_gfx == null and "snorkel" in upgrades:
+		_snorkel_gfx = Node3D.new()
+		add_child(_snorkel_gfx)
+		var top := spec.snorkel
+		var foot := Vector3(top.x, spec.intake.y, top.z)
+		Psx.mesh(_snorkel_gfx, Psx.cylinder(0.07, 0.07, top.y - foot.y, 6), (top + foot) * 0.5, DARK)
+		Psx.box(_snorkel_gfx, Vector3(0.18, 0.12, 0.22), top, DARK)
+	if _snorkel_gfx:
+		_snorkel_gfx.visible = "snorkel" in upgrades
+
+
+## Its own state, for saving (Profile): fuel, condition, the engine, upgrades, its load.
+func to_dict() -> Dictionary:
+	return {"spec": spec.id, "fuel": fuel, "condition": condition, "flooded": flooded,
+		"upgrades": upgrades, "hold": hold.to_dict()}
+
+
+func from_dict(d: Dictionary) -> void:
+	fuel = clampf(float(d.get("fuel", fuel)), 0.0, spec.fuel_capacity)
+	condition = clampf(float(d.get("condition", condition)), 0.0, 1.0)
+	flooded = bool(d.get("flooded", false))
+	upgrades = PackedStringArray(d.get("upgrades", []))
+	_apply_upgrades()
+	if typeof(d.get("hold")) == TYPE_DICTIONARY:
+		hold.from_dict(d.hold)
 
 
 ## Concrete sets in the mixer (docs/plan.md §7): at Hold.CONCRETE_SETS the load is lost.
@@ -859,6 +1005,25 @@ func _build_six() -> void:
 	for k in _loads:
 		gfx.add_child(_loads[k])
 		_loads[k].visible = false
+
+
+## The 6x6's bodies as upgrades (Upgrades.BODIES), over its bed, hidden until fitted: a tank on
+## its cradles, a tipper's steel box.
+func _build_six_bodies() -> void:
+	var tank := Node3D.new()
+	add_child(tank)
+	var shell := Psx.mesh(tank, Psx.cylinder(1.0, 1.0, 3.6, 10), Vector3(0.0, 1.85, 1.75), Color(0.75, 0.75, 0.72))
+	shell.rotation.x = PI * 0.5
+	for z in [0.4, 3.1]:
+		Psx.box(tank, Vector3(2.0, 0.3, 0.2), Vector3(0.0, 0.95, z), DARK)
+	Psx.box(tank, Vector3(0.5, 0.15, 0.5), Vector3(0.0, 2.9, 1.75), DARK)
+	var tipper := Node3D.new()
+	add_child(tipper)
+	Psx.box(tipper, Vector3(2.4, 1.0, 3.8), Vector3(0.0, 1.35, 1.8), Color(0.55, 0.35, 0.15))
+	Psx.box(tipper, Vector3(2.3, 0.05, 3.7), Vector3(0.0, 1.86, 1.8), DARK)
+	_bodies = {"body_tank": tank, "body_tipper": tipper}
+	for b in _bodies:
+		_bodies[b].visible = false
 
 
 ## The tractor's look (TruckSpec.body "tractor"): weights ahead of a narrow red bonnet, the

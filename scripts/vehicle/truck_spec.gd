@@ -55,6 +55,7 @@ var hitch := Vector3.ZERO  # where a trailer couples, in the body's frame
 var hitch_kind := ""  # "": none; "ball" a towbar; "pin" a tractor's drawbar pin; "fifth" a fifth wheel
 var lights: Array[Vector3] = []  # headlights, in the body's frame
 var intake := Vector3(0.0, 0.25, -1.4)  # the engine's air intake, in the body's frame: water over it floods the engine (§8)
+var snorkel := Vector3(0.8, 0.95, -0.9)  # the intake with the snorkel fitted, up by the roof (1.6 m over the ground); ZERO: none fits
 var reveal := 40.0  # m of the map it uncovers around it, driven (§3)
 
 # Camera and sound.
@@ -143,6 +144,7 @@ static func six() -> TruckSpec:
 	s.winch_mount = Vector3(0.0, 0.15, -3.8)
 	s.winch_length = 24.0
 	s.intake = Vector3(-1.0, 0.8, -1.9)  # 1.5 m over the ground
+	s.snorkel = Vector3(-1.1, 1.8, -1.8)  # 2.2 m or more over the ground: it fords the river's shallows
 	s.hitch = Vector3(0.0, -0.05, 3.9)
 	s.hitch_kind = "ball"
 	s.lights = [Vector3(-0.88, 0.85, -3.42), Vector3(0.88, 0.85, -3.42)]
@@ -199,6 +201,7 @@ static func tractor() -> TruckSpec:
 	s.winch_mount = Vector3(0.0, -0.25, -2.45)
 	s.winch_length = 18.0
 	s.intake = Vector3(-0.28, 0.35, -0.3)  # 1.3 m over the ground
+	s.snorkel = Vector3(-0.28, 1.15, -0.3)  # 2.1 m
 	s.hitch = Vector3(0.0, -0.22, 2.0)  # as high as the farm trailer's drawbar eye stands
 	s.hitch_kind = "pin"
 	s.lights = [Vector3(-0.25, 0.42, -2.2), Vector3(0.25, 0.42, -2.2)]
@@ -260,6 +263,7 @@ static func semi() -> TruckSpec:
 	s.winch_mount = Vector3(0.0, -0.2, -3.65)
 	s.winch_length = 24.0
 	s.intake = Vector3(-0.95, 0.35, -1.18)  # 1.2 m over the ground
+	s.snorkel = Vector3.ZERO  # none fits the semi
 	s.hitch = Vector3(0.0, 0.45, 1.65)
 	s.hitch_kind = "fifth"
 	s.lights = [Vector3(-0.85, -0.05, -3.65), Vector3(0.85, -0.05, -3.65)]
@@ -307,6 +311,7 @@ static func scout() -> TruckSpec:
 	s.winch_mount = Vector3(0.0, 0.0, -2.0)
 	s.winch_length = 20.0
 	s.intake = Vector3(0.75, 0.25, -1.3)  # 0.8 m over the ground: it floods first
+	s.snorkel = Vector3(0.85, 1.05, -0.8)  # 1.6 m
 	s.reveal = 90.0
 	s.lights = [Vector3(-0.55, 0.4, -1.96), Vector3(0.55, 0.4, -1.96)]
 	s.camera_distance = 8.0
@@ -349,6 +354,7 @@ static func mixer() -> TruckSpec:
 	s.hitch_kind = ""
 	s.winch_length = 24.0
 	s.intake = Vector3(-0.95, 0.45, -1.18)  # 1.3 m over the ground
+	s.snorkel = Vector3(-1.25, 1.65, -1.6)  # 2.5 m
 	s.camera_distance = 14.0
 	return s
 

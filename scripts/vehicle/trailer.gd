@@ -57,6 +57,7 @@ func _ready() -> void:
 	hold.masses = spec.cargo_mass
 	hold.capacity = spec.capacity
 	hold.changed.connect(_on_hold_changed)
+	boxes = spec.shapes
 	for b in spec.shapes:
 		_add_box_shape(b.size, b.pos)
 	call("_build_" + spec.body)
@@ -294,6 +295,7 @@ func _physics_process(delta: float) -> void:
 	if _place_requested:
 		return  # forces from where it stands now would land on it where it is going
 	_update_wheels(delta)
+	_apply_water()
 	if _parting and not _touching(_parting):
 		_part()
 	var brake := truck.braking if truck else 1.0
