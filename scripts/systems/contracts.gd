@@ -183,6 +183,8 @@ func recover() -> void:
 ## The base whose workshop the truck is at: the one Infra says (a built outpost, the railhead),
 ## else the railhead when the truck is at the depot; null elsewhere.
 func workshop_base() -> Node:
+	if has_method("here_base"):  # stream C's: the railhead or a built outpost the truck is at
+		return call("here_base")
 	var infra: Node = get_parent().get("infra")
 	if infra == null:
 		return null
