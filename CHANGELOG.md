@@ -3,6 +3,18 @@
 Zsuv starts from Khutir Road 0.3.0 (the tag `base-khutir-road-0.3.0`); its changelog is in the
 history there.
 
+## 0.1.1 — 2026-11-15 — How to dig, and where the timber is
+
+- The game says how to dig: in the tractor, "hold B and creep forward"; too fast, "slower: under
+  6 km/h"; with soil aboard at the hole, "hold V to tip here"; at the washout in another truck,
+  that the tractor and its tipper fill it.
+- Where each need is found: the build list and a site's line say it ("timber: the railhead's
+  yard (4)", "parts: the railhead"), and the old sawmill across the river says one load of parts
+  brings it back.
+- The winch hooks trees and rocks in every biome: beyond the steppe it aimed at a point far off
+  and would not hook.
+- No yellow arrow over the truck; the winch's own pick shows only while aiming with F.
+
 ## 0.1.0 — 2026-11-14 — The road crew
 
 The first build for GitHub Game Off 2026 (theme SHIFT): a new game on Khutir Road's base. The plan
