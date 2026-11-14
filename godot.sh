@@ -9,7 +9,7 @@
 #   ./godot.sh bake                  generate the map and write it to map/ (the game loads it; export does this first)
 #   ./godot.sh export [preset|all]   Web | Windows | Linux | macOS -> builds/
 #   ./godot.sh web                   export Web and serve it on http://localhost:8060
-#   ./godot.sh capture               record the trailer scenes into capture/trailer/ (tools/make_media.py)
+#   ./godot.sh capture               record the trailer scenes into capture/trailer/ (a window, no sound; tools/make_media.py)
 #   ./godot.sh soundcheck            record the game's mix on a scripted drive into capture/soundcheck.wav
 # Works with the bash 3.2 of a stock Mac as well as Git Bash on Windows.
 set -euo pipefail
@@ -78,7 +78,7 @@ case "$cmd" in
   export) "$0" bake; export_presets "${1:-all}";;
   web) export_presets Web; echo "http://localhost:8060"; cd builds/web && exec python3 -m http.server 8060;;
   capture) fetch; imported; what="${1:-trailer}"; out="$(pwd -W 2>/dev/null || pwd)/capture/$what"; rm -rf "$out"; mkdir -p "$out"
-    ${LIMIT:+$LIMIT 900} "$BIN" --path . --fixed-fps 30 --disable-vsync -- --capture="$what" --out="$out"
+    ${LIMIT:+$LIMIT 900} "$BIN" --path . --audio-driver Dummy --fixed-fps 30 --disable-vsync -- --valley=steppe --capture="$what" --out="$out"
     cat "$out/done.txt";;
   soundcheck) fetch; imported; out="$(pwd -W 2>/dev/null || pwd)/capture/soundcheck.wav"
     ${LIMIT:+$LIMIT 300} "$BIN" --headless --path . -s res://tests/soundcheck.gd -- --out="$out" 2>&1 | grep -v "^Godot Engine\|^autodrive pos";;

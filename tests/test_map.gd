@@ -337,6 +337,22 @@ func test_the_route_from_the_railhead_to_the_village_meets_its_barriers_in_order
 	t.note = "%.0f m of road from the railhead to the upper village" % r[1]
 
 
+func test_a_tree_in_another_biome_is_hooked_where_it_stands(t: TCase) -> void:
+	var land: Land = t.world.land
+	var winch: Winch = t.world.vehicle.winch
+	for i in land.tiles.size():
+		var tile := land.tiles[i]
+		if tile == land.home:
+			continue
+		var pr: Dictionary = land.builders[i].props.filter(func(x: Dictionary) -> bool: return x.kind == "tree" and x.shape != null)[0]
+		var at: Vector2 = (pr.p as Vector2) + tile.origin
+		var trunk := Vector3(at.x, land.get_height(at.x, at.y) + 1.2, at.y)
+		var aimed := winch.aim(trunk + Vector3(4.0, 0.0, 0.0), Vector3(-1.0, 0.0, 0.0))
+		t.ok(aimed.what == "the tree", "%s: the ray at a tree met %s" % [tile.valley.id, aimed.what])
+		t.ok(Vector2(aimed.point.x, aimed.point.z).distance_to(at) < 1.0, "%s: the tree at %s would be hooked at %s" % [tile.valley.id, at, aimed.point])
+	winch.cancel_aim()
+
+
 func test_the_sky_blends_across_a_border(t: TCase) -> void:
 	var land: Land = t.world.land
 	for b in land.borders:

@@ -1,12 +1,18 @@
 class_name Director
 extends Node
-## Scripted capture for the store page: drives the truck and the camera through the trailer
-## scenes and saves every frame of each scene as <out>/<scene>/00000.png, at the game's own
-## 480x270. Run at a fixed frame rate, so time and physics are the same on every run:
-##   godot --path . --fixed-fps 30 -- --capture=trailer --out=<dir>   (./godot.sh capture)
-## tools/make_media.py cuts the trailer from the scenes and picks the screenshots.
+## Scripted capture for the store page: drives the trucks and the camera through Zsuv's scenes
+## and saves every frame of each as <out>/<scene>/00000.png, at the game's own 480x270. Run at a
+## fixed frame rate, in a window (headless renders nothing) and with no sound, in the world built
+## around the steppe, so time and physics are the same on every run:
+##   godot --path . --audio-driver Dummy --fixed-fps 30 -- --valley=steppe --capture=trailer --out=<dir>
+## (./godot.sh capture). tools/make_media.py cuts the trailer and picks the screenshots, the
+## cover and the GIF. Every place is in the steppe's metres; another biome's is its own plus its
+## tile's origin.
 
 const FPS := 30.0
+const FOREST := Vector2(256.0, 0.0)  # the khutir valley's middle in the steppe's frame
+const SWAMP := Vector2(256.0, -256.0)
+const PEAKS := Vector2(0.0, -512.0)
 
 var main: Node3D
 var out_dir := ""
@@ -17,7 +23,7 @@ var _log := PackedStringArray()
 
 
 func _ready() -> void:
-	process_priority = 1000  # after the truck, the chase camera and the contracts
+	process_priority = 1000  # after the truck and the chase camera
 	main.hud.set_help(Hud.Help.OFF)
 	AudioServer.set_bus_mute(0, true)  # frames come slower than real time: the sound would stutter
 	_run.call_deferred()
@@ -31,11 +37,17 @@ func _process(delta: float) -> void:
 
 func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
+	main.profile.add_rigs(PackedStringArray(["tractor", "farm", "six", "trailer"]))
+	main.call("_park_trailers")
 	await _frames(10)
-	await _depart_depot()
-	await _road_to_khutir()
-	await _snow_to_tower()
-	await _winch()
+	await _scout()
+	await _washout()
+	await _fuel_station()
+	await _mixer()
+	await _bridge()
+	await _forest()
+	await _swamp()
+	await _village()
 	_log.append("done")
 	var f := FileAccess.open(out_dir.path_join("done.txt"), FileAccess.WRITE)
 	f.store_string("\n".join(_log) + "\n")
@@ -45,73 +57,140 @@ func _run() -> void:
 
 # --- Scenes ------------------------------------------------------------------------------------
 
-func _depart_depot() -> void:
-	var v: Vehicle = main.vehicle
-	# The truck waits at the pump, lights on, while the camera drifts in over the valley.
-	await _place(Vector2(-93.5, -88.0), _yaw_to(Vector2(-93.5, -88.0), Vector2(-96.0, -70.0)))
+## The scout on the wind farm's hill over the steppe, then off down the road with the paper map
+## drawing itself.
+func _scout() -> void:
+	var v := await _truck(TruckSpec.scout())
+	var top := Vector2(56.0, 50.0)
+	await _place(top, _yaw_to(top, Vector2(20.0, -88.0)))
 	v.set_lights(true)
-	var depot := _ground(-96.0, -92.0)
 	_cinematic(true)
-	_cam = _fly(depot + Vector3(42.0, 26.0, 40.0), depot + Vector3(14.0, 7.0, 16.0),
-		depot + Vector3(0.0, 2.0, 0.0), depot + Vector3(0.0, 2.0, 0.0), 7.0)
-	await _record("01-valley", 7.0)
-
-	# Loading up: the crate drops onto the bed, the depot's lit windows behind.
-	_cam = _orbit_truck(7.5, 3.2, deg_to_rad(-55.0), deg_to_rad(-15.0), 5.0)
-	await _record("02-depot", 5.0, {1.6: func() -> void: Loads.put(v, "parts", 1.0)})
-
-	# Out of the depot and up the west road towards the khutir.
+	var at := v.global_position
+	_cam = _fly(at + Vector3(-18.0, 6.0, 16.0), at + Vector3(-6.5, 2.4, 5.0), at + Vector3(0.0, 1.0, 0.0), at + Vector3(-4.0, 0.0, -12.0), 6.0)
+	await _record("01-scout-ridge", 6.0)
+	# Down the hill and away along the road to the elevator, the map open and filling in.
 	main.map_screen._trail.clear()
-	var route := PackedVector2Array([Vector2(-97.0, -78.0)])
-	route.append_array(main.roads[1].slice(1, -1))
-	route.append(Vector2(-73.0, 86.0))  # pull up short of the khutir's house
-	v.drive_along(route, 10.0)
-	_cam = _follow(Vector3(0.0, 2.6, 8.5), Vector3(0.0, 1.0, -6.0), 3.0)
-	await _until(func() -> bool: return _xz(v).y > -72.0, 20.0)
-	await _record("03-road", 7.0)
+	v.drive_along(PackedVector2Array([Vector2(44.0, 15.0), Vector2(36.0, -30.0), Vector2(20.0, -88.0)]), 12.0)
+	await _frames(30)
+	main.call("_toggle_map")
+	await _record("02-map-draws", 6.0)
+	main.call("_toggle_map")
+	v.autodrive = false
 
 
-func _road_to_khutir() -> void:
-	var v: Vehicle = main.vehicle
-	# The puddle across the road at (-88, -15): into it in two-wheel drive, then 4x4 and the lock
-	# while the wheels are still in the mud.
-	await _until(func() -> bool: return _xz(v).distance_to(Vector2(-88.0, -15.0)) < 30.0, 60.0)
-	v.awd = false
-	v.diff_lock = false
+## The tractor's bucket bites into the washout's bank, and the tipper pours its load into it.
+func _washout() -> void:
+	var land: Land = main.land
+	var tile := land.home
+	var ft: Dictionary = tile.valley.features.filter(func(x: Dictionary) -> bool: return x.type == "washout")[0]
+	var r := int(ft.road)
+	var s0 := float(ft.s)
+	var dir: Vector2 = tile.along(r, s0)[1]
+	var tractor := await _truck(TruckSpec.tractor())
+	var farm: Trailer = main.contracts._trailer("farm")
+	tractor.low_range = true
+	tractor.awd = true
+	await _rig(tractor, farm, tile.along(r, s0 - 8.0)[0], dir)
+	var side := Vector2(-dir.y, dir.x)
+	var at := tractor.global_position
+	_cinematic(true)
+	var eye := _ground(at.x + side.x * 9.0 + dir.x * 2.0, at.z + side.y * 9.0 + dir.y * 2.0) + Vector3(0.0, 3.0, 0.0)
+	_cam = _static_watch(eye, Vector3(0.0, 0.0, -2.5))
+	Input.action_press("dig")
+	await _record("03-bucket-bites", 6.0, {}, func() -> void: _creep(tractor, 0.5))
+	Input.action_release("dig")
+	_creep(tractor, -1.0)
+	# The tipper backed up to the gap, pouring.
+	var back := (tractor.spec.hitch.z - farm.spec.coupler.z) + farm.spec.extent().end.z + Loader.BEHIND
+	var spot: Vector2 = tile.along(r, s0 + 0.5)[0]
+	await _rig(tractor, farm, spot - dir * back, -dir)
+	Loader.set_soil(farm, Loader.TIPPER)
+	var mid := _ground(spot.x, spot.y)
+	eye = _ground(spot.x + side.x * 10.0 - dir.x * 4.0, spot.y + side.y * 10.0 - dir.y * 4.0) + Vector3(0.0, 4.0, 0.0)
+	_cam = _static_watch_blend(eye, mid + Vector3(0.0, 0.5, 0.0), 0.35)
+	Input.action_press("tip")
+	await _record("04-tipper-pours", 6.0)
+	Input.action_release("tip")
+	tractor.unhitch()
+
+
+## Placing a fuel station with P by the railhead: its footprint green on level ground.
+func _fuel_station() -> void:
+	var v := await _truck(TruckSpec.pickup())
+	var infra: Infra = main.infra
+	# The nearest spot to the railhead where a fuel station may stand, the truck 11 m short of it.
+	var site := Vector2(-60.0, -60.0)
+	var best := INF
+	for z in range(-120, -10, 4):
+		for x in range(-120, 0, 4):
+			var q := Vector2(x, z)
+			var d := q.distance_to(Vector2(-90.0, -85.0))
+			if d < best and d > 30.0 and infra.check("fuel_station", q, 0.0) == "" and main.land.road_distance(q + Vector2(0.0, 11.0)) > 4.0:
+				best = d
+				site = q
+	await _place(site + Vector2(0.0, 11.0), 0.0)
+	var cam: Camera3D = infra.camera
+	infra.camera = null  # the footprint stays where it is put, not under a cursor
+	infra.picked = BuildingSpec.fuel_station()
+	infra.mode = Infra.Mode.PLACE
+	infra.ghost_yaw = 0.0
+	infra.ghost_at = site
 	_cinematic(false)
-	_cam = _follow(Vector3(-3.5, 1.8, -9.0), Vector3(0.0, 0.8, 0.0), 2.5)
-	await _record("06-mud", 7.0, {
-		0.5: func() -> void: v.awd = true,
-		1.0: func() -> void: v.diff_lock = true,
-	})
-	# The last stretch: ride in behind the truck, the khutir's lit window ahead.
+	_cam = _orbit_truck(13.0, 6.5, deg_to_rad(150.0), deg_to_rad(120.0), 5.0)
+	await _record("05-fuel-station", 5.0)
+	infra.mode = Infra.Mode.NONE
+	infra.camera = cam
+
+
+## The mixer out of the railhead with its concrete setting: the countdown on the HUD.
+func _mixer() -> void:
+	var v := await _truck(TruckSpec.mixer())
+	v.rig_put("concrete", 1.0)
+	var road: PackedVector2Array = main.roads[0]
+	await _place(road[0].lerp(road[1], 0.35), _yaw_to(road[0], road[1]))
+	v.drive_along(road.slice(1), 11.0)
+	_cinematic(false)
+	_cam = _follow(Vector3(-4.5, 2.6, 9.5), Vector3(0.0, 1.2, -8.0), 2.5)
+	await _frames(45)
+	await _record("06-mixer", 6.0)
+	v.autodrive = false
+	v.rig_take("concrete")
+
+
+## A pickup over the river on a bridge, out of the steppe into the forest.
+func _bridge() -> void:
+	var land: Land = main.land
+	var spot := land.spot("bridge:river")
+	if not land.bridges.has(spot.id):
+		land.build_deck(spot)
+	var v := await _truck(TruckSpec.pickup())
+	v.set_lights(true)
+	var tile := land.home
+	var sa := Vector2(spot.a.x, spot.a.z)
+	var sb := Vector2(spot.b.x, spot.b.z)
+	var way := PackedVector2Array()
+	var s := 50.0
+	while tile.along(4, s)[0].distance_to(sb) > sa.distance_to(sb) + 1.0:
+		way.append(tile.along(4, s)[0])
+		s += 4.0
+	way.append_array(PackedVector2Array([sa, sb, Vector2(-104.0, -4.0) + FOREST, Vector2(-88.0, -15.0) + FOREST]))
+	await _place(way[0], _yaw_to(way[0], way[1]))
+	v.awd = true
+	v.drive_along(way.slice(1), 8.0)
+	var mid: Vector3 = (spot.a + spot.b) * 0.5
 	_cinematic(true)
-	await _until(func() -> bool: return _xz(v).distance_to(Vector2(-85.0, 60.0)) < 14.0, 90.0)
-	_cam = _follow(Vector3(2.8, 2.4, 7.5), Vector3(0.0, 1.6, -10.0), 2.0)
-	await _record("10-khutir", 6.0)
-	await _until(func() -> bool: return not v.autodrive or absf(v.forward_speed) < 0.3, 10.0)
-	await _frames(10)
-	Loads.clear(v)  # unloaded
-	await _frames(15)
-	main.call("_toggle_map")
-	await _record("08-map", 4.0)
-	main.call("_toggle_map")
-
-	# The end card: the camera cranes up and away from the khutir at dusk.
-	_cinematic(true)
-	var house := _ground(-75.0, 95.0)
-	var look := house + Vector3(0.0, 2.0, 0.0)
-	_cam = _crane(v.global_position + Vector3(-3.0, 1.5, -7.0), v.global_position + Vector3(-9.0, 13.0, -24.0), look, 9.0)
-	await _record("11-title", 9.0)
+	_cam = _static_watch(mid + Vector3(-3.0, 4.0, 15.0), Vector3(0.0, 0.5, 0.0))
+	await _until(func() -> bool: return _xz(v).distance_to(sa) < 14.0, 20.0)
+	await _record("07-river-bridge", 7.0)
+	v.autodrive = false
 
 
-func _snow_to_tower() -> void:
-	var v: Vehicle = main.vehicle
-	# Off the road, through the drifts, up to the radio tower: low range, all wheels, locked.
-	var start := Vector2(54.0, 54.0)
-	var route := PackedVector2Array([Vector2(31.0, 31.0), Vector2(27.5, 28.0)])
+## Deep snow under the pines in the forest, then the winch aimed with the mouse at a tree.
+func _forest() -> void:
+	var v := await _truck(TruckSpec.pickup())
+	var start := Vector2(54.0, 54.0) + FOREST
+	var route := PackedVector2Array([Vector2(31.0, 31.0) + FOREST, Vector2(27.5, 28.0) + FOREST])
 	await _place(start, _yaw_to(start, route[0]))
-	v.set_cargo(true)
 	v.awd = true
 	v.diff_lock = true
 	v.low_range = true
@@ -119,47 +198,84 @@ func _snow_to_tower() -> void:
 	_cinematic(true)
 	_cam = _follow(Vector3(4.0, 1.0, -1.0), Vector3(0.0, 0.6, 0.0), 6.0)
 	await _frames(20)
-	await _record("04-snow", 4.5)
-	# Down low behind it, over the fresh ruts.
-	_cam = _follow(Vector3(0.7, 1.2, 5.5), Vector3(0.0, 0.0, 2.0), 3.0)
-	await _record("05-ruts", 4.0)
-	# Arriving at the tower, the drone on its pad in the foreground.
-	var pad := _ground(22.0, 31.0)
-	var eye := _find_view(pad + Vector3(0.0, 0.5, 0.0), Vector2(-1.0, -0.7), 5.5, 1.3)
-	_cam = _static_watch_blend(eye, pad + Vector3(0.0, 0.6, 0.0), 0.55)
-	await _record("09-tower", 7.0)
+	await _record("08-deep-snow", 5.0)
+	v.autodrive = false
 	v.low_range = false
-
-
-func _winch() -> void:
-	var v: Vehicle = main.vehicle
-	# Nose-first in the drifts below a pine: hook up and reel in.
-	var p := Vector2(-81.5, 19.6)
-	var tree := Vector2(-75.2, 26.0)
+	# Nose-first in the drifts below a pine: F, the cursor on the tree, a click, and reel in.
+	var p := Vector2(-81.5, 19.6) + FOREST
+	var tree := p + Vector2(9.0, 0.0)
+	var near := INF
+	for pr in main.land.builders[main.land.tiles.find(main.land.tile_at(p.x, p.y))].props:
+		var q: Vector2 = (pr.p as Vector2) + main.land.tile_at(p.x, p.y).origin
+		var d := q.distance_to(p)
+		if pr.kind == "tree" and pr.shape != null and d > 7.0 and d < 14.0 and absf(d - 10.0) < near:
+			near = absf(d - 10.0)
+			tree = q
 	await _place(p, _yaw_to(p, tree))
-	v.set_cargo(true)
 	v.awd = false
 	v.diff_lock = false
 	await _frames(20)
-	var anchor := v.winch.anchors[v.winch.candidate] if v.winch.candidate >= 0 else _ground(tree.x, tree.y)
-	var mid := (v.global_position + anchor) * 0.5
-	var across := Vector2(anchor.x - v.global_position.x, anchor.z - v.global_position.z).normalized().orthogonal()
-	var eye := _find_view(mid + Vector3(0.0, 0.6, 0.0), across, 5.5, 1.0)
+	var anchor := v.winch.candidate_point() if v.winch.candidate >= 0 else _nearest_anchor(tree)  # what it would pick: in reach
+	# Over the truck's shoulder, the tree ahead of it: the cursor goes onto the tree.
+	var back := Vector2(v.global_position.x - anchor.x, v.global_position.z - anchor.z).normalized()
+	var eye := _surface(v.global_position.x + back.x * 7.0 - back.y * 2.5, v.global_position.z + back.y * 7.0 + back.x * 2.5) + Vector3(0.0, 2.6, 0.0)
+	_cinematic(false)
+	_cam = _static_watch_blend(eye, anchor, 0.35)
+	var winch: Winch = v.winch
+	winch.aiming = true
+	v.driven = false  # its aim is the director's here, not the window's cursor's
+
+	await _record("09-winch-aim", 7.0, {
+		2.2: func() -> void: winch.hook_aimed(); v.driven = true,
+		2.8: func() -> void: winch.auto_reel = true,
+	}, func() -> void: if winch.aiming: winch.aim(winch.mount_position(), anchor - Vector3(0.0, 0.15, 0.0) - winch.mount_position()))
+	v.driven = true
+
+	winch.auto_reel = false
+	if winch.attached:
+		winch.toggle()
+	winch.cancel_aim()
+
+
+## The 6x6 with its snorkel through the swamp's deep water, over the road to the forestry.
+func _swamp() -> void:
+	var v := await _truck(TruckSpec.six())
+	v.fit("snorkel")
+	var a := Vector2(-66.0, -86.0) + SWAMP
+	var route := PackedVector2Array([Vector2(-52.0, -88.0) + SWAMP, Vector2(-22.0, -84.0) + SWAMP, Vector2(-4.0, -80.0) + SWAMP])
+	await _place(a, _yaw_to(a, route[0]))
+	v.awd = true
+	v.low_range = true
+	v.drive_along(route, 4.0)
+	var lake := Vector2(-37.0, -86.0) + SWAMP
 	_cinematic(true)
-	_cam = _static_watch_blend(eye, mid + Vector3(0.0, 0.8, 0.0), 0.5)
-	await _record("07-winch", 7.0, {
-		1.0: func() -> void: v.winch.toggle(),
-		1.6: func() -> void: v.winch.auto_reel = true,
-	})
-	v.winch.auto_reel = false
-	if v.winch.attached:
-		v.winch.toggle()
+	var eye := _ground(lake.x - 4.0, lake.y + 10.0) + Vector3(0.0, 2.2, 0.0)
+	_cam = _static_watch(eye, Vector3(0.0, 0.6, 0.0))
+	await _until(func() -> bool: return _xz(v).distance_to(lake) < 9.0, 20.0)
+	await _record("10-swamp-water", 6.0)
+	v.autodrive = false
+	v.low_range = false
+
+
+## The upper village at night in the pass, the truck's lights on it: the end of the road.
+func _village() -> void:
+	var v := await _truck(TruckSpec.pickup())
+	var village := Vector2(-12.0, -28.0) + PEAKS
+	var at := Vector2(-21.0, -17.0) + PEAKS
+	await _place(at, _yaw_to(at, village))
+	v.set_lights(true)
+	await _frames(30)  # the night's sky in
+	_cinematic(true)
+	var look := _ground(village.x, village.y) + Vector3(0.0, 3.0, 0.0)
+	_cam = _crane(v.global_position + Vector3(4.0, 1.6, 6.0), v.global_position + Vector3(10.0, 12.0, 22.0), look, 9.0)
+	await _record("11-upper-village", 9.0)
 
 
 # --- Recording -------------------------------------------------------------------------------
 
-## Saves every frame for `seconds` into <out>/<scene>/; `events` maps a time (s) to a Callable.
-func _record(scene: String, seconds: float, events := {}) -> void:
+## Saves every frame for `seconds` into <out>/<scene>/; `events` maps a time (s) to a Callable,
+## `each` is called every frame before it is drawn.
+func _record(scene: String, seconds: float, events := {}, each := Callable()) -> void:
 	var dir := out_dir.path_join(scene)
 	DirAccess.make_dir_recursive_absolute(dir)
 	var n := roundi(seconds * FPS)
@@ -169,6 +285,8 @@ func _record(scene: String, seconds: float, events := {}) -> void:
 	for i in n:
 		while not times.is_empty() and _t >= times[0]:
 			(events[times.pop_front()] as Callable).call()
+		if each.is_valid():
+			each.call()
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(dir.path_join("%05d.png" % i))
 	_log.append("%s %d" % [scene, n])
@@ -189,11 +307,66 @@ func _until(cond: Callable, limit: float) -> void:
 	_log.append("timeout waiting at %s" % _xz(main.vehicle))
 
 
+## Drives a truck of spec from now on (the one out on the map, or a new one).
+func _truck(spec: TruckSpec) -> Vehicle:
+	main.vehicle.autodrive = false
+	main.vehicle.set_lights(false)
+	_cam = Callable()
+	main.set_truck(spec)
+	await _frames(5)
+	var v: Vehicle = main.vehicle
+	v.autodrive = false
+	return v
+
+
 func _place(p: Vector2, yaw: float) -> void:
 	var v: Vehicle = main.vehicle
 	v.autodrive = false
 	v.teleport(Vector3(p.x, main.land.get_height(p.x, p.y) + 1.2, p.y), yaw)
 	await _frames(45)
+
+
+## The tractor with its tipper hitched straight behind, set down at p facing dir.
+func _rig(tractor: Vehicle, farm: Trailer, p: Vector2, dir: Vector2) -> void:
+	_creep(tractor, -1.0)
+	if tractor.trailer == null:
+		tractor.hitch(farm)
+		await _frames(2)
+	await _place(p, atan2(-dir.x, -dir.y))
+
+
+## Keeps the truck creeping at about speed m/s (-1: everything let go).
+func _creep(v: Vehicle, speed: float) -> void:
+	if speed < 0.0:
+		Input.action_release("accelerate")
+		Input.action_release("brake")
+		return
+	if v.forward_speed < speed:
+		Input.action_release("brake")
+		Input.action_press("accelerate", 0.5)
+	else:
+		Input.action_release("accelerate")
+		Input.action_press("brake", 0.3)
+
+
+## The mouse over p on the screen, so the winch's aim (which follows the cursor) is on it.
+func _point_mouse_at(p: Vector3) -> void:
+	var cam := main.camera_rig.camera as Camera3D
+	if not cam.is_position_behind(p):
+		# The game draws at 480x270 and the window shows it stretched: the cursor is in the window's pixels.
+		var scale := Vector2(DisplayServer.window_get_size()) / get_viewport().get_visible_rect().size
+		Input.warp_mouse(cam.unproject_position(p) * scale)
+
+
+func _nearest_anchor(p: Vector2) -> Vector3:
+	var best := Vector3(p.x, main.land.get_height(p.x, p.y) + 1.0, p.y)
+	var near := INF
+	for a in main.land.anchor_points:
+		var d := Vector2(a.x, a.z).distance_to(p)
+		if d < near:
+			near = d
+			best = a
+	return best
 
 
 ## Cinematic: no dashboard.
@@ -298,7 +471,7 @@ func _unblock(target: Vector3, cam: Vector3) -> Vector3:
 
 
 func _in_crown(p: Vector3) -> bool:
-	var trees: PackedVector2Array = main.builder.tree_points
+	var trees: PackedVector2Array = main.land.tree_points
 	for tp in trees:
 		var d := Vector2(p.x, p.z).distance_to(tp)
 		if d > 2.8:

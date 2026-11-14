@@ -103,12 +103,12 @@ upload on itch.io as "played in the browser" (viewport 960x540; it scales).
 ## Store media
 
 ```bash
-./godot.sh capture             # scripts/capture/director.gd drives and films the trailer scenes into capture/trailer/
-python tools/make_media.py     # the trailer, screenshots, cover and GIF into media/
+./godot.sh capture                           # scripts/capture/director.gd films the scenes into capture/trailer/ (a window, no sound)
+python tools/make_media.py --ffmpeg ffmpeg   # the trailer, screenshots, cover and GIF into media/
 ```
 
-`make_media.py` needs Python 3 with Pillow and NumPy, and Blender 4.5 for the MP4. Copy for the
-itch.io page is in [media/itch-page.md](media/itch-page.md).
+`make_media.py` needs Python 3 with Pillow and NumPy, and FFmpeg (or Blender 4.5) for the MP4. Copy
+for the itch.io page is in [media/itch-page.md](media/itch-page.md).
 
 ## Sound
 

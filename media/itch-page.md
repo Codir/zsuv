@@ -6,8 +6,14 @@ A draft until the first build (plan §2). The page stays unpublished until then.
 
 **Short description / tagline:** Shift the land, reopen the valley.
 
-**Cover:** `media/cover.png` (630x500) · **Screenshots:** `media/screenshots/*.png` (1920x1080) ·
-**GIF for the description:** `media/zsuv.gif`. None of them is made yet (`tools/make_media.py`).
+**Cover:** `media/cover.png` (630x500: the tractor's bucket at the washout) · **GIF for the
+description:** `media/zsuv.gif` (480x270: the bucket, the tipper, the river bridge, the swamp) ·
+**Trailer:** `media/trailer/zsuv-trailer.mp4` (55 s, 1920x1080, upload it to YouTube for the page's
+video link) · **Screenshots** (1920x1080, in this order), `media/screenshots/`:
+01-scout-over-the-steppe, 02-the-map-draws-itself, 03-the-bucket-bites, 04-filling-the-washout,
+05-placing-a-fuel-station, 06-the-mixer-countdown, 07-the-river-bridge, 08-the-winch-aimed,
+09-the-swamp-water, 10-the-upper-village-at-night. All made by `./godot.sh capture` and
+`tools/make_media.py`.
 
 **Classification:** Game · **Release status:** In development · **Genre:** Simulation ·
 **Tags:** driving, off-road, psx, low-poly, truck, building, terrain, exploration, physics, game-off

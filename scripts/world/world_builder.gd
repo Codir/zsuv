@@ -69,7 +69,7 @@ func _scatter_trees(locations: Dictionary) -> void:
 		var cs := CollisionShape3D.new()
 		cs.shape = shape
 		cs.position = Vector3(p.x, y + 2.0 * s, p.y)
-		cs.set_meta("anchor", anchor_points[anchor_points.size() - 1])  # the winch hooks it 1 m up its trunk
+		cs.set_meta("anchor", anchor_points[anchor_points.size() - 1] + position)  # in the world (the builder stands at its tile): the winch hooks it 1 m up its trunk
 		body.add_child(cs)
 		props.append({"p": p, "kind": "tree", "shape": cs})
 	_trees(valley.trees, xforms)
@@ -150,7 +150,7 @@ func _scatter_rocks(locations: Dictionary) -> void:
 		var cs := CollisionShape3D.new()
 		cs.shape = shape
 		cs.position = Vector3(p.x, y, p.y)
-		cs.set_meta("anchor", anchor_points[anchor_points.size() - 1])
+		cs.set_meta("anchor", anchor_points[anchor_points.size() - 1] + position)  # in the world
 		cs.set_meta("what", "the rock")
 		body.add_child(cs)
 		props.append({"p": p, "kind": "rock", "shape": cs})

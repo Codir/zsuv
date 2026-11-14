@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Store-page media from the captured scenes (`./godot.sh capture` writes capture/trailer/):
 
-  python tools/make_media.py [--src capture/trailer] [--out media] [--only trailer,shots,cover,gif]
+  python tools/make_media.py [--src capture/trailer] [--out media] [--only trailer,shots,cover,gif] [--ffmpeg <ffmpeg>]
 
   media/trailer/zsuv-trailer.mp4   1920x1080, 30 fps, H.264 + AAC (a generated wind bed)
   media/screenshots/NN-name.png           1920x1080
@@ -10,7 +10,8 @@
 
 Everything is drawn at the game's own 480x270 and blown up with nearest-neighbour, so the
 captions and the title are the same crisp pixels as the HUD, set in the game's font. The MP4 is
-encoded by Blender's FFmpeg (tools/blender_encode.py). Needs Python 3 with Pillow and NumPy.
+encoded by FFmpeg (--ffmpeg <path>), or else by Blender's (tools/blender_encode.py). Needs Python 3
+with Pillow and NumPy.
 """
 import argparse
 import os
@@ -32,33 +33,33 @@ TRAILER_KBPS = 3500  # ~25 MB a minute
 
 # scene, start (s), length (s), caption, caption from..to (s into the shot)
 CUT = [
-    ("01-valley", 0.0, 6.0, "A snowbound valley at dusk.", 1.4, 5.4),
-    ("02-depot", 0.4, 4.0, "Load up at the depot.", 0.5, 3.7),
-    ("03-road", 0.5, 5.0, "Follow the marker poles.", 0.8, 4.6),
-    ("06-mud", 0.0, 5.6, "Mud? Engage 4x4. Lock the diff.", 0.4, 4.4),
-    ("04-snow", 0.0, 4.3, "Deep snow fights every wheel.", 0.5, 4.0),
-    ("05-ruts", 0.3, 3.4, "Every rut stays where you left it.", 0.3, 3.1),
-    ("07-winch", 0.6, 6.0, "Stuck? Winch out.", 1.0, 5.6),
-    ("08-map", 0.0, 3.6, "Read the paper map.", 0.4, 3.3),
-    ("09-tower", 0.4, 5.6, "Drone batteries for the radio tower.", 0.6, 5.2),
-    ("10-khutir", 0.0, 5.6, "Groceries for the lone khutir.", 0.8, 5.2),
-    ("11-title", 0.0, 9.0, None, 0.0, 0.0),
+    ("01-scout-ridge", 0.0, 5.6, "Spring after the floods. The roads are gone.", 1.0, 5.2),
+    ("02-map-draws", 0.3, 4.6, "Scout it: the map draws itself.", 0.4, 4.3),
+    ("03-bucket-bites", 0.5, 5.0, "Shift the land: dig into the banks...", 0.5, 4.6),
+    ("04-tipper-pours", 0.6, 4.8, "...and fill the washout.", 0.4, 4.4),
+    ("05-fuel-station", 0.2, 4.4, "Build fuel stations where you need them.", 0.4, 4.0),
+    ("06-mixer", 0.4, 4.8, "Concrete sets in five minutes.", 0.4, 4.4),
+    ("07-river-bridge", 0.6, 5.6, "Bridge the river.", 0.6, 5.2),
+    ("08-deep-snow", 0.2, 4.4, "Deep snow under the pines.", 0.4, 4.0),
+    ("09-winch-aim", 0.5, 5.8, "Aim the winch where you want it.", 0.4, 5.4),
+    ("10-swamp-water", 0.3, 5.0, "Snorkel through the swamp.", 0.4, 4.6),
+    ("11-upper-village", 0.0, 9.0, None, 0.0, 0.0),
 ]
 # Where a caption sits (centre x, y), clear of the HUD's own lines; the rest sit at (240, 214).
-CAPTION_AT = {"06-mud": (240, 196), "08-map": (372, 212)}
+CAPTION_AT = {"02-map-draws": (372, 238), "05-fuel-station": (240, 200), "09-winch-aim": (240, 200)}
 
 # scene, frame, file name
 SHOTS = [
-    ("01-valley", 205, "01-depot-at-dusk"),
-    ("02-depot", 140, "02-loading-up"),
-    ("03-road", 100, "03-marker-poles"),
-    ("06-mud", 45, "04-mud-4x4-diff-lock"),
-    ("04-snow", 90, "05-deep-snow"),
-    ("07-winch", 100, "06-winch"),
-    ("08-map", 30, "07-paper-map"),
-    ("09-tower", 200, "08-radio-tower"),
-    ("10-khutir", 175, "09-khutir"),
-    ("11-title", 150, "10-valley-at-dusk"),
+    ("01-scout-ridge", 150, "01-scout-over-the-steppe"),
+    ("02-map-draws", 150, "02-the-map-draws-itself"),
+    ("03-bucket-bites", 90, "03-the-bucket-bites"),
+    ("04-tipper-pours", 140, "04-filling-the-washout"),
+    ("05-fuel-station", 90, "05-placing-a-fuel-station"),
+    ("06-mixer", 120, "06-the-mixer-countdown"),
+    ("07-river-bridge", 120, "07-the-river-bridge"),
+    ("09-winch-aim", 40, "08-the-winch-aimed"),
+    ("10-swamp-water", 90, "09-the-swamp-water"),
+    ("11-upper-village", 220, "10-the-upper-village-at-night"),
 ]
 
 ORANGE = (240, 160, 40)
@@ -112,12 +113,12 @@ def title_card(img, t):
         return min(1.0, max(0.0, (t - t0) / 0.6))
     lines = []
     if fade(1.8) > 0:
-        img = Image.alpha_composite(img.convert("RGBA"), text_layer([("KHUTIR ROAD", font(44, 900, 112), 104, ORANGE, 2)], fade(1.8))).convert("RGB")
+        img = Image.alpha_composite(img.convert("RGBA"), text_layer([("ZSUV", font(52, 900, 112), 100, ORANGE, 2)], fade(1.8))).convert("RGB")
     if fade(3.2) > 0:
-        lines.append(("a PSX winter delivery drive", font(13, 600), 140, (242, 240, 230), 1))
+        lines.append(("shift the land, open the road", font(13, 600), 138, (242, 240, 230), 1))
     img = Image.alpha_composite(img.convert("RGBA"), text_layer(lines, fade(3.2))).convert("RGB")
     if fade(4.6) > 0:
-        img = Image.alpha_composite(img.convert("RGBA"), text_layer([("on itch.io", font(12, 700), 232, (255, 214, 90), 1)], fade(4.6))).convert("RGB")
+        img = Image.alpha_composite(img.convert("RGBA"), text_layer([("Game Off 2026 on itch.io", font(12, 700), 232, (255, 214, 90), 1)], fade(4.6))).convert("RGB")
     return img
 
 
@@ -125,7 +126,7 @@ def up(img):
     return img.resize((W * SCALE, H * SCALE), Image.NEAREST)
 
 
-def make_trailer(src, out, blender):
+def make_trailer(src, out, blender, ffmpeg=None):
     work = os.path.join(ROOT, "capture", "cut")
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work)
@@ -144,7 +145,7 @@ def make_trailer(src, out, blender):
         t = i / FPS
         if text:
             img = caption(img, text, CAPTION_AT.get(scene, (W // 2, 214)), min(1.0, max(0.0, (t - c0) / 0.4), max(0.0, (c1 - t) / 0.4)))
-        if scene == "11-title":
+        if scene == "11-upper-village":
             img = title_card(img, t)
         return img
 
@@ -169,8 +170,13 @@ def make_trailer(src, out, blender):
     wav = os.path.join(work, "wind.wav")
     write_wind(wav, seconds)
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    subprocess.run([blender, "-b", "--factory-startup", "-P", os.path.join(ROOT, "tools", "blender_encode.py"), "--",
-                    work, out, str(FPS), str(TRAILER_KBPS), wav], check=True, stdout=subprocess.DEVNULL)
+    if ffmpeg:  # FFmpeg itself: H.264 for the picture, AAC for the wind
+        subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", os.path.join(work, "%05d.jpg"), "-i", wav,
+                        "-c:v", "libx264", "-preset", "slow", "-b:v", f"{TRAILER_KBPS}k", "-pix_fmt", "yuv420p",
+                        "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", out], check=True)
+    else:  # Blender's FFmpeg (tools/blender_encode.py)
+        subprocess.run([blender, "-b", "--factory-startup", "-P", os.path.join(ROOT, "tools", "blender_encode.py"), "--",
+                        work, out, str(FPS), str(TRAILER_KBPS), wav], check=True, stdout=subprocess.DEVNULL)
     print("  ->", out, f"{os.path.getsize(out) / 1e6:.1f} MB")
 
 
@@ -218,13 +224,13 @@ def make_shots(src, out):
     print(f"screenshots: {len(SHOTS)} -> {out}")
 
 
-def make_cover(src, out, scene="10-khutir", frame=175, x0=96):
+def make_cover(src, out, scene="03-bucket-bites", frame=90, x0=40):
     """itch.io cover, 630x500: a 315x250 window of a frame, doubled, the title over the sky."""
     img = Image.open(frames_of(src, scene)[frame]).convert("RGB").crop((x0, 20, x0 + 315, 270))
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
     d.fontmode = "1"
-    for text, f, y, colour, o in [("KHUTIR", font(40, 900, 112), 30, ORANGE, 2), ("ROAD", font(40, 900, 112), 66, ORANGE, 2)]:
+    for text, f, y, colour, o in [("ZSUV", font(48, 900, 112), 36, ORANGE, 2)]:
         for ox in range(-o, o + 1):
             for oy in range(-o, o + 1):
                 if ox or oy:
@@ -237,8 +243,8 @@ def make_cover(src, out, scene="10-khutir", frame=175, x0=96):
 
 
 def make_gif(src, out):
-    """A short loop: the road, the deep snow, the winch."""
-    picks = [("03-road", 30, 2.2), ("04-snow", 20, 2.0), ("07-winch", 40, 2.2)]
+    """A short loop: the bucket, the tipper, the bridge, the swamp."""
+    picks = [("03-bucket-bites", 40, 2.0), ("04-tipper-pours", 50, 2.0), ("07-river-bridge", 90, 2.0), ("10-swamp-water", 50, 1.8)]
     frames = []
     for scene, a, secs in picks:
         fs = frames_of(src, scene)
@@ -256,6 +262,7 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "media"))
     ap.add_argument("--only", default="trailer,shots,cover,gif")
     ap.add_argument("--blender", default=r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe")
+    ap.add_argument("--ffmpeg", default=None, help="encode the MP4 with this FFmpeg, not Blender's")
     a = ap.parse_args()
     only = a.only.split(",")
     if "shots" in only:
@@ -265,7 +272,7 @@ def main():
     if "gif" in only:
         make_gif(a.src, os.path.join(a.out, "zsuv.gif"))
     if "trailer" in only:
-        make_trailer(a.src, os.path.join(a.out, "trailer", "zsuv-trailer.mp4"), a.blender)
+        make_trailer(a.src, os.path.join(a.out, "trailer", "zsuv-trailer.mp4"), a.blender, a.ffmpeg)
 
 
 if __name__ == "__main__":
