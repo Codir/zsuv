@@ -16,9 +16,9 @@ const HITCH_AXES := Basis(Vector3.UP, Vector3.BACK, Vector3.RIGHT)
 const HITCH_YAW := 85.0 * PI / 180.0
 const HITCH_PITCH := 30.0 * PI / 180.0
 const HITCH_ROLL := 10.0 * PI / 180.0
-## L/s at full throttle, times the spec's burn: a pickup's 80 L go about 2 km of road, so the
-## village and back is beyond a tank (docs/plan.md §6, test_tuning.gd).
-const BURN := 0.7
+## L/s at full throttle, times the spec's burn: a pickup's 80 L go about 2 km of road, as
+## driven (docs/plan.md §6; test_fuel.gd measures it, test_tuning.gd holds the map to it).
+const BURN := 0.45
 const BURN_IDLE := 0.04  # L/s idling
 const FLOOD_SECS := 1.0  # water over the intake this long and the engine dies
 const FLOOD_COST := 0.25
