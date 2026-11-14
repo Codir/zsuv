@@ -5,6 +5,7 @@ extends Node3D
 ## on its timer, wherever the player is. Infra places it, feeds it and saves it.
 
 signal made(site: Site, res: String)  # a load came off its line
+signal stood(site: Site)  # its last need came in: it stands
 
 var spec: BuildingSpec
 var at := Vector2.ZERO  # its middle, on the map
@@ -21,6 +22,7 @@ var status := ""  # what it is doing: "making timber", "Full", "No fuel", "Felle
 var ground: Callable  # (x, z) -> height: where it stands
 var ends: Array[Vector3] = []  # a bridge's two banks, on the road (Land.crossings)
 var key := ""  # a bridge's crossing, for saving
+var progress := ""  # how far a road site's ground is: "40% spread", "Too steep 12 m along: ..."
 
 var _gfx: Node3D
 
@@ -95,6 +97,7 @@ func deliver(res: String, n: float) -> float:
 			built = true
 			delivered = {}
 			_refresh()
+			stood.emit(self)
 	elif res == "fuel":
 		fuel += r
 	else:
@@ -175,7 +178,11 @@ func line() -> String:
 		var needs := PackedStringArray()
 		for res in needs_left():
 			needs.append(Loads.unit(res, needs_left()[res]))
+		if is_road() and needs.is_empty():
+			return "%s: %s" % [spec.title, progress if progress != "" else "not done"]
 		return "%s site: needs %s" % [spec.title, ", ".join(needs)]
+	if is_road():
+		return "%s: open" % spec.title
 	var bits := PackedStringArray()
 	if spec.makes != "" and spec.holds > 0.0:
 		bits.append("%s %d/%d" % [spec.makes, roundi(float(stock.get(spec.makes, 0.0))), roundi(spec.holds)])
@@ -234,13 +241,13 @@ func _height(x: float, z: float) -> float:
 
 ## The stakes and the sign while a site, the building once it stands.
 func _refresh() -> void:
-	if spec == null or spec.id in ["railhead", "village"]:
-		return
+	if spec == null or spec.id in ["railhead", "village"] or key.begins_with("ruin:"):
+		return  # the world builder drew it
 	if _gfx:
 		_gfx.queue_free()
 	_gfx = Node3D.new()
 	add_child(_gfx)
-	if spec.id == "bridge":
+	if is_road():  # a road site
 		_bridge()
 		return
 	var base := _height(at.x, at.y)
@@ -305,53 +312,24 @@ func spawn_point() -> Vector2:
 	return at + Vector2(0.0, -spec.size.y * 0.5 + 3.0).rotated(-yaw)
 
 
-## A bridge: stakes on its two banks while a site; built, a deck of planks on piers from bank to
-## bank at the road's level, with rails, that the trucks drive over.
+## A road site (a bridge, a fill, a landslide, a gravel road): stakes at its two ends while it is
+## not done. A bridge's deck and a road's grading are the land's (Land.build_deck, Land.grade).
 func _bridge() -> void:
 	position = Vector3.ZERO
 	rotation = Vector3.ZERO
+	if built or ends.size() < 2:
+		return
 	var a := ends[0]
 	var b := ends[1]
 	var flat := Vector3(b.x - a.x, 0.0, b.z - a.z).normalized()
 	var side := flat.cross(Vector3.UP).normalized()
-	if not built:
-		for e in [a, b]:
-			for s in [-3.5, 3.5]:
-				Psx.box(_gfx, Vector3(0.12, 1.2, 0.12), e + side * s + Vector3(0.0, 0.5, 0.0), Color(0.95, 0.5, 0.1), 0.6)
-		_label("SITE: BRIDGE", a + Vector3(0.0, 2.6, 0.0))
-		return
-	# The deck runs 3 m onto each bank and meets the ground there, so its ends are no step.
-	var out_a := a - flat * 3.0
-	var out_b := b + flat * 3.0
-	out_a.y = maxf(_height(out_a.x, out_a.z), a.y) + 0.05
-	out_b.y = maxf(_height(out_b.x, out_b.z), b.y) + 0.05
-	a = out_a
-	b = out_b
-	var length := a.distance_to(b)
-	var mid := (a + b) * 0.5
-	var body := StaticBody3D.new()
-	_gfx.add_child(body)
-	body.global_transform = Transform3D(Basis.looking_at(b - a, Vector3.UP), mid)
-	var deck := Vector3(5.0, 0.5, length)
-	var cs := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = deck
-	cs.shape = shape
-	cs.position = Vector3(0.0, -0.25, 0.0)
-	body.add_child(cs)
-	Psx.box(body, deck, Vector3(0.0, -0.25, 0.0), spec.color)
-	for x in [-2.4, 2.4]:
-		var rail := CollisionShape3D.new()
-		var rs := BoxShape3D.new()
-		rs.size = Vector3(0.2, 0.9, length)
-		rail.shape = rs
-		rail.position = Vector3(x, 0.45, 0.0)
-		body.add_child(rail)
-		Psx.box(body, rs.size, rail.position, spec.color.darkened(0.3))
-	var n := maxi(int(length / 8.0), 1)
-	for i in range(1, n):  # piers down to the bed
-		var p := a.lerp(b, float(i) / n)
-		var floor_h := _height(p.x, p.z)
-		var h := p.y - floor_h
-		if h > 0.5:
-			Psx.box(_gfx, Vector3(0.6, h, 0.6), Vector3(p.x, floor_h + h * 0.5 - 0.5, p.z), spec.color.darkened(0.45))
+	for e in [a, b]:
+		for s in [-3.5, 3.5]:
+			var p: Vector3 = e + side * s
+			Psx.box(_gfx, Vector3(0.12, 1.2, 0.12), Vector3(p.x, _height(p.x, p.z) + 0.5, p.z), Color(0.95, 0.5, 0.1), 0.6)
+	_label("SITE: %s" % spec.title.to_upper(), a + Vector3(0.0, 2.6, 0.0))
+
+
+## Whether it is one of the land's road sites (a bridge, a fill, a landslide, a gravel road).
+func is_road() -> bool:
+	return key != "" and not key.begins_with("ruin:")

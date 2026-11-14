@@ -16,6 +16,10 @@ const HITCH_AXES := Basis(Vector3.UP, Vector3.BACK, Vector3.RIGHT)
 const HITCH_YAW := 85.0 * PI / 180.0
 const HITCH_PITCH := 30.0 * PI / 180.0
 const HITCH_ROLL := 10.0 * PI / 180.0
+## L/s at full throttle, times the spec's burn: a pickup's 80 L go about 2 km of road, so the
+## village and back is beyond a tank (docs/plan.md §6, test_tuning.gd).
+const BURN := 0.7
+const BURN_IDLE := 0.04  # L/s idling
 const FLOOD_SECS := 1.0  # water over the intake this long and the engine dies
 const FLOOD_COST := 0.25
 const ROLL_COST := 0.1
@@ -482,7 +486,7 @@ func _physics_process(delta: float) -> void:
 	for w in wheels:
 		_apply_tire(w, brake, delta)
 
-	var burn := 0.04 + absf(drive) * 0.45 * spec.burn * (1.2 if awd else 1.0) * (1.15 if low_range else 1.0) * (1.5 if cargo == "heavy" else 1.0)
+	var burn := BURN_IDLE + absf(drive) * BURN * spec.burn * (1.2 if awd else 1.0) * (1.15 if low_range else 1.0) * (1.5 if cargo == "heavy" else 1.0)
 	if (driven or autodrive) and engine_runs():  # a parked engine is off
 		fuel = maxf(fuel - burn * delta, 0.0)
 	if condition < 0.25:  # a tank knocked about leaks

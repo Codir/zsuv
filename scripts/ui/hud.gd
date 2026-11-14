@@ -8,7 +8,7 @@ enum Help { HINT, FULL, OFF }
 ## The keys a drive needs, in a corner: the full card covered the view (Philip, in the jam).
 ## E, F and T need no place here: the prompt at the bottom names them when they apply.
 const HINT_TEXT := """WASD drive  SPACE handbrake
-Q 4x4  X diff  G low  M map
+B dig  V tip  P build  M map
 F1 all keys"""
 
 const HELP_TEXT := """W/S   throttle / brake, reverse
@@ -20,12 +20,12 @@ H     headlights   R  flip upright
 E     load, unload, refuel, build;
       step across to a parked truck
 P     place a building, wheel - turn
-TAB   garage, at the railhead
+TAB   garage at a base, U workshop
 C     hitch / unhitch a trailer
 B/V   tractor: dig / tip the tipper
 F     aim the winch, Shift reel
-M     map
-T     tow to the railhead
+M     map, click: waypoint, Z zoom
+T     tow to the nearest base
 RMB   camera, wheel - zoom
 F1    hide help  ESC title"""
 
