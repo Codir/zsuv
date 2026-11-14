@@ -216,7 +216,7 @@ func test_a_fuel_station_on_the_steppe_from_the_railheads_loads(t: TCase) -> voi
 	infra.interact()
 	t.eq(site.fuel, 400.0, "fuel in the station")
 	t.eq(Loads.amount(v, "fuel"), 0.0, "fuel left in the barrels")
-	t.eq(world.profile.sites.filter(func(d: Dictionary) -> bool: return d.kind == "fuel_station" and d.built).size(), 1, "the station is not saved")
+	t.eq(world.profile.sites.filter(func(d: Dictionary) -> bool: return d.kind == "fuel_station" and d.built and not d.has("key")).size(), 1, "the station is not saved")
 	vp.free()
 	shared.autodrive = false
 
