@@ -86,10 +86,37 @@ func test_a_quarry_makes_gravel(t: TCase) -> void:
 	infra.deposits.clear()
 	if quarry == null:
 		return
+	var ew: Earthworks = t.world.land.earthworks
+	var verts := infra.pit_vertices(quarry)
+	var ground := 0.0
+	for p in verts:
+		ground += ew.height(p.x, p.y)
 	quarry.deliver("fuel", 50.0)
 	infra.advance(91.0)
 	t.eq(quarry.stock.get("gravel", 0.0), 1.0, "gravel after 90 s")
 	t.eq(quarry.fuel, 10.0, "fuel after a load, the next one started")
+	var dug := 0.0
+	for p in verts:
+		dug += ew.height(p.x, p.y)
+	dug = ground - dug  # m3: the vertices are a metre apart
+	t.ok(absf(dug - Infra.PIT_LOAD) < Infra.PIT_LOAD * 0.02, "the pit took %.2f m3 for a load of %.0f" % [dug, Infra.PIT_LOAD])
+	# Dug on to 4 m, it stops.
+	var loads := 1
+	while quarry.halt == "" and loads < 200:
+		quarry.give("gravel", 3.0)
+		quarry.fuel = quarry.spec.tank
+		infra.advance(91.0)
+		loads += 1
+	t.note = "%d loads to dig it out, %d vertices" % [loads, verts.size()]
+	t.eq(quarry.halt, "Dug out: 4 m deep", "the quarry dug out")
+	t.ok(absf(infra.pit_depth(quarry) - Infra.PIT_DEEPEST) < 0.05, "the pit is %.2f m deep" % infra.pit_depth(quarry))
+	var made: float = quarry.stock.get("gravel", 0.0)
+	quarry.give("gravel", 3.0)
+	infra.advance(200.0)
+	t.eq(quarry.stock.get("gravel", 0.0), 0.0, "gravel made from a dug-out pit (%.0f before)" % made)
+	t.eq(quarry.status, "Dug out: 4 m deep", "its status")
+	for p in verts:  # the ground back as made
+		ew.set_height(p.x, p.y, ew.generated(p.x, p.y))
 	B._clear(infra)
 
 
@@ -195,7 +222,7 @@ func test_buildings_are_saved_with_their_stock_and_timers(t: TCase) -> void:
 	var loaded := Infra.new()
 	t.world.add_child(loaded)
 	loaded.setup(t.world.vehicle, t.world.land, q, null, t.world.locations, t.world.builder.tree_points)
-	var placed := loaded.sites.filter(func(x: Site) -> bool: return x != loaded.village)
+	var placed := loaded.sites.filter(func(x: Site) -> bool: return x != loaded.village and x.key == "")
 	t.eq(placed.size(), 2, "sites loaded")
 	if placed.size() == 2:
 		var m: Site = placed[0]

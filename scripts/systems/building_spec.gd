@@ -145,3 +145,15 @@ static func village() -> BuildingSpec:
 	s.needs = {"fuel": 800, "parts": 2}
 	s.size = Vector2(16.0, 16.0)
 	return s
+
+
+## A bridge over a crossing found, its old bridge gone (docs/plan.md §5): a deck from bank to bank
+## at the road's level. It is staked where the crossing is, not placed.
+static func bridge(over: float) -> BuildingSpec:
+	var s := BuildingSpec.new()
+	s.id = "bridge"
+	s.title = "Bridge"
+	s.needs = {"concrete": 2, "timber": 3}
+	s.size = Vector2(9.0, over + 2.0)
+	s.color = Color(0.5, 0.36, 0.22)
+	return s

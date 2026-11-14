@@ -105,6 +105,18 @@ func setup(v: Vehicle, l: Land, p: Profile, cam: Camera3D, locs: Dictionary, tre
 		village.at = vloc.pos
 		village.name = "Village"
 		_add(village)
+	var crossings := land.crossings()
+	for i in crossings.size():
+		var c: Dictionary = crossings[i]
+		var bridge := Site.new()
+		bridge.spec = BuildingSpec.bridge(float(c.over))
+		bridge.ends = [c.a, c.b] as Array[Vector3]
+		bridge.key = "bridge%d" % i
+		bridge.at = Vector2((c.a.x + c.b.x) * 0.5, (c.a.z + c.b.z) * 0.5)
+		var d := Vector2(c.b.x - c.a.x, c.b.z - c.a.z)
+		bridge.yaw = atan2(d.x, d.y)
+		bridge.name = "Bridge%d" % i
+		_add(bridge)
 	_load_saved()
 	_sync_felled()
 	_ghost = MeshInstance3D.new()
@@ -198,7 +210,7 @@ func place(kind: String, at: Vector2, yaw: float) -> Site:
 
 ## Takes a site with nothing brought to it down: true when it did.
 func take_down(site: Site) -> bool:
-	if site.built or not site.delivered.is_empty() or site == village:
+	if site.built or not site.delivered.is_empty() or site == village or site.key != "":
 		return false
 	sites.erase(site)
 	land.earthworks.keep_out = land.earthworks.keep_out.filter(func(k: Dictionary) -> bool: return k.get("site") != site)
@@ -416,7 +428,12 @@ func _bring(s: Site) -> void:
 			message.emit("The %s needs %s" % [s.spec.title.to_lower(), _needs_text(s)])
 		return
 	if s.built:
-		if s == village:
+		if s.spec.id == "bridge":
+			stats["bridges"] = int(stats.get("bridges", 0)) + 1
+			if land.has_method("bridged"):
+				land.call("bridged", s.key)
+			message.emit("The bridge stands: the road goes across")
+		elif s == village:
 			message.emit("The upper village has its fuel and parts. The valley is open")
 			finished.emit()
 		else:
@@ -562,6 +579,8 @@ func ledger() -> PackedStringArray:
 	for s in sites:
 		if s == village:
 			continue
+		if s.spec.id == "bridge" and not s.built and not land.fog.seen(s.at):
+			continue  # nothing unfound is shown
 		out.append(s.line())
 	if village and (village.built or land.fog.is_found(":".join(VILLAGE))):
 		out.append("Upper village: " + ("has all it asked for" if village.built else "needs " + _needs_text(village)))
@@ -724,17 +743,25 @@ func _press_p() -> void:
 ## The buildings and sites, the railhead's and the village's state and the stats, into the
 ## profile, and saved (Saver adds the rest of the game to it).
 func _save() -> void:
+	write()
+	changed.emit()
+	profile.save()
+
+
+## The buildings and sites, the railhead's and the village's state and the stats, into the
+## profile, not yet written out.
+func write() -> void:
 	var vid := land.home.valley.id
 	var out: Array = profile.sites.filter(func(d: Dictionary) -> bool: return d.get("valley", "") != vid)
 	out.append({"kind": "railhead", "valley": vid, "stock": railhead.stock.duplicate()})
 	for s in sites:
 		var d := s.to_dict()
 		d["valley"] = vid
+		if s.key != "":
+			d["key"] = s.key
 		out.append(d)
 	profile.sites = out
 	profile.stats = stats.duplicate()
-	changed.emit()
-	profile.save()
 
 
 func _load_saved() -> void:
@@ -745,6 +772,12 @@ func _load_saved() -> void:
 		match str(d.get("kind", "")):
 			"railhead":
 				railhead.stock = Site._amounts(d.get("stock", {}))
+			"bridge":
+				for s in sites:
+					if s.key == str(d.get("key", "")) and s.key != "":
+						s.built = bool(d.get("built", false))
+						s.delivered = Site._amounts(d.get("delivered", {}))
+						s._refresh()
 			"village":
 				if village:
 					village.built = bool(d.get("built", false))
@@ -768,8 +801,3 @@ func refresh() -> void:
 			s.trees_left = trees_near(s.at)
 		if s.spec.deposit and pit_depth(s) >= PIT_DEEPEST - 0.05:
 			s.halt = "Dug out: %d m deep" % roundi(PIT_DEEPEST)
-
-
-func _exit_tree() -> void:
-	if land:
-		_save()

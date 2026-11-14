@@ -5,8 +5,8 @@ extends Node
 ## earthworks (with the map's version), the fog, the scout's track, the waypoint and the stats;
 ## Infra keeps the buildings and sites in it itself. It saves on every change Infra reports, when a
 ## truck is switched, the earthworks at most every DIG_EVERY s while the ground changes and when B
-## or V is let go, every TRUCKS_EVERY s for where the trucks stand, when the window loses focus and
-## on the way out. A save loads the map as made, then lays the earthworks over it.
+## or V is let go, every TRUCKS_EVERY s for where the trucks stand, when the window loses focus
+## or closes, and on Esc to the title. A save loads the map as made, then lays the earthworks over it.
 
 const DIG_EVERY := 5.0
 const TRUCKS_EVERY := 30.0
@@ -29,12 +29,15 @@ var _restoring := false
 func _ready() -> void:
 	main.infra.changed.connect(collect)
 	main.fleet.switched.connect(func(_v: Vehicle) -> void: save())
+	main.leave.connect(save)  # Esc to the title: saved before the world goes
 
 
 ## Everything but the buildings into the profile (Infra's own save writes it out).
 func collect() -> void:
 	if _restoring or not is_inside_tree() or not main.vehicle.is_inside_tree():
 		return
+	if main.fleet.trucks.any(func(v: Vehicle) -> bool: return is_instance_valid(v) and not v.is_inside_tree()):
+		return  # on the way out: what is left of the world is not the game
 	var p: Profile = main.profile
 	var fleet: Fleet = main.fleet
 	var out: Array = []
@@ -58,6 +61,8 @@ func collect() -> void:
 
 
 func save() -> void:
+	if not _restoring:
+		main.infra.write()
 	collect()
 	main.profile.save()
 
@@ -185,11 +190,6 @@ func _process(delta: float) -> void:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_WM_WINDOW_FOCUS_OUT, NOTIFICATION_WM_CLOSE_REQUEST]:
 		if main and main.profile and main.profile.path != "":
 			save()
-
-
-func _exit_tree() -> void:
-	if main and main.profile and main.profile.path != "" and not _restoring:
-		save()
