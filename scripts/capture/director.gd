@@ -196,7 +196,7 @@ func _until(cond: Callable, limit: float) -> void:
 func _place(p: Vector2, yaw: float) -> void:
 	var v: Vehicle = main.vehicle
 	v.autodrive = false
-	v.teleport(Vector3(p.x, main.terrain.get_height(p.x, p.y) + 1.2, p.y), yaw)
+	v.teleport(Vector3(p.x, main.land.get_height(p.x, p.y) + 1.2, p.y), yaw)
 	await _frames(45)
 
 
@@ -308,7 +308,7 @@ func _in_crown(p: Vector3) -> bool:
 		var d := Vector2(p.x, p.z).distance_to(tp)
 		if d > 2.8:
 			continue
-		var hy: float = p.y - main.terrain.get_height(tp.x, tp.y)
+		var hy: float = p.y - main.land.get_height(tp.x, tp.y)
 		var r := 0.5 if hy < 1.4 else 2.7 * (1.0 - (hy - 1.4) / 7.5)
 		if hy > 0.0 and d < r:
 			return true
@@ -320,12 +320,12 @@ func _looking(p: Vector3, target: Vector3) -> Transform3D:
 
 
 func _ground(x: float, z: float) -> Vector3:
-	return Vector3(x, main.terrain.get_height(x, z), z)
+	return Vector3(x, main.land.get_height(x, z), z)
 
 
 ## The top of the snow (or mud) layer, which stands up to 0.8 m over the ground.
 func _surface(x: float, z: float) -> Vector3:
-	var s: Terrain.Surface = main.terrain.sample(Vector3(x, 0.0, z))
+	var s: Terrain.Surface = main.land.sample(Vector3(x, 0.0, z))
 	return _ground(x, z) + Vector3(0.0, maxf(s.snow, s.mud * Terrain.MAX_MUD), 0.0)
 
 

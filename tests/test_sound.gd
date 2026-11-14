@@ -97,7 +97,7 @@ func test_tyres_crunch_snow_and_squelch_mud_when_they_roll(t: TCase) -> void:
 	v.fuel = v.spec.fuel_capacity
 	# Deep snow, standing, then rolling.
 	var dir := Vector2(1.0, 0.0)
-	var p := _snowfield(t.world.terrain, dir)
+	var p := _snowfield(t.world.land.home, dir)
 	if not t.ok(p != Vector2.INF, "no 30 m of deep snow without mud"):
 		return
 	await t.place(p, _yaw(dir))

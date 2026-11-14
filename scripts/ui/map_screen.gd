@@ -9,7 +9,8 @@ const INK := Color(0.22, 0.17, 0.12)
 const TRAIL_STEP := 3.0
 const TRAIL_MAX := 3000
 
-var terrain: Terrain
+var land: Land
+var terrain: Terrain  # the tile drawn: the home biome's
 var vehicle: Vehicle
 var contracts: Contracts
 var locations: Dictionary
@@ -20,8 +21,9 @@ var _origin := Vector2.ZERO
 var _trail := PackedVector2Array()
 
 
-func setup(t: Terrain, v: Vehicle, c: Contracts, locs: Dictionary, trees: PackedVector2Array) -> void:
-	terrain = t
+func setup(l: Land, v: Vehicle, c: Contracts, locs: Dictionary, trees: PackedVector2Array) -> void:
+	land = l
+	terrain = l.home
 	vehicle = v
 	contracts = c
 	locations = locs

@@ -138,12 +138,12 @@ func meet(at: Vector3, basis: Basis, velocity: Vector3) -> void:
 ## its wheels asks (up to MAX_TIP).
 func behind(hitch: Transform3D) -> Transform3D:
 	var xf := Transform3D(hitch.basis, hitch.origin - hitch.basis * spec.coupler)
-	if terrain == null:
+	if land == null:
 		return xf
 	var lift := 0.0
 	for w in wheels:
 		var bottom := xf * (w.mount - Vector3(0.0, rest_length + w.radius, 0.0))
-		lift = maxf(lift, terrain.get_height(bottom.x, bottom.z) + 0.05 - bottom.y)
+		lift = maxf(lift, land.get_height(bottom.x, bottom.z) + 0.05 - bottom.y)
 	if lift <= 0.0:
 		return xf
 	var tip := minf(asin(clampf(lift / (_axle().z - spec.coupler.z), 0.0, 1.0)), MAX_TIP)
@@ -173,8 +173,8 @@ func fits(xf: Transform3D, truck_too: Node = null) -> bool:
 ## What a query for what it meets leaves out: itself, and the ground (met all over).
 func _not_ground() -> Array[RID]:
 	var out: Array[RID] = [get_rid()]
-	if terrain and terrain.body:
-		out.append(terrain.body.get_rid())
+	if land:
+		out.append_array(land.bodies())
 	return out
 
 
@@ -188,7 +188,7 @@ func place(xf: Transform3D, velocity := Vector3.ZERO) -> void:
 
 
 ## Stands it on the ground at at (its origin, on the map) facing yaw, on its wheels and its stand,
-## tipped as the ground is there; it settles on its springs. In the tree, with its terrain.
+## tipped as the ground is there; it settles on its springs. In the tree, with its land.
 func stand_on(at: Vector2, yaw: float) -> void:
 	var turn := Basis(Vector3.UP, yaw)
 	var axle := _axle()
@@ -255,7 +255,7 @@ func _off_plane(at: Vector2, yaw: float, plane: Vector3, m: Vector3) -> float:
 
 
 func _ground_at(p: Vector3) -> Vector3:
-	return Vector3(p.x, terrain.get_height(p.x, p.z) if terrain else 0.0, p.z)
+	return Vector3(p.x, land.get_height(p.x, p.z) if land else 0.0, p.z)
 
 
 ## The middle of its wheels' mounts, in its frame.
@@ -370,8 +370,8 @@ func _reach(w: Wheel, space: PhysicsDirectSpaceState3D, up: Vector3) -> void:
 	w.normal = hit.normal
 	w.dist = origin.distance_to(w.point)
 	w.compression = ray_len - w.dist
-	if terrain:
-		w.surface = terrain.sample(w.point)
+	if land:
+		w.surface = land.sample(w.point) if land.is_ground(hit.collider) else Terrain.Surface.new()  # on a deck: firm
 
 
 ## What a wheel's ray must not hit: the trailer, and the truck it is hitched to or just left.
@@ -398,7 +398,7 @@ func _stand() -> void:
 	var compression := STAND_TRAVEL + _legs - top.distance_to(p)
 	var f := maxf(spec.stand_k * compression - spec.stand_damping * point_velocity(p).dot(up), 0.0)
 	apply_force(up * f, p - global_position)
-	_hold(i, p, hit.normal, f, (terrain.sample(p).grip if terrain else 1.0) * STAND_GRIP)
+	_hold(i, p, hit.normal, f, (land.sample(p).grip if land else 1.0) * STAND_GRIP)
 
 
 ## Support i (a wheel, or the stand) at p on ground of normal n, carrying load_n newtons with grip,

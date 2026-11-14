@@ -2,6 +2,7 @@
 
 uniform sampler2D height_tex : filter_nearest, repeat_disable;
 uniform sampler2D snow_tex : filter_linear, repeat_disable;
+uniform vec2 tile_origin;  // the tile's middle in the world: the world's metres less this are the tile's
 
 const float T_HALF = 128.0;
 const float T_N = 257.0;

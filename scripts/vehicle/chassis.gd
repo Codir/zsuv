@@ -35,7 +35,7 @@ class Wheel:
 	var slip := false
 
 
-var terrain: Terrain
+var land: Land  # the ground it drives on
 var wheels: Array[Wheel] = []
 var axles: Array[Vector2i] = []  # the wheels of an axle, left and right
 var rest_length := 0.5
@@ -80,8 +80,8 @@ func _update_suspension(w: Wheel, space: PhysicsDirectSpaceState3D, up: Vector3,
 	w.normal = hit.normal
 	w.dist = origin.distance_to(w.point)
 	w.compression = ray_len - w.dist
-	if terrain:
-		w.surface = terrain.sample(w.point)
+	if land:
+		w.surface = land.sample(w.point) if land.is_ground(hit.collider) else Terrain.Surface.new()  # on a deck or a building: firm, road grip
 		if w.sink != 1.0 or w.bite != 0.0:
 			w.surface.rolling *= w.sink
 			w.surface.grip = lerpf(w.surface.grip, 1.0, w.bite * (1.0 - w.surface.ice))
@@ -136,8 +136,8 @@ func _apply_tire(w: Wheel, brake: float, delta: float) -> void:
 	apply_force(fwd * (tire.x - roll) + right * tire.y, w.point - global_position)
 
 	w.spin_speed = signf(w.request) * SLIP_SPIN if w.slip else v_long / w.radius
-	if terrain and (w.surface.snow > 0.02 or w.surface.mud > 0.05):
-		terrain.compact(w.point, 0.08 if w.slip else 0.25)
+	if land and (w.surface.snow > 0.02 or w.surface.mud > 0.05):
+		land.compact(w.point, 0.08 if w.slip else 0.25)
 
 
 func point_velocity(p: Vector3) -> Vector3:
@@ -163,7 +163,7 @@ func _animate_wheels(delta: float) -> void:
 
 ## What flies off a spinning wheel that is not mud: snow, sand or dust, as the valley has it.
 func _layer_spray() -> Color:
-	return terrain.valley.layer_color.lightened(0.15) if terrain else Color(0.9, 0.93, 1.0)
+	return land.valley_at(Vector2(global_position.x, global_position.z)).layer_color.lightened(0.15) if land else Color(0.9, 0.93, 1.0)
 
 
 func _add_wheel(mount: Vector3, radius: float, width: float, front: bool, drive2: bool, rim_color := Color(0.75, 0.3, 0.1)) -> Wheel:
