@@ -410,7 +410,7 @@ func test_the_ledger_lists_every_building_and_site(t: TCase) -> void:
 		return
 	var lines := infra.ledger()
 	t.ok(lines[0].begins_with("Railhead: timber 4, gravel 2/4") or lines[0].begins_with("Railhead:"), "the railhead's line: " + lines[0])
-	t.ok(lines.has("Fuel station site: needs concrete 1, parts 1"), "the ledger: %s" % [lines])
+	t.ok(lines.has("Fuel station site: needs concrete 1 (a concrete plant, in the mixer), parts 1 (the railhead)"), "the ledger: %s" % [lines])
 	t.world.call("_toggle_map")
 	await t.ticks(3)
 	t.ok(t.world.map_screen.visible, "the map does not open")
@@ -489,6 +489,7 @@ func test_the_village_calls_and_a_road_sites_hint_comes_once(t: TCase) -> void:
 	var infra: Infra = t.world.infra
 	var land: Land = t.world.land
 	_clear(infra)
+	infra.stats = {"told": ["ruin"]}  # the forest is the shared world: its old sawmill was said
 	var got: Array[String] = []
 	var on_message := func(text: String) -> void: got.append(text)
 	infra.message.connect(on_message)

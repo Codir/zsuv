@@ -233,7 +233,7 @@ func place(kind: String, at: Vector2, yaw: float) -> Site:
 	for s in sites:
 		if s.spec.trees > 0:
 			s.trees_left = trees_near(s.at)
-	message.emit("Staked out: a %s. It needs %s" % [site.spec.title.to_lower(), _needs_text(site)])
+	message.emit("Staked out: a %s. It needs %s" % [site.spec.title.to_lower(), needs_where(site)])
 	_save()
 	return site
 
@@ -458,9 +458,9 @@ func _bring(s: Site) -> void:
 			if refusal == "" or refusal == "Full":
 				break
 		if refusal != "" and refusal != "Full":
-			message.emit("%s. The %s needs %s" % [refusal, s.spec.title.to_lower(), _needs_text(s)])
+			message.emit("%s. The %s needs %s" % [refusal, s.spec.title.to_lower(), needs_where(s)])
 		else:
-			message.emit("The %s needs %s" % [s.spec.title.to_lower(), _needs_text(s)])
+			message.emit("The %s needs %s" % [s.spec.title.to_lower(), needs_where(s)])
 		return
 	if not s.built:  # once it stands, _on_stood says so
 		message.emit("Brought: %s. Still needed: %s" % [", ".join(brought), _needs_text(s)])
@@ -501,6 +501,30 @@ static func _needs_text(s: Site) -> String:
 	var left := s.needs_left()
 	for res in left:
 		bits.append(Loads.unit(res, left[res]))
+	return ", ".join(bits)
+
+
+## Where res is to be had, for the player: "the railhead", "the railhead's yard (4)", "a quarry".
+func where(res: String) -> String:
+	match res:
+		"parts", "fuel":
+			return "the railhead"
+		"timber":
+			var n := roundi(railhead.available("timber"))
+			return "the railhead's yard (%d)" % n if n > 0 else "a sawmill"
+		"gravel":
+			return "a quarry"
+		"concrete":
+			return "a concrete plant, in the mixer"
+	return ""
+
+
+## What site s still needs and where each is had: "concrete 1 (a concrete plant, in the mixer), ...".
+func needs_where(s: Site) -> String:
+	var bits := PackedStringArray()
+	var left := s.needs_left()
+	for res in left:
+		bits.append("%s (%s)" % [Loads.unit(res, left[res]), where(res)])
 	return ", ".join(bits)
 
 
@@ -637,7 +661,10 @@ func ledger() -> PackedStringArray:
 			continue  # nothing unfound is shown
 		if s.key.begins_with("ruin:") and not land.fog.seen(s.at):
 			continue
-		out.append(s.line())
+		if not s.built and not s.needs_left().is_empty():
+			out.append("%s site: needs %s" % [s.spec.title, needs_where(s)])
+		else:
+			out.append(s.line())
 	if village and (village.built or land.fog.is_found(":".join(VILLAGE))):
 		out.append("Upper village: " + ("has all it asked for" if village.built else "needs " + _needs_text(village)))
 	return out
@@ -682,13 +709,14 @@ func _follow_cursor() -> void:
 
 func _panel_text() -> String:
 	if mode == Mode.PICK:
-		var lines := PackedStringArray(["BUILD", ""])
+		var lines := PackedStringArray(["BUILD"])
 		var all := BuildingSpec.all()
 		for i in all.size():
 			var bits := PackedStringArray()
 			for res in all[i].needs:
 				bits.append(Loads.unit(res, all[i].needs[res]))
 			lines.append("%d  %-15s %s" % [i + 1, all[i].title.to_upper(), ", ".join(bits)])
+		lines.append("parts, fuel: %s   timber: %s   gravel: %s" % [where("parts"), where("timber"), where("gravel")])
 		return "\n".join(lines)
 	if not yard.is_empty():
 		var s: Site = yard[0].from
@@ -716,8 +744,9 @@ func _prompt_text(stopped: bool) -> String:
 	if not yard.is_empty():
 		return "[1]-[%d] load   [E] close" % yard.size()
 	var s := here()
-	if s == null:
-		return ""
+	if s == null or (s.is_road() and s.spec.id != "bridge" and not s.built):  # out on the land: digging
+		var dig := _dig_hint()
+		return dig if dig != "" or s == null else s.line()
 	if not stopped:
 		return "Stop at the %s" % (s.spec.title.to_lower() + ("" if s.built or s == village else " site"))
 	if not s.built and s.is_road() and s.spec.id != "bridge":
@@ -880,6 +909,13 @@ func _tell() -> void:
 			message.emit(CALLS[called][1])
 			return
 	var told: Array = stats.get("told", [])
+	var mill: Variant = sites.filter(func(s: Site) -> bool: return s.key == "ruin:khutir:lumber")
+	if not "ruin" in told and not (mill as Array).is_empty() and not mill[0].built \
+			and (land.fog.is_found("biome:khutir") or land.fog.seen(mill[0].at)):
+		told.append("ruin")
+		stats["told"] = told
+		message.emit("An old sawmill: parts 1 brings it back")
+		return
 	for s in sites:
 		if s.is_road() and not s.built and not s.spec.id in told and p.distance_to(s.at) < s.spec.size.y * 0.5 + HINT_REACH \
 				and land.fog.seen(s.at):
@@ -887,3 +923,37 @@ func _tell() -> void:
 			stats["told"] = told
 			message.emit(HINTS.get(s.spec.id, s.line()))
 			return
+
+
+## The unbuilt fill or landslide the truck is at or near (15 m past its ends), or null.
+func _earthwork_near() -> Site:
+	var p := Vector2(vehicle.global_position.x, vehicle.global_position.z)
+	for s in sites:
+		if s.spec.id in ["fill", "slide"] and not s.built and s.contains(p, 15.0):
+			return s
+	return null
+
+
+## What the bucket and the tipper want, said where they are wanted (docs/plan.md §1, §4): in the
+## tractor, how to dig, slower when it is too fast, tip it at a washout; in another truck at a
+## washout or a landslide, that the tractor does this. "" nothing to say.
+func _dig_hint() -> String:
+	if vehicle.fuel <= 0.0:
+		return ""
+	var near := _earthwork_near()
+	var loader := vehicle.get_node_or_null("Loader") as Loader
+	if loader == null:
+		if near and near.spec.id == "fill":
+			return "The tractor with its tipper fills this: dig earth with B, tip it with V"
+		if near:
+			return "The tractor's bucket digs this out: dig with B, tip it aside with V"
+		return ""
+	var tip := loader.tipper()
+	if Input.is_action_pressed("dig") and absf(vehicle.forward_speed) > Loader.CREEP:
+		return "Slower: under 6 km/h to dig"
+	var soil := Loader.soil_in(tip) if tip else loader.bucket_soil
+	if soil > 0.5 and near and near.spec.id == "fill":
+		return "Hold V to tip here"
+	if tip and soil >= Loader.TIPPER - 0.5:
+		return "The tipper is full: take it to the washout and hold V"
+	return "Hold B and creep forward to dig into the tipper"
