@@ -50,7 +50,6 @@ func _run() -> void:
 
 func _depart_depot() -> void:
 	var v: Vehicle = main.vehicle
-	var c: Contracts = main.contracts
 	# The truck waits at the pump, lights on, while the camera drifts in over the valley.
 	await _place(Vector2(-93.5, -88.0), _yaw_to(Vector2(-93.5, -88.0), Vector2(-96.0, -70.0)))
 	v.set_lights(true)
@@ -62,7 +61,7 @@ func _depart_depot() -> void:
 
 	# Loading up: the crate drops onto the bed, the depot's lit windows behind.
 	_cam = _orbit_truck(7.5, 3.2, deg_to_rad(-55.0), deg_to_rad(-15.0), 5.0)
-	await _record("02-depot", 5.0, {1.6: func() -> void: c.take(c.offer("farm", "plain"))})
+	await _record("02-depot", 5.0, {1.6: func() -> void: Loads.put(v, "parts", 1.0)})
 
 	# Out of the depot and up the west road towards the khutir.
 	main.map_screen._trail.clear()
@@ -95,7 +94,7 @@ func _road_to_khutir() -> void:
 	await _record("10-khutir", 6.0)
 	await _until(func() -> bool: return not v.autodrive or absf(v.forward_speed) < 0.3, 10.0)
 	await _frames(10)
-	main.contracts.call("_interact")  # deliver, for the money on the dashboard
+	Loads.clear(v)  # unloaded
 	await _frames(15)
 	main.call("_toggle_map")
 	await _record("08-map", 4.0)

@@ -12,6 +12,7 @@ var terrain: Terrain
 var vehicle: Vehicle
 var camera_rig: CameraRig
 var contracts: Contracts
+var infra: Infra  # what the player builds (docs/plan.md §5)
 var hud: Hud
 var map_screen: MapScreen
 var builder: WorldBuilder
@@ -65,10 +66,18 @@ func _ready() -> void:
 	contracts.rigs_changed.connect(_park_trailers)
 	contracts.towing.connect(_towing)
 
+	infra = Infra.new()
+	infra.name = "Infra"
+	add_child(infra)
+	infra.contracts = contracts
+	infra.setup(vehicle, terrain, profile, camera_rig.camera, locations, builder.tree_points)
+
 	_setup_post()
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(vehicle, contracts)
+	hud.infra = infra
+	infra.message.connect(hud.show_message)
 	map_screen = MapScreen.new()
 	add_child(map_screen)
 	map_screen.setup(terrain, vehicle, contracts, locations, builder.tree_points)
@@ -115,6 +124,7 @@ func set_truck(spec: TruckSpec) -> void:
 	hud.vehicle = vehicle
 	map_screen.vehicle = vehicle
 	contracts.set_vehicle(vehicle)
+	infra.vehicle = vehicle
 
 
 ## The player's trailers wait beside the truck's spawn, facing the way it faces; one bought here

@@ -17,17 +17,19 @@ Q     all-wheel drive 4x4
 X     differential lock
 G     low range
 H     headlights   R  flip upright
-E     job board, unload, refuel
-TAB   garage, on the board
+E     load, unload, refuel, build
+P     place a building, wheel - turn
+TAB   garage, at the railhead
 C     hitch / unhitch a trailer
 F     winch, Shift - reel in
 M     map
-T     tow back to depot
+T     tow to the railhead
 RMB   camera, wheel - zoom
 F1    hide help  ESC title"""
 
 var vehicle: Vehicle
 var contracts: Contracts
+var infra: Infra  # set after setup: its prompt, its lists
 
 var _status: Label
 var _objective: Label
@@ -62,7 +64,7 @@ func setup(v: Vehicle, c: Contracts) -> void:
 	_board = _make_label(Vector2(28, 82), Vector2(size.x - 56, 88), HORIZONTAL_ALIGNMENT_LEFT)
 	_board.visible = false
 	_message.add_theme_color_override("font_color", Color(0.5, 1.0, 0.6))
-	_help = _make_label(Vector2(size.x - 196, 4), Vector2(190, 172), HORIZONTAL_ALIGNMENT_LEFT)
+	_help = _make_label(Vector2(size.x - 196, 4), Vector2(190, 184), HORIZONTAL_ALIGNMENT_LEFT)
 	_help.text = HELP_TEXT
 	_hint = _make_label(Vector2(size.x - 146, 4), Vector2(140, 40), HORIZONTAL_ALIGNMENT_LEFT)
 	_hint.text = HINT_TEXT
@@ -90,7 +92,7 @@ func _process(delta: float) -> void:
 	if vehicle == null:
 		return
 	var fuel_bars := roundi(vehicle.fuel / vehicle.spec.fuel_capacity * 10.0)
-	_status.text = "%3d km/h  %s  %s  DIFF:%s\nFUEL %s%s %2d L\n$ %d%s" % [
+	_status.text = "%3d km/h  %s  %s  DIFF:%s\nFUEL %s%s %2d L\n%s" % [
 		roundi(absf(vehicle.forward_speed) * 3.6),
 		"LOW " if vehicle.low_range else "HIGH",
 		_drive_text(),
@@ -98,18 +100,19 @@ func _process(delta: float) -> void:
 		"█".repeat(fuel_bars),
 		"░".repeat(10 - fuel_bars),
 		roundi(vehicle.fuel),
-		contracts.money,
-		("   " + contracts.cargo_text()) if contracts.cargo_text() != "" else "",
+		Loads.text(vehicle),
 	]
 	if vehicle.winch.attached:
 		_status.text += "\nWINCH %4.1f m  pull %2d kN%s" % [
 			vehicle.winch.length, roundi(vehicle.winch.tension / 1000.0), "  <<" if vehicle.winch.reeling else ""]
 	_objective.text = contracts.objective_text()
-	_board.visible = contracts.board_open
-	_board_bg.visible = contracts.board_open
+	var board := contracts.garage_text() if contracts.garage_open else (infra.panel if infra else "")
+	_board.visible = board != ""
+	_board_bg.visible = board != ""
 	if _board.visible:
-		_board.text = contracts.board_text()
-	_prompt.text = vehicle.prompt_with(contracts.prompt)
+		_board.text = board
+	var said := infra.prompt if infra and infra.prompt != "" else contracts.prompt
+	_prompt.text = vehicle.prompt_with(said)
 	_message_time -= delta
 	_message.visible = _message_time > 0.0
 
