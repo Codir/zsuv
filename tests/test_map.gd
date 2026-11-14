@@ -256,8 +256,11 @@ func test_the_sites_spots_the_deposits_and_the_swamps_deep_water(t: TCase) -> vo
 	var kinds := {}
 	for s in land.site_spots():
 		kinds[s.kind] = kinds.get(s.kind, 0) + 1
+		t.ok(typeof(s.get("needs")) == TYPE_DICTIONARY, "%s has no needs" % s.id)
 		t.ok(not land.corridor_state(s).drivable or s.kind == "gravel_road", "%s is drivable as the flood left it" % s.id)
 	t.eq(kinds, {"bridge": 2, "fill": 1, "slide": 1, "gravel_road": 1}, "road sites")
+	t.eq(land.spot("bridge:river").needs, {"concrete": 2, "timber": 3}, "the river bridge needs")
+	t.ok(int(land.site_spots().filter(func(s: Dictionary) -> bool: return s.kind == "gravel_road")[0].needs.get("gravel", 0)) >= 3, "the bog road needs too little gravel")
 	var ds := land.deposits()
 	t.eq(ds.size(), 3, "gravel deposits")
 	for d in ds:

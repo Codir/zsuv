@@ -18,6 +18,8 @@ const CLEAR := 1.5  # m: trees and rocks this near a bite or a dump go
 const DUMP_RADIUS := 2.0  # m a dump spreads over
 const PIT := 4.0  # m: a quarry stops when its pit is this deep
 
+signal changed  # the ground was dug, dumped, levelled, spread or graded: a save may keep it
+
 var land: Land
 var shifted := 0.0  # m³ dug in all, for the HUD and the end card
 var keep_out: Array[Dictionary] = []  # more flats not to touch: {pos (world), radius, name} (a built site's)
@@ -75,6 +77,7 @@ func bite(p: Vector2, forward: Vector2, depth := BITE_DEPTH, blade := -INF) -> f
 	_clear(p)
 	slump(p)
 	shifted += taken
+	changed.emit()
 	return taken
 
 
@@ -110,6 +113,7 @@ func level(p: Vector2, forward: Vector2, at: float, carry: float, most: float) -
 	if moved > 0.0:
 		_paint(p, 1.4, Color(1.0, 0.0, 0.0), Color(1.0, 0.0, 0.0), false)
 		_clear(p)
+		changed.emit()
 	return carry
 
 
@@ -143,6 +147,7 @@ func dump(p: Vector2, volume: float) -> float:
 	_paint(p, DUMP_RADIUS, Color(1.0, 0.0, 0.0), Color(1.0, 1.0, 1.0), road_gone)
 	_clear(p)
 	slump(p)
+	changed.emit()
 	return placed
 
 
@@ -266,6 +271,7 @@ func spread_gravel(p: Vector2, radius: float) -> String:
 	if why != "":
 		return why
 	_paint(p, radius, Color(0.0, 1.0, 0.0), Color(1.0, 1.0, 1.0), false)
+	changed.emit()
 	return ""
 
 
@@ -293,6 +299,7 @@ func quarry(centre: Vector2, size: Vector2, yaw: float, m3: float) -> float:
 			taken += drop
 	if taken > 0.0:
 		_paint(centre, size.length() * 0.5, Color(0.0, 0.0, 1.0), Color(1.0, 0.0, 1.0), true)
+		changed.emit()
 	return taken
 
 

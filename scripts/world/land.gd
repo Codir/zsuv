@@ -550,15 +550,17 @@ const COVERED := 0.9  # of a gravel road's corridor spread, and it is done
 const CLEARED := 0.85  # of a slide above the road's level gone, and it is clear
 const GRADE_SMOOTH := 14.0  # m a graded road's profile is averaged over, as a smoothed road's
 const GRADE_MOST := 0.22  # the steepest a graded road climbs
+const GRAVEL_STRIP := 16.0  # m of half a road a load of gravel covers, crept over in its 12 s
 
-var bridges := {}  # spot id -> the deck built over it (a StaticBody3D)
+var bridges := {}  # spot id -> the deck built over it (a StaticBody3D), or true
 var graded := {}  # spot id -> true
 var _spots: Array[Dictionary] = []
 var _slide_volume := {}  # spot id -> m3 of the slide over the road's level as made
 
 
 ## Where a road site goes, each found by the fog at pos: {id, kind ("bridge", "fill", "slide",
-## "gravel_road"), path (its centre line, world, every 2 m), a, b (its ends, on the ground),
+## "gravel_road"), path (its centre line, world, every 2 m), a, b (its ends, on the ground), needs
+## ({resource: loads}: a bridge concrete 2 and timber 3, a gravel road its gravel, the rest none),
 ## width, pos, biome}. A bridge spans a crossing from bank to bank; a fill crosses a washout, a
 ## slide a landslide, a gravel road a bog's stretch of road.
 func site_spots() -> Array[Dictionary]:
@@ -572,6 +574,7 @@ func site_spots() -> Array[Dictionary]:
 		for k in n + 1:
 			path.append(a.lerp(b, float(k) / n))
 		var s := _spot("bridge:" + String(c.kind), "bridge", path, c.biomes[0])
+		s.needs = {"concrete": 2, "timber": 3}
 		s.a = c.a
 		s.b = c.b
 		_spots.append(s)
@@ -587,8 +590,17 @@ func site_spots() -> Array[Dictionary]:
 					_slide_volume[s.id] = _above(s, true)
 		for i in t.valley.bogs.size():
 			var bg: Dictionary = t.valley.bogs[i]
-			_spots.append(_spot("gravel_road:%s%d" % [t.valley.id, i], "gravel_road", _road_path(t, int(bg.road), float(bg.from), float(bg.to)), t.valley.id))
+			var g := _spot("gravel_road:%s%d" % [t.valley.id, i], "gravel_road", _road_path(t, int(bg.road), float(bg.from), float(bg.to)), t.valley.id)
+			# Loads of gravel to cover it: a load spreads a strip GRAVEL_STRIP m long, half a road wide.
+			g.needs = {"gravel": ceili((float(bg.to) - float(bg.from)) * 2.0 / GRAVEL_STRIP)}
+			_spots.append(g)
 	return _spots
+
+
+## The bridge over spot id stands (its site built the deck, or build_deck did): the map and the
+## tests know the crossing is open.
+func bridged(id: String, deck: Node3D = null) -> void:
+	bridges[id] = deck if deck else true
 
 
 func spot(id: String) -> Dictionary:
@@ -601,7 +613,7 @@ func spot(id: String) -> Dictionary:
 func _spot(id: String, kind: String, path: PackedVector2Array, biome: String) -> Dictionary:
 	var a := path[0]
 	var b := path[path.size() - 1]
-	return {"id": id, "kind": kind, "path": path, "width": CORRIDOR, "biome": biome, "pos": path[path.size() / 2],
+	return {"id": id, "kind": kind, "path": path, "width": CORRIDOR, "biome": biome, "pos": path[path.size() / 2], "needs": {},
 		"a": Vector3(a.x, get_height(a.x, a.y), a.y), "b": Vector3(b.x, get_height(b.x, b.y), b.y)}
 
 
@@ -754,6 +766,7 @@ func grade(s: Dictionary) -> void:
 				t.paint(l, half, Color(0.0, 1.0, 0.0), Color(1.0, 1.0, 1.0), true, false)
 				t.mark_road(l, half)
 	graded[s.id] = true
+	earthworks.changed.emit()
 
 
 ## A deck over a bridge site, from bank to bank at their heights (docs/plan.md §5): a StaticBody3D
