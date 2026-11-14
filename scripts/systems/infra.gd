@@ -28,6 +28,20 @@ const PIT_DEEPEST := 4.0  # m under the ground as made: the quarry is dug out
 const PIT_MARGIN := 2.0  # m of its footprint's edge left undug
 const VILLAGE := ["carpathians", "village"]  # the upper village: its biome and its place
 ## Ruins on the map: built on their old place for less, or standing with fuel still in them.
+## The upper village on the radio as the truck driven comes nearer (docs/plan.md §1), metres from it.
+const CALLS := [
+	[300.0, "The upper village: the gorge bridge is gone, you will need concrete and timber up here"],
+	[120.0, "The upper village: we see your lights! Fuel 800 L and parts 2, and we are through the winter"],
+]
+## What the game says once, the first time the truck driven comes up to a road site found.
+const HINTS := {
+	"fill": "A washout: fill it with soil. The tractor's bucket digs into its tipper (hold B), V tips it",
+	"bridge": "The bridge needs concrete 2 and timber 3. The railhead has enough for one; the mixer's concrete sets in 5 minutes",
+	"gravel_road": "Bog: spread gravel across it with V from the tipper. A quarry on a gravel bank makes it",
+	"slide": "A landslide over the road: dig it out with the tractor's bucket (hold B) and tip it aside",
+}
+const HINT_REACH := 30.0
+
 const RUINS := {
 	"khutir:lumber": {"spec": "sawmill", "title": "Old sawmill", "needs": {"parts": 1}},
 	"polissia:peat": {"spec": "fuel_station", "title": "Peat works", "needs": {}, "fuel": 3000.0},
@@ -647,6 +661,7 @@ func _process(_delta: float) -> void:
 	_ghost.visible = mode == Mode.PLACE
 	panel = _panel_text()
 	prompt = _prompt_text(stopped)
+	_tell()
 
 
 ## The ghost follows the mouse on the ground, within REACH of the truck.
@@ -850,3 +865,25 @@ func refresh() -> void:
 			s.trees_left = trees_near(s.at)
 		if s.spec.deposit and pit_depth(s) >= PIT_DEEPEST - 0.05:
 			s.halt = "Dug out: %d m deep" % roundi(PIT_DEEPEST)
+
+
+## The village's calls as the truck driven comes nearer, and each kind of road site's hint the
+## first time it comes up to one: each said once, and kept in the stats so a save says no more.
+func _tell() -> void:
+	if Engine.get_process_frames() % 30 != 0:
+		return
+	var p := Vector2(vehicle.global_position.x, vehicle.global_position.z)
+	if village and not village.built:
+		var called := int(stats.get("called", 0))
+		if called < CALLS.size() and p.distance_to(village.at) < CALLS[called][0]:
+			stats["called"] = called + 1
+			message.emit(CALLS[called][1])
+			return
+	var told: Array = stats.get("told", [])
+	for s in sites:
+		if s.is_road() and not s.built and not s.spec.id in told and p.distance_to(s.at) < s.spec.size.y * 0.5 + HINT_REACH \
+				and land.fog.seen(s.at):
+			told.append(s.spec.id)
+			stats["told"] = told
+			message.emit(HINTS.get(s.spec.id, s.line()))
+			return

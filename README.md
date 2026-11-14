@@ -25,8 +25,7 @@ recordings by people (see Credits).
 Godot 4.7.2 (GL Compatibility, Jolt Physics), everything procedural; runs on Windows, Linux,
 macOS and in the browser.
 
-**In development.** For now the game still plays as Khutir Road did. The controls below are
-Khutir Road's, and they change as the plan lands.
+**In development** for Game Off 2026.
 
 ## Controls
 
@@ -39,17 +38,20 @@ Khutir Road's, and they change as the plan lands.
 | X | differential lock |
 | G | low range |
 | H | headlights |
-| E | the job board at the depot, unload at a delivery point, refuel (stopped); beside your parked truck, step across into it, or pour fuel into it from barrels |
-| 1 - 5 | take a job from the board; in the garage, buy or drive |
-| Tab | on the board: the garage (trucks and trailers) |
+| E | at a site, bring it the loads it needs; at a building, unload what it takes, fill the tank, or open the list of what can be loaded (stopped); beside your parked truck, step across into it, or pour fuel into it from barrels |
+| 1 - 9 | pick from the list on screen: what to build, what to load, the truck to drive |
+| P | place a building (stopped): pick it, the footprint follows the mouse, green or red with the reason; the wheel turns it, left click stakes it, Esc cancels; beside a site with nothing brought, take it down |
+| Tab | at the railhead or an outpost: the garage; U there turns to the workshop (upgrades, repair) |
 | C | hitch the trailer behind you, or unhitch it |
+| B / V | the tractor: hold B to dig with the bucket (into its tipper), hold V to tip; creeping forward spreads gravel into a road |
 | F | aim the winch with the mouse, left click hooks the tree, rock, building or truck under the cursor; F again hooks the nearest ahead; Esc cancels; hold Shift to reel in |
-| M | paper map; click a parked truck's mark to drive it |
-| T | tow back to the depot |
+| M | paper map, with the ledger of every building and site; click a parked truck's mark to drive it, anywhere else for a waypoint (click it again to clear it) |
+| Z, wheel on the map | the whole map, or the biome you are in |
+| T | tow to the nearest base (the load on the truck is lost) |
 | R | flip upright |
 | Right mouse + drag, wheel | orbit and zoom the camera |
 | F1 | the help: a short hint in the corner, then every key, then none |
-| Esc | back to the title |
+| Esc | close what is open; back to the title |
 
 Keys are physical, so they sit in the same place on any keyboard layout.
 

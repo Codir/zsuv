@@ -481,3 +481,26 @@ func test_a_bridge_carries_a_truck_across_the_river(t: TCase) -> void:
 	_clear(infra)
 	await t.ticks(2)
 	t.ok(not land.bridges.has(bridge.key), "the deck is still there after the clear")
+
+
+## The first minutes (docs/plan.md §1): the village calls on the radio as the truck comes nearer,
+## and the first time it comes up to a road site found, the game says what it wants, once.
+func test_the_village_calls_and_a_road_sites_hint_comes_once(t: TCase) -> void:
+	var infra: Infra = t.world.infra
+	var land: Land = t.world.land
+	_clear(infra)
+	var got: Array[String] = []
+	var on_message := func(text: String) -> void: got.append(text)
+	infra.message.connect(on_message)
+	var river: Site = infra.sites.filter(func(s: Site) -> bool: return s.key == "bridge:river")[0]
+	land.fog.reveal(river.at, 40.0)
+	var a: Vector3 = river.ends[0]
+	await t.place(Vector2(a.x, a.z) + Vector2(-10.0, 0.0), 0.0, 40)
+	t.ok(got.any(func(m: String) -> bool: return m.begins_with("The bridge needs concrete 2 and timber 3")), "no hint at the river: %s" % [got])
+	var hints := got.filter(func(m: String) -> bool: return m.begins_with("The bridge needs")).size()
+	await t.place(Vector2(a.x, a.z) + Vector2(-12.0, 2.0), 0.0, 40)
+	t.eq(got.filter(func(m: String) -> bool: return m.begins_with("The bridge needs")).size(), hints, "the hint said again")
+	await t.place(infra.village.at + Vector2(0.0, -40.0), 0.0, 40)
+	t.ok(got.any(func(m: String) -> bool: return m.begins_with("The upper village")), "the village does not call: %s" % [got])
+	infra.message.disconnect(on_message)
+	_clear(infra)
