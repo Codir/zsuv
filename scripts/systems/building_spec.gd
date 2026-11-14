@@ -147,13 +147,16 @@ static func village() -> BuildingSpec:
 	return s
 
 
-## A bridge over a crossing found, its old bridge gone (docs/plan.md §5): a deck from bank to bank
-## at the road's level. It is staked where the crossing is, not placed.
-static func bridge(over: float) -> BuildingSpec:
+## A road site the land has (Land.site_spots, docs/plan.md §5): staked where it is, not placed. A
+## bridge is built from the loads it needs and its deck put up; a fill, a landslide and a gravel road
+## are done when the ground along them is (Land.corridor_state), and need nothing brought by E.
+static func road_site(spot: Dictionary) -> BuildingSpec:
 	var s := BuildingSpec.new()
-	s.id = "bridge"
-	s.title = "Bridge"
-	s.needs = {"concrete": 2, "timber": 3}
-	s.size = Vector2(9.0, over + 2.0)
+	s.id = str(spot.kind)
+	s.title = {"bridge": "Bridge", "fill": "Fill", "slide": "Landslide", "gravel_road": "Gravel road"}.get(s.id, "Road")
+	s.needs = (spot.get("needs", {}) as Dictionary).duplicate() if s.id == "bridge" else {}
+	var a: Vector3 = spot.a
+	var b: Vector3 = spot.b
+	s.size = Vector2(9.0, Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z)) + 2.0)
 	s.color = Color(0.5, 0.36, 0.22)
 	return s

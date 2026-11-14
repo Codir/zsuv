@@ -259,10 +259,22 @@ static func _grid(c: Vector2, r: float, step: float) -> PackedVector2Array:
 ## Takes every site and building in infra away, and the railhead back as it was.
 static func _clear(infra: Infra) -> void:
 	for s in infra.sites.duplicate():
+		if s.key.begins_with("ruin:"):  # the ruins as found
+			s.delivered = {}
+			s.stock = {}
+			s.built = s.spec.needs.is_empty()
+			s.fuel = s.spec.tank if s.built else 0.0
+			s.halt = ""
+			continue
 		if s == infra.village or s.key != "":  # the goal and the bridges stay, with nothing brought
 			if s.built:
 				s.built = false
 				s._refresh()
+			if infra.land.bridges.has(s.key):  # its deck down again
+				var deck: Variant = infra.land.bridges[s.key]
+				if deck is Node:
+					(deck as Node).queue_free()
+				infra.land.bridges.erase(s.key)
 			s.delivered = {}
 			continue
 		infra.sites.erase(s)
@@ -270,6 +282,7 @@ static func _clear(infra: Infra) -> void:
 	infra.felled.clear()
 	infra._felled_seen = 0  # counted again from the earthworks at the next look
 	infra.railhead.stock = Infra.RAILHEAD_STOCK.duplicate()
+	infra.stats = {}
 	infra.mode = Infra.Mode.NONE
 	infra.yard = []
 	Loads.clear(infra.vehicle)
@@ -448,8 +461,8 @@ func test_a_bridge_carries_a_truck_across_the_river(t: TCase) -> void:
 	bridge.deliver("concrete", 2.0)
 	t.ok(bridge.built, "the bridge does not stand")
 	await t.ticks(2)
-	var deck := bridge.find_children("*", "StaticBody3D", true, false)
-	t.ok(deck.size() == 1, "the bridge has no deck")
+	t.ok(land.bridges.get(bridge.key) is StaticBody3D, "the bridge has no deck")
+	t.eq(infra.stats.get("bridges", 0), 1, "bridges counted")
 	var water := land.water_level(Vector2((a.x + b.x) * 0.5, (a.z + b.z) * 0.5))
 	var end := Vector2(b.x, b.z) + dir * 12.0
 	v.fuel = v.spec.fuel_capacity
@@ -467,4 +480,4 @@ func test_a_bridge_carries_a_truck_across_the_river(t: TCase) -> void:
 	t.ok(low > water + 0.5, "the truck went down to %.1f m, the water is at %.1f" % [low, water])
 	_clear(infra)
 	await t.ticks(2)
-	t.eq(bridge.find_children("*", "StaticBody3D", true, false).size(), 0, "the deck is still there after the clear")
+	t.ok(not land.bridges.has(bridge.key), "the deck is still there after the clear")

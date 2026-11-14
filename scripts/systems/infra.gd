@@ -27,12 +27,10 @@ const PIT_LOAD := 10.0  # m3 a quarry digs out of its pit for a load of gravel
 const PIT_DEEPEST := 4.0  # m under the ground as made: the quarry is dug out
 const PIT_MARGIN := 2.0  # m of its footprint's edge left undug
 const VILLAGE := ["carpathians", "village"]  # the upper village: its biome and its place
-## Gravel a quarry can go on, by biome, in the biome's own metres (docs/plan.md §3): the
-## steppe's gullies, the forest's rocky slopes, the foothills' stony slopes.
-const DEPOSITS := {
-	"steppe": [{"pos": Vector2(-96.0, 9.0), "radius": 18.0}, {"pos": Vector2(24.0, 12.0), "radius": 16.0}],
-	"khutir": [{"pos": Vector2(60.0, -40.0), "radius": 18.0}],
-	"zakarpattia": [{"pos": Vector2(-40.0, 40.0), "radius": 18.0}],
+## Ruins on the map: built on their old place for less, or standing with fuel still in them.
+const RUINS := {
+	"khutir:lumber": {"spec": "sawmill", "title": "Old sawmill", "needs": {"parts": 1}},
+	"polissia:peat": {"spec": "fuel_station", "title": "Peat works", "needs": {}, "fuel": 3000.0},
 }
 
 var vehicle: Vehicle
@@ -64,6 +62,8 @@ var _felled_seen := 0  # land.earthworks.felled's size when last read
 var _tree_at := {}  # Vector2i (a tree's point to 10 cm) -> its index
 var _fuel_seen := -1.0  # the driven truck's fuel a tick ago, for the fuel burnt
 var _fuel_of: Vehicle
+var _roads_dirty := false  # the ground changed: the road sites are looked at again
+var _roads_timer := 0.0
 
 
 func setup(v: Vehicle, l: Land, p: Profile, cam: Camera3D, locs: Dictionary, tree_points := PackedVector2Array()) -> void:
@@ -88,8 +88,6 @@ func setup(v: Vehicle, l: Land, p: Profile, cam: Camera3D, locs: Dictionary, tre
 			locations["%s:%s" % [t.valley.id, key]] = loc
 			if loc.get("kind", "") == "gravel":
 				deposits.append({"pos": loc.pos, "radius": float(loc.get("radius", 10.0))})
-		for d in DEPOSITS.get(t.valley.id, []):
-			deposits.append({"pos": (d.pos as Vector2) + t.origin, "radius": d.radius})
 	railhead = Site.new()
 	railhead.spec = BuildingSpec.railhead()
 	railhead.at = locs.depot.pos
@@ -105,18 +103,34 @@ func setup(v: Vehicle, l: Land, p: Profile, cam: Camera3D, locs: Dictionary, tre
 		village.at = vloc.pos
 		village.name = "Village"
 		_add(village)
-	var crossings := land.crossings()
-	for i in crossings.size():
-		var c: Dictionary = crossings[i]
-		var bridge := Site.new()
-		bridge.spec = BuildingSpec.bridge(float(c.over))
-		bridge.ends = [c.a, c.b] as Array[Vector3]
-		bridge.key = "bridge%d" % i
-		bridge.at = Vector2((c.a.x + c.b.x) * 0.5, (c.a.z + c.b.z) * 0.5)
-		var d := Vector2(c.b.x - c.a.x, c.b.z - c.a.z)
-		bridge.yaw = atan2(d.x, d.y)
-		bridge.name = "Bridge%d" % i
-		_add(bridge)
+	for spot in land.site_spots():  # the bridges, fills, landslides and gravel roads (Land)
+		var road := Site.new()
+		road.spec = BuildingSpec.road_site(spot)
+		road.ends = [spot.a, spot.b] as Array[Vector3]
+		road.key = spot.id
+		road.at = spot.pos
+		var d := Vector2(spot.b.x - spot.a.x, spot.b.z - spot.a.z)
+		road.yaw = atan2(d.x, d.y)
+		road.name = String(spot.id).replace(":", "_")
+		_add(road)
+	for key in RUINS:  # found in ruins, and cheaper to bring back (docs/plan.md §5)
+		var loc: Variant = locations.get(key)
+		if loc == null:
+			continue
+		var ruin := Site.new()
+		ruin.spec = BuildingSpec.find(RUINS[key].spec)
+		ruin.spec.title = RUINS[key].title
+		ruin.spec.needs = RUINS[key].needs.duplicate()
+		ruin.spec.tank = maxf(ruin.spec.tank, float(RUINS[key].get("fuel", 0.0)))
+		ruin.key = "ruin:" + key
+		ruin.at = loc.pos
+		ruin.name = "Ruin_" + key.replace(":", "_")
+		if RUINS[key].needs.is_empty():
+			ruin.built = true
+		ruin.fuel = float(RUINS[key].get("fuel", 0.0))
+		_add(ruin)
+	land.earthworks.changed.connect(func() -> void: _roads_dirty = true)
+	_roads_dirty = true
 	_load_saved()
 	_sync_felled()
 	_ghost = MeshInstance3D.new()
@@ -160,6 +174,8 @@ func check(kind: String, at: Vector2, yaw: float) -> String:
 	var grown := Site.footprint(s, at, yaw, APART)
 	for key in locations:
 		var loc: Dictionary = locations[key]
+		if loc.get("kind", "") == "gravel":  # a deposit is a place to build a quarry on
+			continue
 		if _distance_to(corners, loc.pos) < float(loc.radius) + APART:
 			return "Too near the %s" % loc.name
 	for other in sites:
@@ -259,11 +275,12 @@ static func _distance_to(poly: PackedVector2Array, p: Vector2) -> float:
 func _add(site: Site) -> void:
 	site.ground = func(x: float, z: float) -> float: return land.get_height(x, z)
 	site.made.connect(_on_made)
+	site.stood.connect(_on_stood)
 	sites.append(site)
 	add_child(site)
 	if site.spec.trees > 0:
 		site.trees_left = trees_near(site.at)
-	if site != village:
+	if site != village and site.key == "":  # not a road site: the bucket and the tipper make those
 		land.earthworks.keep_out.append({"pos": site.at, "radius": site.spec.size.length() * 0.5,
 			"name": site.spec.title.to_lower(), "site": site})
 
@@ -355,6 +372,9 @@ func interact() -> void:
 	var s := here()
 	if s == null:
 		return
+	if not s.built and s.is_road() and s.spec.id != "bridge":
+		message.emit(s.line())
+		return
 	if not s.built:
 		_bring(s)
 		return
@@ -411,8 +431,9 @@ func load_item(i: int) -> void:
 ## Brings site s every load on the truck that it needs.
 func _bring(s: Site) -> void:
 	var brought := PackedStringArray()
-	for res in s.needs_left():
-		var n := minf(Loads.amount(vehicle, res), float(s.needs_left()[res]))
+	var left := s.needs_left()
+	for res in left:
+		var n := minf(Loads.amount(vehicle, res), float(left[res]))
 		if n > 0.0:
 			var got := s.deliver(res, Loads.take(vehicle, res, n))
 			brought.append(Loads.unit(res, got))
@@ -427,19 +448,7 @@ func _bring(s: Site) -> void:
 		else:
 			message.emit("The %s needs %s" % [s.spec.title.to_lower(), _needs_text(s)])
 		return
-	if s.built:
-		if s.spec.id == "bridge":
-			stats["bridges"] = int(stats.get("bridges", 0)) + 1
-			if land.has_method("bridged"):
-				land.call("bridged", s.key)
-			message.emit("The bridge stands: the road goes across")
-		elif s == village:
-			message.emit("The upper village has its fuel and parts. The valley is open")
-			finished.emit()
-		else:
-			stats["buildings"] = int(stats.get("buildings", 0)) + 1
-			message.emit("The %s stands: %s" % [s.spec.title.to_lower(), s.spec.does()])
-	else:
+	if not s.built:  # once it stands, _on_stood says so
 		message.emit("Brought: %s. Still needed: %s" % [", ".join(brought), _needs_text(s)])
 	_save()
 
@@ -489,6 +498,22 @@ func advance(seconds: float) -> void:
 		s.step(seconds)
 
 
+## Site s has every load it needs: it stands. A bridge's deck goes up; the village is the end.
+func _on_stood(s: Site) -> void:
+	if s.spec.id == "bridge":
+		stats["bridges"] = int(stats.get("bridges", 0)) + 1
+		if not land.bridges.has(s.key):
+			land.build_deck(land.spot(s.key))
+		message.emit("The bridge stands: the road goes across")
+	elif s == village:
+		message.emit("The upper village has its fuel and parts. The valley is open")
+		finished.emit()
+	else:
+		stats["buildings"] = int(stats.get("buildings", 0)) + 1
+		message.emit("The %s stands: %s" % [s.spec.title.to_lower(), s.spec.does()])
+	_save()
+
+
 func _on_made(s: Site, _res: String) -> void:
 	if s.spec.trees > 0:
 		_fell(s)
@@ -515,48 +540,63 @@ func _fell(s: Site) -> void:
 			other.trees_left = trees_near(other.at)
 
 
-## The vertices of a quarry's pit: its footprint less PIT_MARGIN all round, world metres.
-func pit_vertices(s: Site) -> Array[Vector2i]:
-	var poly := s.corners(-PIT_MARGIN)
-	var out: Array[Vector2i] = []
-	var box := Rect2(poly[0], Vector2.ZERO)
-	for c in poly:
-		box = box.expand(c)
-	for z in range(floori(box.position.y), ceili(box.end.y) + 1):
-		for x in range(floori(box.position.x), ceili(box.end.x) + 1):
-			if Geometry2D.is_point_in_polygon(Vector2(x, z), poly):
-				out.append(Vector2i(x, z))
-	return out
-
-
-## A load of gravel made: its volume comes off the pit, evenly; at PIT_DEEPEST the quarry is dug
-## out and stops.
+## A load of gravel made: its volume comes out of the quarry's pit (Earthworks.quarry); at
+## PIT_DEEPEST nothing more comes out, and the quarry is dug out and stops.
 func _dig_pit(s: Site) -> void:
-	var ew := land.earthworks
-	var verts := pit_vertices(s)
-	if verts.is_empty():
-		return
-	var drop := PIT_LOAD / verts.size()
-	var deepest := 0.0
-	for v in verts:
-		var floor_h := ew.generated(v.x, v.y) - PIT_DEEPEST
-		var h := maxf(ew.height(v.x, v.y) - drop, floor_h)
-		ew.set_height(v.x, v.y, h)
-		deepest = maxf(deepest, ew.generated(v.x, v.y) - h)
-	if deepest >= PIT_DEEPEST - drop * 0.5:
+	var taken := land.earthworks.quarry(s.at, s.spec.size, s.yaw, PIT_LOAD)
+	if taken < PIT_LOAD * 0.5 or pit_depth(s) >= PIT_DEEPEST - 0.05:
 		s.halt = "Dug out: %d m deep" % roundi(PIT_DEEPEST)
 
 
 ## The pit's depth: the most the ground in it is below the ground as made.
 func pit_depth(s: Site) -> float:
-	var deepest := 0.0
-	for v in pit_vertices(s):
-		deepest = maxf(deepest, land.earthworks.generated(v.x, v.y) - land.earthworks.height(v.x, v.y))
-	return deepest
+	return land.earthworks.pit_depth(s.at, s.spec.size, s.yaw)
+
+
+## The road sites that are done by the ground (a fill, a landslide, a gravel road) looked at again:
+## one whose corridor is as it should be stands, and the land grades it into a road.
+func check_roads() -> void:
+	_roads_dirty = false
+	for s in sites:
+		if not s.is_road() or s.built or s.spec.id == "bridge":
+			continue
+		var spot := land.spot(s.key)
+		if spot.is_empty():
+			continue
+		var st := land.corridor_state(spot)
+		var done := false
+		match s.spec.id:
+			"fill":
+				done = st.drivable
+				s.progress = "fill it with soil till it is drivable" + ("" if st.why == "" else ": " + st.why)
+			"slide":
+				done = float(st.cleared) >= Land.CLEARED and st.drivable
+				s.progress = "%d%% dug away" % roundi(float(st.cleared) * 100.0) + ("" if st.why == "" else ": " + st.why)
+			"gravel_road":
+				done = float(st.covered) >= Land.COVERED
+				s.progress = "%d%% spread, gravel %d loads with V" % [roundi(float(st.covered) * 100.0), int(spot.needs.get("gravel", 0))]
+		if not done:
+			continue
+		s.built = true
+		s._refresh()
+		if s.spec.id != "slide":
+			land.grade(spot)
+		var path: PackedVector2Array = spot.path
+		var length := 0.0
+		for i in path.size() - 1:
+			length += path[i].distance_to(path[i + 1])
+		stats["road_m"] = float(stats.get("road_m", 0.0)) + length
+		message.emit({"fill": "The washout is filled: the road goes across", "slide": "The landslide is cleared: the road is open",
+			"gravel_road": "The gravel road is laid across the bog"}.get(s.spec.id, "The road is open"))
+		_save()
 
 
 func _physics_process(delta: float) -> void:
 	advance(delta)
+	_roads_timer += delta
+	if _roads_dirty and _roads_timer >= 0.5:
+		_roads_timer = 0.0
+		check_roads()
 	stats["played"] = float(stats.get("played", 0.0)) + delta
 	if vehicle:
 		if vehicle == _fuel_of and vehicle.fuel < _fuel_seen:
@@ -579,8 +619,10 @@ func ledger() -> PackedStringArray:
 	for s in sites:
 		if s == village:
 			continue
-		if s.spec.id == "bridge" and not s.built and not land.fog.seen(s.at):
+		if s.is_road() and not s.built and not land.fog.seen(s.at):
 			continue  # nothing unfound is shown
+		if s.key.begins_with("ruin:") and not land.fog.seen(s.at):
+			continue
 		out.append(s.line())
 	if village and (village.built or land.fog.is_found(":".join(VILLAGE))):
 		out.append("Upper village: " + ("has all it asked for" if village.built else "needs " + _needs_text(village)))
@@ -663,6 +705,8 @@ func _prompt_text(stopped: bool) -> String:
 		return ""
 	if not stopped:
 		return "Stop at the %s" % (s.spec.title.to_lower() + ("" if s.built or s == village else " site"))
+	if not s.built and s.is_road() and s.spec.id != "bridge":
+		return s.line()
 	if s == village:
 		return "The upper village has all it asked for" if s.built else "[E] Bring the village: %s" % _needs_text(s)
 	if not s.built:
@@ -772,12 +816,17 @@ func _load_saved() -> void:
 		match str(d.get("kind", "")):
 			"railhead":
 				railhead.stock = Site._amounts(d.get("stock", {}))
-			"bridge":
+			_ when str(d.get("key", "")) != "":  # a road site or a ruin, already on the map: its state
 				for s in sites:
-					if s.key == str(d.get("key", "")) and s.key != "":
+					if s.key == str(d.key):
 						s.built = bool(d.get("built", false))
 						s.delivered = Site._amounts(d.get("delivered", {}))
+						s.stock = Site._amounts(d.get("stock", {}))
+						s.fuel = clampf(float(d.get("fuel", 0.0)), 0.0, s.spec.tank)
+						s.timer = clampf(float(d.get("timer", 0.0)), 0.0, s.spec.period)
 						s._refresh()
+						if s.built and s.spec.id == "bridge" and not land.bridges.has(s.key):
+							land.build_deck(land.spot(s.key))
 			"village":
 				if village:
 					village.built = bool(d.get("built", false))
