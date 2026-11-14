@@ -42,14 +42,20 @@ var burn := 1.0  # times the pickup's fuel at the same throttle
 
 # Loads: what each kind of load weighs on its own bed (a kind it does not list, it does not
 # carry); a trailer's loads are the trailer's (TrailerSpec.cargo_mass).
+## and of Zsuv's resources (Hold.RESOURCES): fuel in litres and soil in m3, so capacity says how
+## much of a kind is a full load (1 if it is not listed).
 var cargo_mass := {}
+var capacity := {}
 var tows: Array[String] = []  # the TrailerSpecs it can hitch
 
 # Gear.
 var winch_mount := Vector3(0.0, 0.25, -2.4)
+var winch_length := 20.0  # m of cable (docs/plan.md §8)
 var hitch := Vector3.ZERO  # where a trailer couples, in the body's frame
 var hitch_kind := ""  # "": none; "ball" a towbar; "pin" a tractor's drawbar pin; "fifth" a fifth wheel
 var lights: Array[Vector3] = []  # headlights, in the body's frame
+var intake := Vector3(0.0, 0.25, -1.4)  # the engine's air intake, in the body's frame: water over it floods the engine (§8)
+var reveal := 40.0  # m of the map it uncovers around it, driven (§3)
 
 # Camera and sound.
 var camera_distance := 10.0
@@ -59,7 +65,7 @@ var engine_pos := Vector3(0.0, 0.4, -1.7)  # where the engine is heard from, in 
 
 
 static func all() -> Array[TruckSpec]:
-	return [pickup(), six(), tractor(), semi()]
+	return [pickup(), six(), tractor(), semi(), scout(), mixer()]
 
 
 static func find(spec_id: String) -> TruckSpec:
@@ -85,7 +91,8 @@ static func pickup() -> TruckSpec:
 		_wheel(Vector3(0.95, 0.2, 1.45), 0.5, 0.42, false, true),
 	]
 	s.axles = [Vector2i(0, 1), Vector2i(2, 3)]
-	s.cargo_mass = {"plain": 900.0, "timed": 900.0, "fragile": 900.0}
+	s.cargo_mass = {"plain": 900.0, "timed": 900.0, "fragile": 900.0, "fuel": 400.0, "parts": 900.0}
+	s.capacity = {"fuel": 400.0}  # barrels
 	s.hitch = Vector3(0.0, 0.0, 2.35)
 	s.hitch_kind = "ball"
 	s.tows = ["trailer"]
@@ -131,9 +138,11 @@ static func six() -> TruckSpec:
 	s.steer_speed = 1.8
 	s.fuel_capacity = 150.0
 	s.burn = 1.8
-	s.cargo_mass = {"plain": 900.0, "timed": 900.0, "fragile": 900.0, "heavy": 3500.0}
+	s.cargo_mass = {"plain": 900.0, "timed": 900.0, "fragile": 900.0, "heavy": 3500.0, "parts": 900.0, "timber": 3000.0}
 	s.tows = ["trailer"]
 	s.winch_mount = Vector3(0.0, 0.15, -3.8)
+	s.winch_length = 24.0
+	s.intake = Vector3(-1.0, 0.8, -1.9)  # 1.5 m over the ground
 	s.hitch = Vector3(0.0, -0.05, 3.9)
 	s.hitch_kind = "ball"
 	s.lights = [Vector3(-0.88, 0.85, -3.42), Vector3(0.88, 0.85, -3.42)]
@@ -188,6 +197,8 @@ static func tractor() -> TruckSpec:
 	s.cargo_mass = {}
 	s.tows = ["farm"]
 	s.winch_mount = Vector3(0.0, -0.25, -2.45)
+	s.winch_length = 18.0
+	s.intake = Vector3(-0.28, 0.35, -0.3)  # 1.3 m over the ground
 	s.hitch = Vector3(0.0, -0.22, 2.0)  # as high as the farm trailer's drawbar eye stands
 	s.hitch_kind = "pin"
 	s.lights = [Vector3(-0.25, 0.42, -2.2), Vector3(0.25, 0.42, -2.2)]
@@ -247,6 +258,8 @@ static func semi() -> TruckSpec:
 	s.cargo_mass = {}
 	s.tows = ["semi_trailer"]
 	s.winch_mount = Vector3(0.0, -0.2, -3.65)
+	s.winch_length = 24.0
+	s.intake = Vector3(-0.95, 0.35, -1.18)  # 1.2 m over the ground
 	s.hitch = Vector3(0.0, 0.45, 1.65)
 	s.hitch_kind = "fifth"
 	s.lights = [Vector3(-0.85, -0.05, -3.65), Vector3(0.85, -0.05, -3.65)]
@@ -254,6 +267,89 @@ static func semi() -> TruckSpec:
 	s.camera_height = 3.0
 	s.engine_pitch = 0.8
 	s.engine_pos = Vector3(0.0, 0.4, -2.3)
+	return s
+
+
+## The scout (docs/plan.md §7): a short two-door 4x4 of the road service, light and quick, always
+## in 4x4, with low range and a winch to get itself out. It carries nothing and tows nothing: its
+## job is to find the way and uncover the map. Its origin rides about 0.55 m over the ground.
+static func scout() -> TruckSpec:
+	var s := TruckSpec.new()
+	s.id = "scout"
+	s.title = "Scout"
+	s.mass = 1200.0
+	s.center_of_mass = Vector3(0.0, -0.1, 0.0)
+	s.body = "scout"
+	s.shapes = [
+		{"size": Vector3(1.75, 0.75, 3.9), "pos": Vector3(0.0, 0.225, 0.0)},  # the body
+		{"size": Vector3(1.7, 0.75, 2.3), "pos": Vector3(0.0, 0.95, 0.35)},  # the cab and the hard top
+	]
+	for z: float in [-1.15, 1.15]:
+		for x: float in [-0.8, 0.8]:
+			s.wheels.append(_wheel(Vector3(x, 0.05, z), 0.36, 0.3, z < 0.0, z > 0.0))
+	s.axles = [Vector2i(0, 1), Vector2i(2, 3)]
+	s.rest_length = 0.4
+	s.spring_k = 20000.0
+	s.damping = 2400.0
+	s.anti_roll = 10000.0
+	s.rim_color = Color(0.95, 0.5, 0.1)
+	s.engine_force = 9400.0
+	s.low_mult = 1.8
+	s.max_speed_high = 24.0
+	s.max_speed_low = 6.0
+	s.max_speed_reverse = 5.0
+	s.max_steer = 0.55
+	s.steer_speed = 2.6
+	s.fuel_capacity = 45.0
+	s.burn = 0.5
+	s.cargo_mass = {}
+	s.tows = []
+	s.winch_mount = Vector3(0.0, 0.0, -2.0)
+	s.winch_length = 20.0
+	s.intake = Vector3(0.75, 0.25, -1.3)  # 0.8 m over the ground: it floods first
+	s.reveal = 90.0
+	s.lights = [Vector3(-0.55, 0.4, -1.96), Vector3(0.55, 0.4, -1.96)]
+	s.camera_distance = 8.0
+	s.camera_height = 1.3
+	s.engine_pitch = 1.3
+	s.engine_pos = Vector3(0.0, 0.3, -1.4)
+	return s
+
+
+## The concrete mixer (docs/plan.md §7): the semi truck's cab, chassis and wheels (6x4, low
+## range) with a drum behind the cab that turns while it carries concrete, and a chute at the
+## back. It carries concrete only, one load, which sets 5 minutes after it goes in (Hold).
+static func mixer() -> TruckSpec:
+	var s := semi()
+	s.id = "mixer"
+	s.title = "Mixer"
+	s.price = 0
+	s.comes_with = ""
+	s.mass = 9000.0
+	s.center_of_mass = Vector3(0.0, 0.0, -0.1)
+	s.body = "mixer"
+	s.shapes = [
+		{"size": Vector3(2.3, 0.6, 2.3), "pos": Vector3(0.0, -0.05, -2.45)},  # the frame under the cab
+		{"size": Vector3(2.3, 0.35, 4.6), "pos": Vector3(0.0, -0.175, 1.0)},  # the frame behind it
+		{"size": Vector3(2.45, 2.4, 2.3), "pos": Vector3(0.0, 1.45, -2.45)},  # the cab
+		{"size": Vector3(2.2, 2.0, 4.3), "pos": Vector3(0.0, 1.1, 0.95)},  # the drum on its frame
+	]
+	s.spring_k = 120000.0
+	s.damping = 11000.0
+	s.anti_roll = 36000.0
+	s.engine_force = 66000.0
+	s.low_mult = 1.8
+	s.max_speed_high = 16.0
+	s.max_speed_low = 4.5
+	s.fuel_capacity = 200.0
+	s.burn = 1.6
+	s.cargo_mass = {"concrete": 6000.0}
+	s.tows = []
+	s.hitch = Vector3.ZERO
+	s.hitch_kind = ""
+	s.winch_length = 24.0
+	s.intake = Vector3(-0.95, 0.45, -1.18)  # 1.3 m over the ground
+	s.camera_distance = 14.0
 	return s
 
 

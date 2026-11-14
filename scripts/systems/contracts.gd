@@ -329,6 +329,8 @@ func garage_items() -> Array[Dictionary]:
 	var items: Array[Dictionary] = [{"id": pickup.id, "title": pickup.title, "price": 0,
 		"gives": PackedStringArray([pickup.id]), "truck": pickup.id}]
 	items.append_array(Garage.catalogue())
+	for s: TruckSpec in [TruckSpec.scout(), TruckSpec.mixer()]:  # Zsuv's, owned from the start
+		items.append({"id": s.id, "title": s.title, "price": 0, "gives": PackedStringArray([s.id]), "truck": s.id})
 	return items
 
 
@@ -491,7 +493,7 @@ func recover() -> void:
 	money -= RECOVER_COST
 	vehicle.fuel = maxf(vehicle.fuel, vehicle.spec.fuel_capacity * 0.5)
 	towing.emit()
-	vehicle.teleport(spawn_pos, spawn_yaw)
+	vehicle.set_down(spawn_pos, spawn_yaw)  # clear of the trucks parked there (Vehicle)
 	message.emit("The tow truck dragged you back to the depot. -$%d" % RECOVER_COST)
 
 

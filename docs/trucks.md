@@ -32,6 +32,8 @@ drag and rolling), turning circles at full lock, as built (`tests/test_trucks.gd
 | Farm trailer | with the tractor | 4, tandem | 1500 kg | | | bulk: 4000 kg of grain, peat or hay | |
 | Semi truck | $5000 | 6: 6x4, twin rear tyres | 7000 kg | 54 km/h | 9.9 m | nothing itself: long loads on its semi-trailer | fast on a road; sinks in mud; a hairpin is hard work |
 | Semi-trailer | with the semi truck | 6, three axles | 3000 kg | | | long: 8000 kg of logs or pipes | 12 m; 37% of it on the fifth wheel |
+| Scout (Zsuv) | owned | 4: always 4x4, 0.36 m tyres | 1200 kg | 64 km/h | 4.4 m | nothing; no hitch | the fastest, 45 L at half the burn, a 20 m winch: it finds the way |
+| Mixer (Zsuv) | owned | 6: 6x4, the semi's chassis | 9000 kg, 15000 loaded | 46 km/h (41 loaded) | 9.9 m | concrete, 1 load, sets in 5 minutes | 200 L, burns 1.6 times, a 24 m winch |
 
 The hitches meet: a towbar at 0.62-0.70 m and the trailer's ball at 0.64; the tractor's pin and
 the farm trailer's eye at 0.72; the fifth wheel at 1.30 m and the kingpin, standing on its legs,

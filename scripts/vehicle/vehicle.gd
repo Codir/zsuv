@@ -22,8 +22,18 @@ var spec: TruckSpec  # set before the truck enters the tree; the pickup if not
 var awd := false
 var diff_lock := false
 var low_range := false
-var has_cargo := false
-var cargo := ""  # what is on the bed (a job's kind: plain, timed, fragile, heavy); "" nothing
+signal said(text: String)  # something about the truck the player should hear: "The concrete set"
+
+var hold := Hold.new()  # what is on its bed (docs/plan.md §8); a hitched trailer has its own
+var has_cargo: bool:  # something on the bed
+	get:
+		return hold.kind != ""
+var cargo: String:  # what is on the bed (a resource, or a job's kind: plain, timed, fragile, heavy); "" nothing
+	get:
+		return hold.kind
+var driven := true  # the player drives it; false: parked out on the map, engine off, handbrake on (Fleet)
+var hooked_by: Winch  # another truck's winch has hold of it: its brakes are off
+var dormant := false  # frozen far from the truck driven (Fleet): no wheels, no engine
 var fuel := 0.0  # a full tank once in the tree
 var autodrive := false
 var autodrive_path := PackedVector2Array()
@@ -47,6 +57,7 @@ var _reset_transform := Transform3D()
 var _loads := {}  # look -> its node on the bed: crates, fragile, heavy
 var _lights: Array[SpotLight3D] = []
 var _joint := RID()  # the hitch's, while a trailer is hitched
+var _drum: Node3D  # the mixer's, turning while it carries concrete
 
 
 func _ready() -> void:
@@ -62,6 +73,9 @@ func _ready() -> void:
 	damping = spec.damping
 	anti_roll = spec.anti_roll
 	fuel = spec.fuel_capacity
+	hold.masses = spec.cargo_mass
+	hold.capacity = spec.capacity
+	hold.changed.connect(_on_hold_changed)
 	for b in spec.shapes:
 		_add_box_shape(b.size, b.pos)
 	call("_build_" + spec.body)
@@ -70,6 +84,7 @@ func _ready() -> void:
 	winch = Winch.new()
 	winch.vehicle = self
 	winch.mount = spec.winch_mount
+	winch.max_length = spec.winch_length
 	add_child(winch)
 	for w in spec.wheels:
 		var wheel := _add_wheel(w.mount, w.radius, w.width, w.steer, w.drive2, spec.rim_color)
@@ -82,13 +97,91 @@ func _ready() -> void:
 	add_child(audio)
 
 
+## A whole load of kind on the bed, or nothing (Khutir Road's jobs; Zsuv's resources go through
+## hold and rig_put / rig_take).
 func set_cargo(on: bool, kind := "plain") -> void:
-	has_cargo = on
-	cargo = kind if on else ""
-	mass = spec.mass + (float(spec.cargo_mass.get(kind, spec.cargo_mass.get("plain", 0.0))) if on else 0.0)
+	hold.set_whole(kind if on else "")
+
+
+## Its weight and its look follow the load on the bed.
+func _on_hold_changed() -> void:
+	mass = spec.mass + hold.mass()
+	var kind := hold.kind
 	var look: String = kind if kind in _loads else "crates"
 	for k in _loads:
-		_loads[k].visible = on and k == look
+		_loads[k].visible = kind != "" and k == look
+
+
+## The holds of the rig, the truck's and its hitched trailer's, bed first.
+func holds() -> Array[Hold]:
+	var out: Array[Hold] = [hold]
+	if trailer:
+		out.append(trailer.hold)
+	return out
+
+
+## How much more of kind the rig can take, on its bed and in its hitched trailer.
+func rig_room(kind: String) -> float:
+	var n := 0.0
+	for h in holds():
+		n += h.room(kind)
+	return n
+
+
+## How much of kind is on the rig.
+func rig_holding(kind: String) -> float:
+	var n := 0.0
+	for h in holds():
+		n += h.holding(kind)
+	return n
+
+
+## Puts up to n of kind on the rig, the bed first, then the trailer; returns how much went on.
+func rig_put(kind: String, n := INF) -> float:
+	var on := 0.0
+	for h in holds():
+		on += h.put(kind, n - on)
+	return on
+
+
+## Takes up to n of kind off the rig, the trailer first, then the bed; returns how much came off.
+func rig_take(kind: String, n := INF) -> float:
+	var off := 0.0
+	var hs := holds()
+	hs.reverse()
+	for h in hs:
+		off += h.take(kind, n - off)
+	return off
+
+
+## Why the rig cannot take any kind here, for a yard's or a site's E ("" when it can): "The scout
+## carries nothing", "The mixer carries only concrete", "Full".
+func load_refusal(kind: String) -> String:
+	if rig_room(kind) > 0.0:
+		return ""
+	var who := spec.title.to_lower()
+	if holds().any(func(h: Hold) -> bool: return h.carries(kind)):
+		return "Full"
+	var carried := PackedStringArray()
+	for k in spec.cargo_mass:
+		if k in Hold.RESOURCES:
+			carried.append(k)
+	if carried.is_empty() and spec.tows.is_empty():
+		return "The %s carries nothing" % who
+	if carried.is_empty() and trailer == null:
+		return "The %s carries nothing itself: hitch its trailer" % who
+	if carried.size() == 1 and spec.tows.is_empty():
+		return "The %s carries only %s" % [who, carried[0]]
+	return "The %s does not carry %s" % [who, kind]
+
+
+## What the rig carries, for the HUD: "TIMBER 1 + TIMBER 1", "CONCRETE 4:12"; "" nothing of Zsuv's.
+func load_text() -> String:
+	var parts := PackedStringArray()
+	for h in holds():
+		if h.text() != "":
+			parts.append(h.text())
+	return " + ".join(parts)
 
 
 func set_lights(on: bool) -> void:
@@ -258,7 +351,7 @@ func hitch_prompt() -> String:
 ## The HUD's bottom line: what the jobs ask (or else what the winch offers), and beside it what
 ## the hitch does; a trailer waits at the depot beside the job board.
 func prompt_with(jobs: String) -> String:
-	var first := jobs if jobs != "" else winch.prompt()
+	var first := winch.prompt() if winch.aiming or jobs == "" else jobs
 	var c := hitch_prompt()
 	return first + ("   " if first != "" and c != "" else "") + c
 
@@ -277,6 +370,8 @@ func _exit_tree() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not driven:
+		return
 	if event.is_action_pressed("toggle_awd"):
 		awd = not awd and spec.all_wheel
 	elif event.is_action_pressed("toggle_diff"):
@@ -286,7 +381,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("toggle_lights"):
 		set_lights(not _lights[0].visible)
 	elif event.is_action_pressed("winch"):
-		winch.toggle()
+		winch.press()
 	elif event.is_action_pressed("hitch"):
 		toggle_hitch()
 	elif event.is_action_pressed("reset"):
@@ -303,6 +398,9 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_age_load(delta)
+	if dormant:
+		return
 	_read_input()
 	var basis := global_transform.basis
 	forward_speed = -linear_velocity.dot(basis.z)
@@ -323,7 +421,7 @@ func _physics_process(delta: float) -> void:
 			brake = 1.0
 		else:
 			drive = throttle_input
-	elif absf(forward_speed) < 0.8 and not (winch.reeling and winch.anchor_body == null):
+	elif absf(forward_speed) < 0.8 and not (winch.reeling and winch.anchor_body == null) and hooked_by == null:
 		brake = 1.0  # hold on a slope; let the winch pull the truck, but hold it while it pulls a car
 	if fuel <= 0.0:
 		drive = 0.0
@@ -336,12 +434,12 @@ func _physics_process(delta: float) -> void:
 
 	# Split the torque between the wheels.
 	var every := awd and spec.all_wheel
-	var driven := 0
+	var n_driven := 0
 	for w in wheels:
 		if every or w.drive2:
-			driven += 1
+			n_driven += 1
 	for w in wheels:
-		w.request = total_drive / driven if (every or w.drive2) else 0.0
+		w.request = total_drive / n_driven if (every or w.drive2) else 0.0
 	for axle in axles:
 		var a: Wheel = wheels[axle.x]
 		var b: Wheel = wheels[axle.y]
@@ -358,16 +456,128 @@ func _physics_process(delta: float) -> void:
 		_apply_tire(w, brake, delta)
 
 	var burn := 0.04 + absf(drive) * 0.45 * spec.burn * (1.2 if awd else 1.0) * (1.15 if low_range else 1.0) * (1.5 if cargo == "heavy" else 1.0)
-	fuel = maxf(fuel - burn * delta, 0.0)
+	if driven or autodrive:  # a parked engine is off
+		fuel = maxf(fuel - burn * delta, 0.0)
 
 
 func _process(delta: float) -> void:
 	_animate_wheels(delta)
+	if _drum and hold.kind == "concrete":
+		_drum.rotate_object_local(Vector3.UP, 1.6 * delta)
+
+
+## Concrete sets in the mixer (docs/plan.md §7): at Hold.CONCRETE_SETS the load is lost.
+func _age_load(delta: float) -> void:
+	for h in holds():
+		if h.kind == "":
+			continue
+		h.age += delta
+		if h.kind == "concrete" and h.age >= Hold.CONCRETE_SETS:
+			h.clear()
+			said.emit("The concrete set")
+
+
+## The engine off, the handbrake on, the lights off (Fleet: a truck left out on the map); or
+## driven again.
+func set_driven(on: bool) -> void:
+	driven = on
+	autodrive = false
+	throttle_input = 0.0
+	steer_input = 0.0
+	handbrake = not on
+	if not on:
+		set_lights(false)
+		winch.cancel_aim()
+
+
+## Frozen where it stands, far from the truck being driven, with its trailer; or woken.
+func set_frozen(on: bool) -> void:
+	if on == dormant:
+		return
+	dormant = on
+	freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+	freeze = on
+	if trailer:
+		trailer.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+		trailer.freeze = on
+
+
+## The gap between its footprint and other's, on the ground (m, 0 when they overlap): how far
+## apart two trucks stand, for stepping across (E) and pouring fuel.
+func gap_to(other: Vehicle) -> float:
+	var a := footprint()
+	var b := other.footprint()
+	if Geometry2D.intersect_polygons(a, b).size() > 0:
+		return 0.0
+	var best := INF
+	for pair in [[a, b], [b, a]]:
+		var from: PackedVector2Array = pair[0]
+		var to: PackedVector2Array = pair[1]
+		for p in from:
+			for i in to.size():
+				var q := Geometry2D.get_closest_point_to_segment(p, to[i], to[(i + 1) % to.size()])
+				best = minf(best, p.distance_to(q))
+	return best
+
+
+## Its outline on the ground (x, z), from its collision boxes.
+func footprint() -> PackedVector2Array:
+	var lo := Vector3.INF
+	var hi := -Vector3.INF
+	for b in spec.shapes:
+		lo = lo.min(b.pos - b.size * 0.5)
+		hi = hi.max(b.pos + b.size * 0.5)
+	var out := PackedVector2Array()
+	for c: Vector3 in [Vector3(lo.x, 0.0, lo.z), Vector3(hi.x, 0.0, lo.z), Vector3(hi.x, 0.0, hi.z), Vector3(lo.x, 0.0, hi.z)]:
+		var p := global_transform * c
+		out.append(Vector2(p.x, p.z))
+	return out
+
+
+## Set down at pos facing yaw (the tow, the garage), or else the nearest spot ahead of it or to a
+## side where it stands clear of the other trucks and anything else there.
+func set_down(pos: Vector3, yaw: float) -> void:
+	teleport(pos, yaw)
+	if not trucks_in_the_way(_reset_transform):
+		return
+	var lift := pos.y - (land.get_height(pos.x, pos.z) if land else 0.0)
+	for i in range(1, 41):
+		for way in [Vector3.LEFT, Vector3.RIGHT, Vector3.FORWARD, Vector3.BACK]:
+			var at := _reset_transform.translated(_reset_transform.basis * way * 1.0 * i)
+			if land:
+				at.origin.y = land.get_height(at.origin.x, at.origin.z) + lift
+			if not trucks_in_the_way(at):
+				_reset_transform = at
+				return
+
+
+## Whether another truck stands where it would at xf.
+func trucks_in_the_way(xf: Transform3D) -> bool:
+	var lo := Vector3.INF
+	var hi := -Vector3.INF
+	for b in spec.shapes:
+		lo = lo.min(b.pos - b.size * 0.5)
+		hi = hi.max(b.pos + b.size * 0.5)
+	var box := BoxShape3D.new()
+	box.size = hi - lo + Vector3(1.0, 0.0, 1.0)
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = box
+	q.transform = Transform3D(xf.basis, xf * ((lo + hi) * 0.5))
+	q.exclude = [get_rid()]
+	for hit in get_world_3d().direct_space_state.intersect_shape(q, 16):
+		if hit.collider is Vehicle and hit.collider != self:
+			return true
+	return false
 
 
 func _read_input() -> void:
 	if autodrive:
 		_autodrive_input()
+		return
+	if not driven:  # parked: engine off, the handbrake on unless a winch has hold of it
+		throttle_input = 0.0
+		steer_input = 0.0
+		handbrake = hooked_by == null
 		return
 	throttle_input = Input.get_axis("brake", "accelerate")
 	steer_input = Input.get_axis("steer_right", "steer_left")
@@ -476,10 +686,103 @@ func _build_pickup() -> void:
 		var ring := Psx.mesh(heavy, Psx.cylinder(0.72, 0.72, 0.8, 10), Vector3(0.0, 1.02, 0.75 + i * 0.9), Color(0.62, 0.62, 0.6))
 		ring.rotation.x = PI * 0.5
 		Psx.mesh(heavy, Psx.cylinder(0.5, 0.5, 0.82, 10), Vector3(0.0, 1.02, 0.75 + i * 0.9), DARK).rotation.x = PI * 0.5
-	_loads = {"crates": crates, "fragile": fragile, "heavy": heavy}
+	# Fuel: two rows of blue barrels standing on the bed.
+	var barrels := Node3D.new()
+	for z in [0.65, 1.25, 1.85]:
+		for x in [-0.4, 0.4]:
+			Psx.mesh(barrels, Psx.cylinder(0.28, 0.28, 0.85, 8), Vector3(x, 0.72, z), Color(0.16, 0.3, 0.55))
+			Psx.mesh(barrels, Psx.cylinder(0.29, 0.29, 0.05, 8), Vector3(x, 0.95, z), DARK)
+	_loads = {"crates": crates, "fragile": fragile, "heavy": heavy, "fuel": barrels}
 	for k in _loads:
 		gfx.add_child(_loads[k])
 		_loads[k].visible = false
+
+
+## The scout's look (TruckSpec.body "scout"): a short white two-door 4x4 with an orange stripe, a
+## roof rack with a light bar and an amber beacon, a spare wheel on the tailgate, a whip antenna.
+## The ground is about 0.55 m under its origin.
+func _build_scout() -> void:
+	var white := Color(0.9, 0.9, 0.86)
+	var orange := Color(0.95, 0.45, 0.08)
+	var grey := Color(0.3, 0.3, 0.32)
+	var gfx := Node3D.new()
+	add_child(gfx)
+	# The body, the bonnet, the stripe along it, the bumpers.
+	Psx.box(gfx, Vector3(1.7, 0.6, 3.8), Vector3(0.0, 0.25, 0.0), white)
+	Psx.box(gfx, Vector3(1.72, 0.12, 3.82), Vector3(0.0, 0.32, 0.0), orange)
+	Psx.box(gfx, Vector3(1.6, 0.12, 1.2), Vector3(0.0, 0.6, -1.25), white)
+	Psx.box(gfx, Vector3(1.8, 0.2, 0.18), Vector3(0.0, 0.05, -1.95), grey)
+	Psx.box(gfx, Vector3(1.8, 0.2, 0.18), Vector3(0.0, 0.05, 1.95), grey)
+	# The cab and the hard top behind it, the glass all round.
+	Psx.box(gfx, Vector3(1.66, 0.72, 2.3), Vector3(0.0, 0.92, 0.35), white)
+	Psx.box(gfx, Vector3(1.5, 0.45, 0.04), Vector3(0.0, 0.98, -0.81), GLASS)
+	Psx.box(gfx, Vector3(1.4, 0.4, 0.04), Vector3(0.0, 1.0, 1.51), GLASS)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.04, 0.4, 0.9), Vector3(0.84 * side, 1.0, -0.2), GLASS)
+		Psx.box(gfx, Vector3(0.04, 0.4, 0.8), Vector3(0.84 * side, 1.0, 0.95), GLASS)
+		Psx.box(gfx, Vector3(0.3, 0.16, 0.05), Vector3(0.55 * side, 0.4, -1.92), Color(1.0, 0.95, 0.75), 2.0)
+		Psx.box(gfx, Vector3(0.18, 0.2, 0.05), Vector3(0.72 * side, 0.45, 1.92), Color(0.9, 0.1, 0.05), 1.5)
+		Psx.box(gfx, Vector3(0.36, 0.1, 0.9), Vector3(0.8 * side, 0.48, -1.15), DARK)
+		Psx.box(gfx, Vector3(0.36, 0.1, 0.9), Vector3(0.8 * side, 0.48, 1.15), DARK)
+		Psx.box(gfx, Vector3(0.16, 0.12, 0.05), Vector3(0.9 * side, 1.08, -0.78), DARK)
+	# The roof rack, the light bar across its front, the amber beacon, the whip antenna.
+	Psx.box(gfx, Vector3(1.6, 0.06, 2.1), Vector3(0.0, 1.33, 0.4), DARK)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.05, 0.12, 2.1), Vector3(0.78 * side, 1.39, 0.4), DARK)
+	Psx.box(gfx, Vector3(1.2, 0.12, 0.14), Vector3(0.0, 1.42, -0.6), Color(1.0, 0.97, 0.85), 2.0)
+	Psx.mesh(gfx, Psx.cylinder(0.11, 0.13, 0.18, 8), Vector3(0.45, 1.46, 0.3), Color(1.0, 0.6, 0.05), 3.0)
+	Psx.mesh(gfx, Psx.cylinder(0.012, 0.012, 1.4, 4), Vector3(-0.8, 1.7, 1.3), DARK)
+	# The spare wheel on the tailgate.
+	var spare := Psx.mesh(gfx, Psx.cylinder(0.34, 0.34, 0.24, 10), Vector3(0.0, 0.7, 2.05), DARK)
+	spare.rotation.x = PI * 0.5
+
+
+## The mixer's look (TruckSpec.body "mixer"): the semi truck's cab and frame, a drum leaning back
+## on it that turns while it carries concrete, the hopper over its mouth and the chute below it.
+func _build_mixer() -> void:
+	var blue := Color(0.17, 0.3, 0.58)
+	var white := Color(0.88, 0.89, 0.9)
+	var grey := Color(0.3, 0.31, 0.33)
+	var drum_colour := Color(0.92, 0.6, 0.12)
+	var gfx := Node3D.new()
+	add_child(gfx)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.14, 0.3, 6.7), Vector3(0.45 * side, 0.08, -0.05), DARK)
+	# The cab, as the semi truck's.
+	Psx.box(gfx, Vector3(2.45, 0.45, 0.25), Vector3(0.0, -0.15, -3.5), grey)
+	Psx.box(gfx, Vector3(2.45, 2.0, 2.2), Vector3(0.0, 1.25, -2.45), blue)
+	Psx.box(gfx, Vector3(2.47, 0.14, 2.22), Vector3(0.0, 0.62, -2.45), white)
+	Psx.box(gfx, Vector3(2.2, 0.85, 0.04), Vector3(0.0, 1.78, -3.56), GLASS)
+	Psx.box(gfx, Vector3(1.8, 0.5, 0.04), Vector3(0.0, 0.98, -3.56), DARK)
+	Psx.box(gfx, Vector3(2.35, 0.3, 2.0), Vector3(0.0, 2.4, -2.35), white)
+	for side in [-1.0, 1.0]:
+		Psx.box(gfx, Vector3(0.42, 0.16, 0.04), Vector3(0.82 * side, -0.05, -3.63), Color(1.0, 0.95, 0.75), 2.0)
+		Psx.box(gfx, Vector3(0.04, 0.6, 0.85), Vector3(1.23 * side, 1.78, -3.0), GLASS)
+		Psx.box(gfx, Vector3(0.06, 0.5, 0.22), Vector3(1.42 * side, 1.8, -3.45), DARK)
+		Psx.box(gfx, Vector3(0.75, 0.05, 2.45), Vector3(0.85 * side, 0.32, 1.875), DARK)
+		Psx.box(gfx, Vector3(0.25, 0.12, 0.05), Vector3(0.85 * side, -0.05, 3.37), Color(0.9, 0.1, 0.05), 1.5)
+	# The pedestals the drum lies on, front and back.
+	Psx.box(gfx, Vector3(1.2, 1.0, 0.3), Vector3(0.0, 0.45, -1.15), grey)
+	Psx.box(gfx, Vector3(1.4, 1.5, 0.3), Vector3(0.0, 0.7, 2.75), grey)
+	# The drum: its axis tilted up towards the back, turning about it.
+	var mount := Node3D.new()
+	mount.position = Vector3(0.0, 1.2, 0.85)
+	mount.rotation.x = PI * 0.5 - 0.18  # its Y back along the truck, the mouth up
+	gfx.add_child(mount)
+	_drum = Node3D.new()
+	mount.add_child(_drum)
+	Psx.mesh(_drum, Psx.cylinder(0.75, 1.0, 1.6, 10), Vector3(0.0, -1.3, 0.0), drum_colour)
+	Psx.mesh(_drum, Psx.cylinder(1.0, 0.95, 1.2, 10), Vector3(0.0, 0.1, 0.0), drum_colour)
+	Psx.mesh(_drum, Psx.cylinder(0.95, 0.45, 1.1, 10), Vector3(0.0, 1.25, 0.0), drum_colour)
+	for i in 4:  # the blades' welds, so it is seen to turn
+		var weld := Psx.box(_drum, Vector3(0.1, 2.6, 0.06), Vector3(0.0, 0.0, 0.0), white)
+		weld.rotation.y = i * PI * 0.5
+		weld.position = Basis(Vector3.UP, i * PI * 0.5) * Vector3(0.0, 0.0, 1.0)
+	# The hopper over its mouth and the chute under it, at the back.
+	Psx.box(gfx, Vector3(0.7, 0.4, 0.6), Vector3(0.0, 2.25, 3.0), grey)
+	var chute := Psx.box(gfx, Vector3(0.35, 0.08, 1.3), Vector3(0.0, 1.2, 3.55), grey)
+	chute.rotation.x = 0.5
+	Psx.box(gfx, Vector3(2.0, 0.2, 0.12), Vector3(0.0, -0.05, 3.3), DARK)
 
 
 ## The 6x6's look (TruckSpec.body "six"): an olive army truck, a long bonnet between wide flat

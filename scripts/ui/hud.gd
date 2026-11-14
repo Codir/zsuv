@@ -17,11 +17,11 @@ Q     all-wheel drive 4x4
 X     differential lock
 G     low range
 H     headlights   R  flip upright
-E     job board, unload, refuel
+E     board, unload; step across
 TAB   garage, on the board
 C     hitch / unhitch a trailer
 B/V   tractor: dig / tip the tipper
-F     winch, Shift - reel in
+F     aim the winch, Shift reel
 M     map
 T     tow back to depot
 RMB   camera, wheel - zoom
@@ -29,6 +29,7 @@ F1    hide help  ESC title"""
 
 var vehicle: Vehicle
 var contracts: Contracts
+var fleet: Fleet  # what E does beside a parked truck (scripts/main.gd sets it)
 
 var _status: Label
 var _objective: Label
@@ -102,6 +103,8 @@ func _process(delta: float) -> void:
 		contracts.money,
 		("   " + contracts.cargo_text()) if contracts.cargo_text() != "" else "",
 	]
+	if vehicle.load_text() != "":
+		_status.text += "\n" + vehicle.load_text()
 	if vehicle.winch.attached:
 		_status.text += "\nWINCH %4.1f m  pull %2d kN%s" % [
 			vehicle.winch.length, roundi(vehicle.winch.tension / 1000.0), "  <<" if vehicle.winch.reeling else ""]
@@ -113,7 +116,8 @@ func _process(delta: float) -> void:
 	_board_bg.visible = contracts.board_open
 	if _board.visible:
 		_board.text = contracts.board_text()
-	_prompt.text = vehicle.prompt_with(contracts.prompt)
+	var here := contracts.prompt if contracts.prompt != "" or fleet == null else fleet.prompt()
+	_prompt.text = vehicle.prompt_with(here)
 	_message_time -= delta
 	_message.visible = _message_time > 0.0
 

@@ -26,11 +26,14 @@ void fragment() {
 }
 """
 
+signal truck_picked(v: Vehicle)  # a click on a parked truck's mark: drive it (Fleet)
+
 var land: Land
 var terrain: Terrain  # the home tile (the first map drew only it)
 var vehicle: Vehicle
 var contracts: Contracts
 var locations: Dictionary
+var fleet: Fleet  # the trucks out on the map, marked on it (scripts/main.gd sets it)
 var whole := false  # zoomed out to the whole map
 var scout_track := PackedVector2Array()  # where the scout has been, kept (docs/plan.md §3)
 
@@ -123,6 +126,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mb.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
 			whole = mb.button_index == MOUSE_BUTTON_WHEEL_DOWN
 			get_viewport().set_input_as_handled()
+		elif mb.button_index == MOUSE_BUTTON_LEFT:
+			# A click on a parked truck's mark drives it (Fleet).
+			var v := truck_at(mb.position)
+			if v:
+				truck_picked.emit(v)
+				get_viewport().set_input_as_handled()
 
 
 func _process(_delta: float) -> void:
@@ -257,6 +266,7 @@ func _on_draw_over() -> void:
 		_text(font, Vector2(x + 13, y), item[1], Color(0.9, 0.9, 0.85))
 		y += 13.0
 	_text(font, Vector2(x, _rect.end.y), "[Z] %s  [M] close" % ("this biome" if whole else "whole map"), Color(0.7, 0.7, 0.65))
+	_draw_fleet(font)
 
 
 func _text(font: Font, pos: Vector2, text: String, color: Color) -> void:
@@ -337,3 +347,33 @@ func _render(t: Terrain, rect: Rect2i) -> void:
 		var l := q - o
 		if rect.has_point(l) and q.x >= 0 and q.y >= 0 and q.x < _img.get_width() - 1 and q.y < _img.get_height() - 1:
 			_img.fill_rect(Rect2i(q, Vector2i(2, 2)), Color(0.2, 0.32, 0.22))
+
+
+## The parked trucks out on the map, each a square in its colour with its name: a click on one
+## drives it.
+func _draw_fleet(font: Font) -> void:
+	if fleet == null:
+		return
+	for v in fleet.trucks:
+		if v == vehicle or not is_instance_valid(v):
+			continue
+		var mp := _to_map(Vector2(v.global_position.x, v.global_position.z))
+		_over.draw_rect(Rect2(mp - Vector2(4, 4), Vector2(8, 8)), Color(0.95, 0.55, 0.2))
+		_over.draw_rect(Rect2(mp - Vector2(4, 4), Vector2(8, 8)), INK, false, 1.0)
+		_text(font, mp + Vector2(6, -4), v.spec.title.to_lower(), Color(1.0, 0.8, 0.55))
+
+
+## The parked truck whose mark is under at (a point on the screen), or null.
+func truck_at(at: Vector2) -> Vehicle:
+	if fleet == null:
+		return null
+	var best: Vehicle = null
+	var best_d := 8.0
+	for v in fleet.trucks:
+		if v == vehicle or not is_instance_valid(v):
+			continue
+		var d := _to_map(Vector2(v.global_position.x, v.global_position.z)).distance_to(at)
+		if d < best_d:
+			best = v
+			best_d = d
+	return best

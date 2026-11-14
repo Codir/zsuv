@@ -70,9 +70,9 @@ func save() -> void:
 	cfg.save(path)
 
 
-## Whether the truck or trailer id is the player's (the pickup always is).
+## Whether the truck or trailer id is the player's (the pickup, the scout and the mixer always are).
 func has_rig(id: String) -> bool:
-	return id == "pickup" or id in rigs
+	return id in ["pickup", "scout", "mixer"] or id in rigs
 
 
 ## Why the garage cannot sell item (Garage.catalogue()) yet ("" when it can).
