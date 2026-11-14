@@ -411,7 +411,7 @@ func test_a_6x6_body_changes_what_it_carries(t: TCase) -> void:
 	var six := await _six(t)
 	var yard := _Yard.new()
 	yard.parts = 3.0
-	t.eq(six.rig_room("fuel"), 0.0, "a flatbed takes fuel")
+	t.eq(six.rig_room("fuel"), 2000.0, "litres on its bed as found")
 	t.ok(Upgrades.fit(six, "body_tank", yard).begins_with("Fitted: tank body"), "the tank is not fitted")
 	t.eq(six.rig_room("fuel"), 2000.0, "litres in its tank body")
 	t.eq(six.rig_room("timber"), 0.0, "the tank takes timber")
@@ -454,3 +454,34 @@ class _Yard extends Node:
 		var got := minf(n, available(res))
 		parts -= got
 		return got
+
+
+## U in the garage turns it to the workshop: its lines fit an upgrade or repair, from the base's
+## parts (the railhead's never run out).
+func test_the_workshop_in_the_garage(t: TCase) -> void:
+	var c: Contracts = t.world.contracts
+	var v: Vehicle = t.world.vehicle
+	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw)
+	v.condition = 0.6
+	c.garage_open = true
+	var u := InputEventKey.new()
+	u.physical_keycode = KEY_U
+	u.pressed = true
+	c._unhandled_input(u)
+	t.ok(c.workshop, "U does not turn the garage to the workshop")
+	t.ok(c.workshop_base() != null, "no base at the railhead")
+	var text := c.garage_text()
+	t.ok(text.begins_with("WORKSHOP - PICKUP") and "1  SNORKEL" in text and "3  REPAIR" in text, "the workshop: %s" % text)
+	var said := []
+	var on_message := func(m: String) -> void: said.append(m)
+	c.message.connect(on_message)
+	c.garage_pick(0)
+	t.ok("snorkel" in v.upgrades, "the snorkel is not fitted: %s" % [said])
+	c.garage_pick(2)
+	t.eq(v.condition, 1.0, "its condition after the repair")
+	c.message.disconnect(on_message)
+	c._unhandled_input(u)
+	t.ok(not c.workshop, "U does not turn back to the trucks")
+	c.garage_open = false
+	v.upgrades = PackedStringArray()
+	v._apply_upgrades()

@@ -57,12 +57,12 @@ static func cannot_fit(v: Vehicle, id: String, parts: float) -> String:
 
 
 ## Makes and fits id on v at base, from its parts (Site.give): the message to show.
-static func fit(v: Vehicle, id: String, base: Node) -> String:
+static func fit(v: Vehicle, id: String, base: Node, infra: Node = null) -> String:
 	var parts: float = base.available("parts") if base else 0.0
 	var why := cannot_fit(v, id, parts)
 	if why != "":
 		return why
-	base.give("parts", float(ALL[id].cost))
+	_take_parts(base, float(ALL[id].cost), infra)
 	v.fit(id)
 	return "Fitted: %s, %s" % [String(ALL[id].title).to_lower(), ALL[id].what]
 
@@ -73,7 +73,7 @@ static func repair_cost(v: Vehicle) -> int:
 
 
 ## Repairs v at base, as far as its parts go: the message to show.
-static func repair(v: Vehicle, base: Node) -> String:
+static func repair(v: Vehicle, base: Node, infra: Node = null) -> String:
 	var cost := repair_cost(v)
 	if cost <= 0:
 		return "It needs no repair"
@@ -81,6 +81,43 @@ static func repair(v: Vehicle, base: Node) -> String:
 	var n := cost if parts >= float(cost) else floori(parts)  # a railhead's are endless (INF)
 	if n <= 0:
 		return "A repair takes parts: bring them to the yard"
-	base.give("parts", float(n))
+	_take_parts(base, float(n), infra)
 	v.condition = minf(v.condition + n * REPAIR_STEP, 1.0)
 	return "Repaired: %d%%" % roundi(v.condition * 100.0)
+
+
+## Takes n parts from base's yard: through Infra.draw when there is one (it saves), else the Site.
+static func _take_parts(base: Node, n: float, infra: Node) -> void:
+	if infra and infra.has_method("draw"):
+		infra.draw(base, "parts", n)
+	else:
+		base.give("parts", n)
+
+
+## The workshop's page of the garage (Contracts, U on the garage): each upgrade that fits v, then
+## the repair, numbered from 1; base is the one the truck is at (null: none, nothing is made).
+static func workshop_text(v: Vehicle, base: Node) -> String:
+	var parts: float = base.available("parts") if base else 0.0
+	var lines := PackedStringArray(["WORKSHOP - %s   parts: %s" % [v.spec.title.to_upper(), "endless" if parts == INF else str(int(parts))], ""])
+	var ups := list(v)
+	for i in ups.size():
+		var u: Dictionary = ups[i]
+		lines.append("%d  %-14s %d parts  %s" % [i + 1, String(u.title).to_upper(), u.cost, "fitted" if u.fitted else u.what])
+	var cost := repair_cost(v)
+	lines.append("%d  %-14s %s" % [ups.size() + 1, "REPAIR", ("%d%%, a load of parts for each 50%%: %d" % [roundi(v.condition * 100.0), cost]) if cost > 0 else "in full repair"])
+	return "\n".join(lines)
+
+
+## How many lines the workshop has for v: its upgrades and the repair.
+static func workshop_size(v: Vehicle) -> int:
+	return list(v).size() + 1
+
+
+## The workshop's line i for v at base: fits that upgrade, or repairs; the message to show.
+static func workshop_pick(v: Vehicle, i: int, base: Node, infra: Node = null) -> String:
+	if base == null:
+		return "The workshop is at a base's garage"
+	var ups := list(v)
+	if i < ups.size():
+		return fit(v, ups[i].id, base, infra)
+	return repair(v, base, infra)

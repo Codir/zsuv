@@ -139,7 +139,10 @@ static func six() -> TruckSpec:
 	s.steer_speed = 1.8
 	s.fuel_capacity = 150.0
 	s.burn = 1.8
-	s.cargo_mass = {"plain": 900.0, "timed": 900.0, "fragile": 900.0, "heavy": 3500.0, "parts": 900.0, "timber": 3000.0}
+	# Its bed as found takes any of them; a body (Upgrades.BODIES) makes it one kind of truck.
+	s.cargo_mass = {"plain": 900.0, "timed": 900.0, "fragile": 900.0, "heavy": 3500.0, "parts": 900.0, "timber": 3000.0,
+		"fuel": 1700.0, "gravel": 4000.0}
+	s.capacity = {"fuel": 2000.0}
 	s.tows = ["trailer"]
 	s.winch_mount = Vector3(0.0, 0.15, -3.8)
 	s.winch_length = 24.0
