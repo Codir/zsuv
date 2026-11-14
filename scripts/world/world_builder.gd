@@ -14,7 +14,6 @@ var valley: Valley
 var tree_points := PackedVector2Array()
 var anchor_points := PackedVector3Array()  # winch anchors
 var props: Array[Dictionary] = []  # every tree and rock: {p (its own metres), kind, shape}; gone: shape null
-var tree_shapes: Array[CollisionShape3D] = []  # each tree's trunk, as tree_points: a felled tree's goes (§4)
 var _rng := RandomNumberGenerator.new()
 
 
@@ -73,7 +72,6 @@ func _scatter_trees(locations: Dictionary) -> void:
 		cs.set_meta("anchor", anchor_points[anchor_points.size() - 1])  # the winch hooks it 1 m up its trunk
 		body.add_child(cs)
 		props.append({"p": p, "kind": "tree", "shape": cs})
-		tree_shapes.append(cs)
 	_trees(valley.trees, xforms)
 
 

@@ -108,7 +108,7 @@ func test_aimed_it_hooks_the_tree_under_the_ray_beside_or_behind(t: TCase) -> vo
 func test_too_far_the_ground_and_ground_in_between_are_refused(t: TCase) -> void:
 	var v: Vehicle = t.world.vehicle
 	var winch := v.winch
-	var terrain: Terrain = t.world.terrain
+	var terrain: Terrain = t.world.land.home  # the home tile sits at the origin
 	await t.place(OPEN, 0.0)
 	# The ground right ahead.
 	var ahead := v.global_transform * Vector3(0.0, 0.0, -6.0)
@@ -157,7 +157,7 @@ func test_hooked_to_a_parked_truck_it_pulls_both_and_wakes_it(t: TCase) -> void:
 	var winch := pickup.winch
 	await t.place(OPEN, 0.0)
 	var at := pickup.global_transform * Vector3(0.0, 0.0, -15.0)
-	var six: Vehicle = w.park_truck(TruckSpec.scout(), Vector3(at.x, w.terrain.get_height(at.x, at.z) + 1.5, at.z), 0.0)
+	var six: Vehicle = w.park_truck(TruckSpec.scout(), Vector3(at.x, w.land.get_height(at.x, at.z) + 1.5, at.z), 0.0)
 	await t.ticks(90)
 	six.set_frozen(true)
 	var r := winch.aim(six.global_position + Vector3(0.0, 8.0, 0.0), Vector3.DOWN)
@@ -186,10 +186,13 @@ func test_hooked_to_a_parked_truck_it_pulls_both_and_wakes_it(t: TCase) -> void:
 	six.free()
 
 
-## The trees' trunks, nearest the truck first.
+## The trees' trunks still standing, nearest the truck first.
 func _trees(t: TCase) -> Array[CollisionShape3D]:
 	var p: Vector3 = t.world.vehicle.global_position
-	var out: Array[CollisionShape3D] = t.world.builder.tree_shapes.duplicate()
+	var out: Array[CollisionShape3D] = []
+	for pr in t.world.builder.props:
+		if pr.kind == "tree" and pr.shape != null and is_instance_valid(pr.shape):
+			out.append(pr.shape)
 	out.sort_custom(func(a: CollisionShape3D, b: CollisionShape3D) -> bool:
 		return a.global_position.distance_squared_to(p) < b.global_position.distance_squared_to(p))
 	return out
@@ -198,7 +201,7 @@ func _trees(t: TCase) -> Array[CollisionShape3D]:
 ## Whether a truck can stand at p: on the map, off the roads, on ground no steeper than 1 in 4,
 ## and no tree or rock within 4 m.
 func _open(t: TCase, p: Vector2) -> bool:
-	var terrain: Terrain = t.world.terrain
+	var terrain: Terrain = t.world.land.home  # the home tile sits at the origin
 	if maxf(absf(p.x), absf(p.y)) > Terrain.HALF - 12.0 or terrain.road_distance(p) < Terrain.ROAD_HALF_WIDTH + 2.0:
 		return false
 	var h := terrain.get_height(p.x, p.y)
