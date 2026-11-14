@@ -9,10 +9,13 @@ const INK := Color(0.22, 0.17, 0.12)
 const TRAIL_STEP := 3.0
 const TRAIL_MAX := 3000
 
+signal truck_picked(v: Vehicle)  # a click on a parked truck's mark: drive it (Fleet)
+
 var terrain: Terrain
 var vehicle: Vehicle
 var contracts: Contracts
 var locations: Dictionary
+var fleet: Fleet  # the trucks out on the map, marked on it (scripts/main.gd sets it)
 
 var _canvas: Control
 var _tex: ImageTexture
@@ -125,6 +128,7 @@ func _on_draw() -> void:
 		_text(font, Vector2(x + 13, y), item[1], Color(0.9, 0.9, 0.85))
 		y += 13.0
 	_text(font, Vector2(x, _origin.y + MAP_SIZE), "[M] close", Color(0.7, 0.7, 0.65))
+	_draw_fleet(font)
 
 
 func _text(font: Font, pos: Vector2, text: String, color: Color) -> void:
@@ -178,3 +182,44 @@ func _render_image(trees: PackedVector2Array) -> Image:
 		var pz := clampi(int(p.y + Terrain.HALF), 0, n - 2)
 		img.fill_rect(Rect2i(px, pz, 2, 2), Color(0.2, 0.32, 0.22))
 	return img
+
+
+## The parked trucks out on the map, each a square in its colour with its name: a click on one
+## drives it.
+func _draw_fleet(font: Font) -> void:
+	if fleet == null:
+		return
+	for v in fleet.trucks:
+		if v == vehicle or not is_instance_valid(v):
+			continue
+		var mp := _to_map(Vector2(v.global_position.x, v.global_position.z))
+		_canvas.draw_rect(Rect2(mp - Vector2(4, 4), Vector2(8, 8)), Color(0.95, 0.55, 0.2))
+		_canvas.draw_rect(Rect2(mp - Vector2(4, 4), Vector2(8, 8)), INK, false, 1.0)
+		_text(font, mp + Vector2(6, -4), v.spec.title.to_lower(), Color(1.0, 0.8, 0.55))
+
+
+## The parked truck whose mark is under at (a point on the screen), or null.
+func truck_at(at: Vector2) -> Vehicle:
+	if fleet == null:
+		return null
+	var best: Vehicle = null
+	var best_d := 8.0
+	for v in fleet.trucks:
+		if v == vehicle or not is_instance_valid(v):
+			continue
+		var d := _to_map(Vector2(v.global_position.x, v.global_position.z)).distance_to(at)
+		if d < best_d:
+			best = v
+			best_d = d
+	return best
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not visible or not event is InputEventMouseButton:
+		return
+	var mb := event as InputEventMouseButton
+	if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+		var v := truck_at(mb.position)
+		if v:
+			truck_picked.emit(v)
+			get_viewport().set_input_as_handled()

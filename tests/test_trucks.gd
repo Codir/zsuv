@@ -97,8 +97,9 @@ func test_top_speeds_and_turning_circles_on_a_flat(t: TCase) -> void:
 		await t.ticks(240)
 		for v in trucks:
 			v.handbrake = false
-	t.ok(tops.tractor < tops.six and tops.six < tops.pickup and tops.pickup < tops.semi,
-		"fastest last should be the tractor, the 6x6, the pickup, the semi: %s" % tops)
+	t.ok(tops.tractor < tops.six and tops.six < tops.pickup and tops.pickup < tops.semi and tops.semi < tops.scout,
+		"fastest last should be the tractor, the 6x6, the pickup, the semi, the scout: %s" % tops)
+	t.ok(tops.mixer < tops.semi and tops.mixer > tops.six * 0.9, "the mixer should be about the 6x6's pace: %s" % tops)
 	# Full lock to the left at a walking pace: the circle the truck drives, its speed over its
 	# rate of turn once it has settled into it.
 	var speed := PackedFloat32Array()
@@ -254,10 +255,13 @@ func _check_wheels(t: TCase, s: TruckSpec) -> void:
 	t.ok(steers and drives, "%s: nothing steers or nothing drives in 2WD" % s.id)
 
 
-## Its hitch where its trailer couples: a towbar or a drawbar pin behind its last axle, about as
+## No hitch on a truck that tows nothing; its hitch where its trailer couples: a towbar or a drawbar pin behind its last axle, about as
 ## high as its trailer's coupler stands; a fifth wheel over its rear axles, 1.2-1.4 m off the ground.
 func _check_hitch(t: TCase, v: Vehicle) -> void:
 	var s := v.spec
+	if s.hitch_kind == "":  # the scout and the mixer tow nothing
+		t.ok(s.tows.is_empty(), "%s tows with no hitch" % s.id)
+		return
 	var p := v.global_transform * s.hitch
 	var over := p.y - (t.world.terrain as Terrain).get_height(p.x, p.z)
 	var last: float = s.wheels[s.wheels.size() - 1].mount.z

@@ -16,8 +16,8 @@ func test_the_garage_sells_cheapest_first(t: TCase) -> void:
 	for item in c.garage_items():
 		ids.append(item.id)
 		prices.append(item.price)
-	t.eq(ids, PackedStringArray(["pickup", "trailer", "tractor", "six", "semi"]), "the garage")
-	t.eq(prices, [0, 800, 2500, 3500, 5000], "prices")
+	t.eq(ids, PackedStringArray(["pickup", "trailer", "tractor", "six", "semi", "scout", "mixer"]), "the garage")
+	t.eq(prices, [0, 800, 2500, 3500, 5000, 0, 0], "prices")
 	t.eq(c.garage_items()[2].gives, PackedStringArray(["tractor", "farm"]), "the tractor comes with its trailer")
 	t.eq(c.garage_items()[4].gives, PackedStringArray(["semi", "semi_trailer"]), "the semi truck with its semi-trailer")
 

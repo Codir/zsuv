@@ -42,6 +42,7 @@ func _start(fresh: bool) -> void:
 	if fresh:
 		profile = Profile.new()
 		profile.path = profile_path
+		profile.truck = "scout"  # a new game starts in the scout (docs/plan.md §7)
 	var v := Valley.find(profile.last)
 	enter(v if v else Valley.steppe(), Weather.Kind.OWN)
 

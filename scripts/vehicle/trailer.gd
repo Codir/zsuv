@@ -18,10 +18,14 @@ const HOLD_SPEED := 0.5  # m/s: hitched, the truck's brakes hold the trailer whe
 const MAX_TIP := 25.0 * PI / 180.0  # put behind a truck, as far as it tips over rising ground
 const DROOP := 0.2  # how much further a bogie's wheel drops into a dip than its spring lets out
 const NO_SPOT := Vector3.INF
+const RESOURCE_LOOKS := {"gravel": "bulk", "soil": "bulk_peat", "timber": "long", "fuel": "double", "parts": "double"}
 
 var spec: TrailerSpec  # set before it enters the tree; the pickup's trailer if not
 var truck: Vehicle  # hitched to; null: standing on its own
-var load := ""  # the kind of load on it; "" none
+var hold := Hold.new()  # what it carries (docs/plan.md §8)
+var load: String:  # the kind of load on it; "" none
+	get:
+		return hold.kind
 var stand_contact := false  # unhitched, its stand is on the ground
 var _legs := 0.0  # how much further down than its own its stand is wound now (up, if less than 0)
 var _held: Array[int] = []  # the shapes of the truck it was let go from that it overlapped then
@@ -50,6 +54,9 @@ func _ready() -> void:
 	spring_k = spec.spring_k
 	damping = spec.damping
 	anti_roll = spec.anti_roll
+	hold.masses = spec.cargo_mass
+	hold.capacity = spec.capacity
+	hold.changed.connect(_on_hold_changed)
 	for b in spec.shapes:
 		_add_box_shape(b.size, b.pos)
 	call("_build_" + spec.body)
@@ -69,9 +76,17 @@ func _exit_tree() -> void:
 ## A load of kind on it, or none (""); look picks another look of that kind ("long_pipes" for
 ## "long"), the kind's own if it has no such look.
 func set_load(kind: String, look := "") -> void:
-	load = kind
-	mass = spec.mass + float(spec.cargo_mass.get(kind, 0.0))
-	var shown := look if look in _loads else kind
+	hold.set_whole(kind, look)
+
+
+## Its weight and its look follow its load: a resource shows as the job load it looks like (gravel
+## as a bulk heap, soil as peat, timber as logs, fuel and parts as crates).
+func _on_hold_changed() -> void:
+	var kind := hold.kind
+	mass = spec.mass + (hold.mass() if kind == "" or hold.carries(kind) else 0.0)
+	var shown := hold.look if hold.look in _loads else kind
+	if not shown in _loads:
+		shown = RESOURCE_LOOKS.get(kind, "")
 	for k in _loads:
 		_loads[k].visible = kind != "" and k == shown
 

@@ -30,6 +30,7 @@ var stand_k := 30000.0  # the stand's spring, N/m, and damper, N/(m/s)
 var stand_damping := 1000.0
 var hitch_kind := "ball"  # the TruckSpec.hitch_kind it fits
 var cargo_mass := {}  # the loads it carries and what each weighs
+var capacity := {}  # how much of a kind is a full load, 1 if not listed (TruckSpec.capacity)
 
 
 ## The box it stands in, in its frame: its collision boxes and its drawbar out to the coupler,
@@ -80,7 +81,8 @@ static func trailer() -> TrailerSpec:
 	s.stand_k = 30000.0
 	s.stand_damping = 1000.0
 	s.hitch_kind = "ball"
-	s.cargo_mass = {"double": 900.0}
+	s.cargo_mass = {"double": 900.0, "fuel": 400.0, "parts": 900.0}
+	s.capacity = {"fuel": 400.0}  # barrels
 	return s
 
 
@@ -113,7 +115,8 @@ static func farm() -> TrailerSpec:
 	s.stand_k = 200000.0
 	s.stand_damping = 5000.0
 	s.hitch_kind = "pin"
-	s.cargo_mass = {"bulk": 4000.0}
+	s.cargo_mass = {"bulk": 4000.0, "gravel": 4000.0, "soil": 4000.0, "timber": 3000.0}
+	s.capacity = {"soil": 10.0}  # m3 (docs/plan.md §4)
 	return s
 
 
@@ -144,5 +147,6 @@ static func semi_trailer() -> TrailerSpec:
 	s.stand_k = 1500000.0
 	s.stand_damping = 60000.0
 	s.hitch_kind = "fifth"
-	s.cargo_mass = {"long": 8000.0}
+	s.cargo_mass = {"long": 8000.0, "timber": 8000.0}
+	s.capacity = {"timber": 3.0}
 	return s

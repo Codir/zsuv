@@ -15,6 +15,7 @@ var contracts: Contracts
 var hud: Hud
 var map_screen: MapScreen
 var builder: WorldBuilder
+var fleet: Fleet  # the trucks out on the map, the one driven among them (docs/plan.md §8)
 var locations: Dictionary
 var roads: Array[PackedVector2Array] = []
 var weather: Weather  # set before the scene enters the tree; the valley's own if not
@@ -73,6 +74,16 @@ func _ready() -> void:
 	add_child(map_screen)
 	map_screen.setup(terrain, vehicle, contracts, locations, builder.tree_points)
 
+	fleet = Fleet.new()
+	fleet.name = "Fleet"
+	add_child(fleet)  # after the contracts: E beside a parked truck is the fleet's first
+	fleet.switched.connect(_drive)
+	fleet.message.connect(hud.show_message)
+	fleet.add(vehicle, true)
+	hud.fleet = fleet
+	map_screen.fleet = fleet
+	map_screen.truck_picked.connect(_pick_from_map)
+
 	if "--autodrive" in OS.get_cmdline_user_args():
 		vehicle.drive_along(roads[0].slice(1))
 	if "--maptest" in OS.get_cmdline_user_args():
@@ -102,19 +113,60 @@ func _truck(spec: TruckSpec) -> Vehicle:
 	return v
 
 
-## The garage put spec at the depot: the truck in play is replaced by it, at the spawn.
+## The garage put spec at the depot and the player drives it: the truck in play goes into the
+## garage (the garage opens only at the depot, where it stands); a truck of spec out on the map is
+## fetched to the spawn (docs/plan.md §8), else one comes out of the garage.
 func set_truck(spec: TruckSpec) -> void:
 	var old := vehicle
+	var spawn := _spawn()
 	old.unhitch()
+	fleet.remove(old)
 	remove_child(old)
 	old.queue_free()
 	_clear_spawn()
-	vehicle = _truck(spec)
+	var v := fleet.find(spec.id)
+	if v:
+		v.unhitch()
+		v.set_frozen(false)
+		v.set_down(spawn, valley.spawn_yaw)
+	else:
+		v = _truck(spec)
+	fleet.drive_truck(v)
+
+
+## The player drives v now (Fleet: stepping across, the map, the garage): the camera, the HUD,
+## the map and the jobs follow it.
+func _drive(v: Vehicle) -> void:
+	var changed := v != vehicle
+	vehicle = v
 	camera_rig.target = vehicle
 	camera_rig.snap_to_target()
 	hud.vehicle = vehicle
 	map_screen.vehicle = vehicle
-	contracts.set_vehicle(vehicle)
+	if changed:
+		contracts.set_vehicle(vehicle)
+
+
+## A click on a parked truck's mark on the paper map: the map closes, and the player drives it.
+func _pick_from_map(v: Vehicle) -> void:
+	if map_screen.visible:
+		_toggle_map()
+	fleet.drive_truck(v)
+
+
+## A truck of spec parked out on the map at pos facing yaw, its engine off: the fleet's (a found
+## truck, the ones standing by the railhead at the start).
+func park_truck(spec: TruckSpec, pos: Vector3, yaw: float) -> Vehicle:
+	var v := Vehicle.new()
+	v.name = "Truck_%s" % spec.id
+	v.spec = spec
+	v.terrain = terrain
+	v.position = pos
+	v.rotation.y = yaw
+	add_child(v)
+	v.winch.anchors = builder.anchor_points
+	fleet.add(v)
+	return v
 
 
 ## The player's trailers wait beside the truck's spawn, facing the way it faces; one bought here
@@ -143,6 +195,9 @@ func _park(t: Trailer, away: Array[RID] = []) -> void:
 ## valley or lying on its side, and any left standing where the truck is to be set down are
 ## brought to their spots by the depot.
 func _towing() -> void:
+	for h in vehicle.holds():  # the load on the rig is what the tow costs (docs/plan.md §5)
+		if h.kind in Hold.RESOURCES:
+			h.clear()
 	var hitched := vehicle.trailer
 	vehicle.unhitch()
 	var moved := _on_spawn()
