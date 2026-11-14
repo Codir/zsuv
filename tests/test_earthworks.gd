@@ -153,6 +153,51 @@ func test_earthworks_survive_a_save_and_a_save_of_another_map_drops_them(t: TCas
 	land.reset_ground()
 
 
+func test_the_quarry_digs_its_pit_by_the_volume_and_stops_4_m_deep(t: TCase) -> void:
+	var land: Land = t.world.land
+	var ew := land.earthworks
+	var dep: Dictionary = land.deposits().filter(func(d: Dictionary) -> bool: return d.biome == t.world.valley.id)[0]
+	var size := Vector2(14.0, 14.0)
+	var before := _volume(ew, dep.pos, 10)
+	var took := ew.quarry(dep.pos, size, 0.6, 10.0)
+	t.ok(absf(took - 10.0) < 0.001, "a load took %.2f m3 out of the pit" % took)
+	t.ok(absf((before - _volume(ew, dep.pos, 10)) - took) < took * 0.02, "the ground fell by another volume than the load")
+	var loads := 1
+	while loads < 200 and ew.quarry(dep.pos, size, 0.6, 10.0) > 0.0:
+		loads += 1
+	var depth := ew.pit_depth(dep.pos, size, 0.6)
+	t.ok(absf(depth - Earthworks.PIT) < 0.05, "the pit stopped %.2f m deep" % depth)
+	t.eq(ew.quarry(dep.pos, size, 0.6, 10.0), 0.0, "m3 out of a pit 4 m deep")
+	t.note = "%d loads to a pit %.1f m deep" % [loads, depth]
+	land.reset_ground()
+
+
+func test_gravel_spread_covers_the_bog_road_and_graded_it_is_firm(t: TCase) -> void:
+	var land: Land = t.world.land
+	var road: Dictionary = land.site_spots().filter(func(s: Dictionary) -> bool: return s.kind == "gravel_road")[0]
+	var path: PackedVector2Array = road.path
+	var mid := path[path.size() / 2]
+	var mud_before := land.sample(Vector3(mid.x, 0.0, mid.y)).mud
+	t.ok(mud_before > 0.3, "the bog road is not muddy: %.2f" % mud_before)
+	t.ok(land.corridor_state(road).covered < 0.1, "the bog road is spread before any gravel")
+	# Spread as the tipper does, in two strips of half a road each.
+	for i in path.size():
+		var dir := (path[mini(i + 1, path.size() - 1)] - path[maxi(i - 1, 0)]).normalized()
+		var side := Vector2(-dir.y, dir.x)
+		for k in [-1.0, 1.0]:
+			land.earthworks.spread_gravel(path[i] + side * k * Loader.GRAVEL_WIDTH * 0.5, Loader.GRAVEL_WIDTH * 0.5 + 0.3)
+	var state := land.corridor_state(road)
+	t.ok(state.covered >= Land.COVERED, "spread all along, %.0f%% of it is covered" % (state.covered * 100.0))
+	land.grade(road)
+	state = land.corridor_state(road)
+	t.ok(state.drivable, "the graded road is not drivable: %s" % state.why)
+	var s := land.sample(Vector3(mid.x, 0.0, mid.y))
+	t.ok(s.mud < 0.01 and s.grip > 0.95, "the graded road: mud %.2f, grip %.2f" % [s.mud, s.grip])
+	t.ok(land.road_distance(mid) < 1.0, "the graded road is not on its road")
+	t.note = "mud %.2f before, %.2f after" % [mud_before, s.mud]
+	land.reset_ground()
+
+
 func test_the_tractor_fills_the_washout_and_the_pickup_drives_to_the_river(t: TCase) -> void:
 	var shared: Vehicle = t.world.vehicle
 	shared.autodrive = true  # deaf to the keys pressed here
@@ -214,6 +259,22 @@ func test_the_tractor_fills_the_washout_and_the_pickup_drives_to_the_river(t: TC
 			passes += 1
 	t.ok(_drivable(land, tile, r, s0), "after %d loads and %d passes the washout is not drivable: %s" % [loads, passes, _profile_note(land, tile, r, s0)])
 	t.ok(land.earthworks.shifted >= dug - 0.1, "the m3 shifted %.1f, dug %.1f" % [land.earthworks.shifted, dug])
+	var fill: Dictionary = land.site_spots().filter(func(s: Dictionary) -> bool: return s.kind == "fill")[0]
+	var fill_state := land.corridor_state(fill)
+	t.ok(fill_state.drivable, "the fill's site is not done: %s" % fill_state.why)
+	# A load of gravel spread over it with V, creeping: a strip of it covered.
+	farm.hold.clear()
+	farm.hold.put("gravel", 1.0)
+	await _set_rig(t, tractor, farm, tile.along(r, s0 + 8.0)[0], road_dir)
+	Input.action_press("tip")
+	for tick in 60 * 8:
+		_creep(tractor, 1.0)
+		await t.tree.physics_frame
+	Input.action_release("tip")
+	_creep(tractor, -1.0)
+	t.ok(farm.hold.holding("gravel") < 0.5, "V spread only %.2f of the gravel" % (1.0 - farm.hold.holding("gravel")))
+	t.ok(land.corridor_state(fill).covered > 0.15, "V spread gravel over %.0f%% of the fill" % (land.corridor_state(fill).covered * 100.0))
+	farm.hold.clear()
 	await _set_rig(t, tractor, farm, tile.along(r, s0 - 22.0)[0] + across * 13.0, road_dir)  # out of the way
 	# Then the pickup drives the road to the river.
 	world.set_truck(TruckSpec.pickup())
@@ -278,6 +339,8 @@ func test_the_tractor_digs_out_the_landslide_and_the_pickup_drives_up_through_it
 		await _pour_at(t, tractor, farm, tile.along(r, s0 - 22.0)[0] + across * 13.0, road_dir, 0.0)
 		loads += 1
 	t.ok(_drivable(land, tile, r, s0, WHEELS), "after %d loads and %d passes the landslide is not dug out: %s" % [loads, passes, _profile_note(land, tile, r, s0)])
+	var slide: Dictionary = land.site_spots().filter(func(s: Dictionary) -> bool: return s.kind == "slide")[0]
+	t.ok(land.corridor_state(slide).cleared >= Land.CLEARED, "the landslide's site: %.0f%% of it cleared" % (land.corridor_state(slide).cleared * 100.0))
 	world.set_truck(TruckSpec.pickup())
 	await t.ticks(2)
 	var secs := await _drive(t, world, _stretch(tile, r, s0 - 25.0, s0 + 25.0), 40)

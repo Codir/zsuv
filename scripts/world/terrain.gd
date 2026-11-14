@@ -895,3 +895,14 @@ func load_chunk(c: Vector2i, bytes: PackedByteArray) -> bool:
 	_images_dirty = true
 	touch(Rect2i(c * CHUNK, Vector2i.ONE * k))
 	return true
+
+
+## Marks the ground within radius of local p as road: the road's mark on, its mud and soft layer
+## off (a graded road, docs/plan.md §5).
+func mark_road(p: Vector2, radius: float) -> void:
+	for z in range(maxi(floori(p.y - radius + HALF), 0), mini(ceili(p.y + radius + HALF), N - 1) + 1):
+		for x in range(maxi(floori(p.x - radius + HALF), 0), mini(ceili(p.x + radius + HALF), N - 1) + 1):
+			if Vector2(x - HALF, z - HALF).distance_to(p) <= radius:
+				var c := snow_img.get_pixel(x, z)
+				snow_img.set_pixel(x, z, Color(c.r * valley.layer_on_road, 0.0, 1.0, c.a))
+	_images_dirty = true

@@ -251,6 +251,67 @@ func test_each_crossing_has_its_two_banks_at_the_roads_level(t: TCase) -> void:
 	t.note = ", ".join(cs.map(func(c: Dictionary) -> String: return "%s %.0f m" % [c.kind, c.over]))
 
 
+func test_the_sites_spots_the_deposits_and_the_swamps_deep_water(t: TCase) -> void:
+	var land: Land = t.world.land
+	var kinds := {}
+	for s in land.site_spots():
+		kinds[s.kind] = kinds.get(s.kind, 0) + 1
+		t.ok(not land.corridor_state(s).drivable or s.kind == "gravel_road", "%s is drivable as the flood left it" % s.id)
+	t.eq(kinds, {"bridge": 2, "fill": 1, "slide": 1, "gravel_road": 1}, "road sites")
+	var ds := land.deposits()
+	t.eq(ds.size(), 3, "gravel deposits")
+	for d in ds:
+		t.ok(land.road_distance(d.pos) > float(d.radius), "a deposit on a road at %s" % d.pos)
+	# The swamp's deep water: over its road, above a pickup's intake.
+	var swamp: Terrain = land.tiles.filter(func(x: Terrain) -> bool: return x.valley.id == "polissia")[0]
+	var lake: Dictionary = swamp.valley.features.filter(func(f: Dictionary) -> bool: return f.type == "lake" and f.has("water"))[0]
+	var at: Vector2 = (lake.pos as Vector2) + swamp.origin
+	var level := land.water_level(at)
+	var deep := level - land.get_height(at.x, at.y)
+	t.ok(deep > 1.0 and deep < 2.0, "the deep water over the swamp's road is %.2f m" % deep)
+	t.ok(land.road_distance(at) < Terrain.ROAD_HALF_WIDTH, "the deep water is not on the road")
+	t.eq(land.water_level(at + Vector2(40.0, 0.0)), -INF, "water 40 m from the deep water")
+	t.note = "the swamp's deep water %.1f m over its road" % deep
+
+
+func test_a_bridged_crossing_drives_both_ways_with_a_roads_grip(t: TCase) -> void:
+	var land: Land = t.world.land
+	var notes := PackedStringArray()
+	for b in land.borders:
+		if b.kind == "land":
+			continue
+		var s := land.spot("bridge:" + String(b.kind))
+		var deck := land.build_deck(s)
+		await t.ticks(2)
+		# The road up to one bank, over the deck, and on from the other bank.
+		var sa := Vector2(s.a.x, s.a.z)
+		var sb := Vector2(s.b.x, s.b.z)
+		var over := PackedVector2Array()
+		for p in _to_gate(b.a, b.side):
+			if p.distance_to(sb) > sa.distance_to(sb) + 1.0:
+				over.append(p)
+		over.append(sa)
+		over.append(sb)
+		for p in _from_gate(b.b, Land.OPPOSITE[b.side]):
+			if p.distance_to(sa) > sa.distance_to(sb) + 1.0:
+				over.append(p)
+		for back in [false, true]:
+			var way := over.duplicate()
+			if back:
+				way.reverse()
+			var secs := await _drive(t, way, 40)
+			t.ok(secs > 0.0, "the %s's bridge does not drive %s" % [b.kind, "back" if back else "over"])
+			notes.append("%s %.0f s" % [b.kind, secs])
+		# Halfway over, the wheels feel a road, not the riverbed under the deck.
+		var mid: Vector3 = (s.a + s.b) * 0.5
+		var space: PhysicsDirectSpaceState3D = t.world.get_world_3d().direct_space_state
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(mid + Vector3(0, 3, 0), mid - Vector3(0, 6, 0)))
+		t.ok(not hit.is_empty() and hit.collider == deck and not land.is_ground(hit.collider), "the %s's deck is not under its middle" % b.kind)
+		land.bridges.erase(s.id)
+		deck.free()
+	t.note = ", ".join(notes)
+
+
 func test_the_sky_blends_across_a_border(t: TCase) -> void:
 	var land: Land = t.world.land
 	for b in land.borders:

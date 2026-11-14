@@ -43,7 +43,7 @@ func _is_clear(p: Vector2, locations: Dictionary, margin: float) -> bool:
 		if p.distance_to(d.at) < 8.0 + margin:
 			return false
 	for ft in valley.features:  # nothing grows on a lake or its ice
-		if ft.type == "lake" and p.distance_to(ft.pos) < float(ft.radius) + margin:
+		if ft.type == "lake" and p.distance_to(ft.pos) < float(ft.radius) + (float(ft.get("shore", 8.0)) * 0.5 + 2.0 if ft.has("water") else 0.0) + margin:
 			return false
 	return true
 
@@ -859,3 +859,12 @@ func clear_near(p: Vector2, radius: float) -> PackedVector2Array:
 				if absf(o.x - q.x) < 0.01 and absf(o.z - q.y) < 0.01:
 					mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3.ZERO), o))
 	return gone
+
+
+## A gravel deposit: grey stone heaped on bare ground, for a quarry to stand on (docs/plan.md §5).
+func _build_gravel(loc: Dictionary) -> void:
+	_frame(loc)
+	for i in 7:
+		var p := _at(-6.0 + (i % 4) * 4.0 + _rng.randf() * 1.5, -4.0 + (i / 4) * 7.0 + _rng.randf() * 1.5)
+		_piece(Vector3(2.2, 0.7, 1.8), p, Vector3(0.0, 0.35, 0.0), _rng.randf() * TAU, Color(0.55, 0.54, 0.5))
+		_piece(Vector3(1.2, 0.5, 1.1), p, Vector3(0.3, 0.85, 0.2), _rng.randf() * TAU, Color(0.48, 0.47, 0.44))

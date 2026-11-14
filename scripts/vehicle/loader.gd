@@ -13,7 +13,8 @@ const BUCKET := 1.5  # m³ in the bucket itself
 const TIPPER := 10.0  # m³ in the tipper
 const POUR := 4.0  # s to tip a full tipper
 const POUR_EVERY := 0.2
-const SOIL_MASS := 400.0  # kg a m³: 4000 kg a tipper, a game's scale (docs/plan.md §4)
+const GRAVEL_POUR := 12.0  # s a load of gravel takes to spread
+const GRAVEL_WIDTH := 3.5  # m: the strip it spreads, half a road
 const AHEAD := -3.3  # m along the tractor (its -z ahead) where the bucket bites
 const BEHIND := 1.2  # m past the tipper's back where it pours
 
@@ -46,22 +47,22 @@ func tipper() -> Trailer:
 	return vehicle.trailer if vehicle.trailer and vehicle.trailer.spec.id == "farm" else null
 
 
-## m³ in the tipper t.
+## m³ of soil in the tipper t (its hold's).
 static func soil_in(t: Trailer) -> float:
-	return float(t.get_meta("soil", 0.0)) if t else 0.0
+	return t.hold.holding("soil") if t else 0.0
 
 
-## Puts m³ in the tipper t, its weight and its heap with it.
+## Puts m³ of soil in the tipper t, its weight and its heap with it (its hold).
 static func set_soil(t: Trailer, m3: float) -> void:
-	t.set_meta("soil", maxf(m3, 0.0))
-	t.set_load("bulk" if m3 > 0.05 else "")
-	t.mass = t.spec.mass + SOIL_MASS * maxf(m3, 0.0)
+	t.hold.take("soil")
+	if m3 > 0.0001:
+		t.hold.put("soil", m3)
 
 
 ## What the HUD shows of it: the load and why it stopped, if it did.
 func status() -> String:
 	var t := tipper()
-	var line := "SOIL %.1f/%d m3" % [soil_in(t), int(TIPPER)] if t else "BUCKET %.1f/%.1f m3" % [bucket_soil, BUCKET]
+	var line := (t.hold.text() if not t.hold.is_empty() else "TIPPER EMPTY") if t else "BUCKET %.1f/%.1f m3" % [bucket_soil, BUCKET]
 	return line + ("  " + message if message != "" else "")
 
 
@@ -106,9 +107,12 @@ func _bite() -> void:
 		message = "Too fast to dig"
 		return
 	var t := tipper()
-	var room := TIPPER - soil_in(t) if t else BUCKET - bucket_soil
+	var room := t.hold.room("soil") if t else BUCKET - bucket_soil
 	if room <= 0.01:
-		message = "The tipper is full: tip it with V" if t else "The bucket is full"
+		if t and not t.hold.is_empty() and t.hold.kind != "soil":
+			message = "The tipper has %s on: tip it first" % t.hold.kind
+		else:
+			message = "The tipper is full: tip it with V" if t else "The bucket is full"
 		return
 	var at := _ground_point(Vector3(0.0, 0.0, AHEAD))
 	var why := land.earthworks.why_not(at)
@@ -154,13 +158,19 @@ func _pour() -> void:
 	if t == null:
 		message = "No tipper hitched"
 		return
+	var back := t.spec.extent().end.z + BEHIND
+	var at3 := t.global_transform * Vector3(0.0, 0.0, back)
+	var at := Vector2(at3.x, at3.z)
+	if t.hold.kind == "gravel":  # spread in a strip behind it as it creeps: a gravel road
+		var why := land.earthworks.spread_gravel(at, GRAVEL_WIDTH * 0.5)
+		message = why
+		if why == "":
+			t.hold.take("gravel", POUR_EVERY / GRAVEL_POUR)
+		return
 	var left := soil_in(t)
 	if left <= 0.0:
 		message = "The tipper is empty"
 		return
-	var back := t.spec.extent().end.z + BEHIND
-	var at3 := t.global_transform * Vector3(0.0, 0.0, back)
-	var at := Vector2(at3.x, at3.z)
 	var placed := land.earthworks.dump(at, minf(left, TIPPER * POUR_EVERY / POUR))
 	if placed <= 0.0:
 		message = land.earthworks.why_not(at) if land.earthworks.why_not(at) != "" else "No room for more here"

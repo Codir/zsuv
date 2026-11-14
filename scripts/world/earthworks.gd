@@ -16,6 +16,7 @@ const SLUMP_REACH := 4  # vertices either way: the 9x9 m around a bite or a dump
 const SLUMP_PASSES := 3
 const CLEAR := 1.5  # m: trees and rocks this near a bite or a dump go
 const DUMP_RADIUS := 2.0  # m a dump spreads over
+const PIT := 4.0  # m: a quarry stops when its pit is this deep
 
 var land: Land
 var shifted := 0.0  # m³ dug in all, for the HUD and the end card
@@ -256,3 +257,54 @@ func fell(p: Vector2) -> void:
 		if absf(l.x) <= Terrain.HALF and absf(l.y) <= Terrain.HALF:
 			for q in land.builders[i].clear_near(l, 0.05):
 				felled.append(q + t.origin)
+
+
+## Spreads gravel within radius of p (world): firm, a road's grip, no mud nor soft layer under it
+## (works G). "" when it did, else why it cannot (why_not).
+func spread_gravel(p: Vector2, radius: float) -> String:
+	var why := why_not(p)
+	if why != "":
+		return why
+	_paint(p, radius, Color(0.0, 1.0, 0.0), Color(1.0, 1.0, 1.0), false)
+	return ""
+
+
+## A quarry digs its own pit (docs/plan.md §4): m3 off the ground inside its footprint (size across
+## and along, turned by yaw, at centre), evenly, no deeper than PIT under the ground as made, in
+## its place's flat or not. Returns the m³ taken: 0 once the pit is PIT deep all over.
+func quarry(centre: Vector2, size: Vector2, yaw: float, m3: float) -> float:
+	var pts: Array[Vector2i] = []
+	var reach := ceili(size.length() * 0.5) + 1
+	for z in range(roundi(centre.y) - reach, roundi(centre.y) + reach + 1):
+		for x in range(roundi(centre.x) - reach, roundi(centre.x) + reach + 1):
+			var l := (Vector2(x, z) - centre).rotated(yaw)  # as a Site turns its footprint
+			if absf(l.x) <= size.x * 0.5 - 1.0 and absf(l.y) <= size.y * 0.5 - 1.0:
+				pts.append(Vector2i(x, z))
+	var taken := 0.0
+	for round_i in 4:  # what a vertex already at the bottom cannot give, the others share
+		var open := pts.filter(func(v: Vector2i) -> bool: return height(v.x, v.y) > generated(v.x, v.y) - PIT + 0.001)
+		if open.is_empty() or taken >= m3 - 0.0001:
+			break
+		var each := (m3 - taken) / open.size()
+		for v: Vector2i in open:
+			var h := height(v.x, v.y)
+			var drop := minf(each, h - (generated(v.x, v.y) - PIT))
+			set_height(v.x, v.y, h - drop)
+			taken += drop
+	if taken > 0.0:
+		_paint(centre, size.length() * 0.5, Color(0.0, 0.0, 1.0), Color(1.0, 0.0, 1.0), true)
+	return taken
+
+
+## How deep the pit in a footprint is, on average, under the ground as made.
+func pit_depth(centre: Vector2, size: Vector2, yaw: float) -> float:
+	var sum := 0.0
+	var n := 0
+	var reach := ceili(size.length() * 0.5) + 1
+	for z in range(roundi(centre.y) - reach, roundi(centre.y) + reach + 1):
+		for x in range(roundi(centre.x) - reach, roundi(centre.x) + reach + 1):
+			var l := (Vector2(x, z) - centre).rotated(yaw)  # as a Site turns its footprint
+			if absf(l.x) <= size.x * 0.5 - 1.0 and absf(l.y) <= size.y * 0.5 - 1.0:
+				sum += generated(x, z) - height(x, z)
+				n += 1
+	return sum / n if n > 0 else 0.0

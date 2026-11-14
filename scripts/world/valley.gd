@@ -25,6 +25,7 @@ var biome := ""
 var cell := Vector2i.ZERO
 var borders := {}
 var gaps: Array[Dictionary] = []  # {road, from, to}: metres along it with no shelf (a bridge site)
+var bogs: Array[Dictionary] = []  # {road, from, to}: a stretch of road through a bog, for a gravel road (§5)
 
 # Ground: noise relief, then features: {type: hill | ridge | lake | gully | ditch | washout | slide,
 # ...}. A washout {road, s, width, depth, length} is a gully cut across road s metres along it, a
@@ -103,6 +104,8 @@ static func khutir() -> Valley:
 			"cargo": "spare parts", "reward": 300, "no": ["long", "bulk"]},
 		"tower": {"name": "Radio Tower", "pos": Vector2(25, 35), "radius": 8.0, "kind": "radio_tower",
 			"cargo": "drone batteries", "reward": 500, "offroad": true, "no": ["long", "bulk"]},
+		# Rocky slopes: a gravel deposit for a quarry (docs/plan.md §5).
+		"gravel": {"name": "Gravel Bank", "pos": Vector2(40, -30), "radius": 10.0, "kind": "gravel", "offroad": true},
 	}
 	v.roads = [
 		PackedVector2Array([Vector2(-95, -95), Vector2(-60, -102), Vector2(-25, -85), Vector2(8, -96), Vector2(45, -80),
@@ -159,6 +162,8 @@ static func steppe() -> Valley:
 			"cargo": "turbine parts", "reward": 350},
 		"kurgan": {"name": "Kurgan Dig", "pos": Vector2(-72, 92), "radius": 10.0, "kind": "kurgan_dig",
 			"cargo": "the archaeologists' tents", "reward": 350, "no": ["long"]},
+		# The gravel in a gully (docs/plan.md §1).
+		"gravel": {"name": "Gravel Bank", "pos": Vector2(-30, -45), "radius": 10.0, "kind": "gravel", "offroad": true},
 	}
 	v.roads = [
 		PackedVector2Array([Vector2(-90, -85), Vector2(-40, -92), Vector2(20, -88), Vector2(72, -78)]),
@@ -224,6 +229,8 @@ static func zakarpattia() -> Valley:
 			"cargo": "roof shingles", "reward": 350},
 		"spring": {"name": "Mineral Spring", "pos": Vector2(66, -34), "radius": 10.0, "kind": "pump_room",
 			"cargo": "bottle crates", "reward": 350},
+		# Stony slopes: a gravel deposit (docs/plan.md §3).
+		"gravel": {"name": "Gravel Bank", "pos": Vector2(30, -50), "radius": 10.0, "kind": "gravel", "offroad": true},
 	}
 	v.roads = [
 		PackedVector2Array([Vector2(-80, 86), Vector2(-42, 80), Vector2(-12, 60), Vector2(10, 38)]),
@@ -300,6 +307,10 @@ static func polissia() -> Valley:
 		PackedVector2Array([Vector2(-8, 46), Vector2(0, 88), Vector2(0, 128)]),
 		PackedVector2Array([Vector2(4, -78), Vector2(-20, -104), Vector2(-40, -128)]),
 	]
+	# The bog: deep mud along the road past the peat works, made firm by a gravel road (§5); and deep
+	# water over the road to the forestry, over a truck's intake without a snorkel (§8).
+	v.bogs = [{"road": 1, "from": 100.0, "to": 155.0}]
+	v.features.append({"type": "lake", "pos": Vector2(-37, -86), "radius": 11.0, "depth": 2.2, "water": 1.4, "shore": 10.0})
 	v.puddles = [{"pos": Vector2(-44, 54), "radius": 16.0}, {"pos": Vector2(-72, 40), "radius": 11.0},
 		{"pos": Vector2(-90, 0), "radius": 7.0}, {"pos": Vector2(76, 30), "radius": 7.0}]
 	v.layer_base = 0.15

@@ -14,7 +14,7 @@ extends Node3D
 ## for 2 x GATE_FLAT m. A river or a gorge needs no profile: both tiles carve their half of its bed
 ## from their own ground, down to one level along it, and the water's level runs along it.
 
-const MAP_VERSION := 3  # moves with any change to what the generator makes (docs/plan.md §3, §11)
+const MAP_VERSION := 4  # moves with any change to what the generator makes (docs/plan.md §3, §11)
 const BAND := 24.0
 const SMOOTH := 20.0
 const GATE_FLAT := 8.0
@@ -93,6 +93,12 @@ func build(home_valley: Valley, use_bake := true) -> void:
 	for b in borders:
 		if b.kind != "land":
 			_water_plane(b)
+	for t in tiles:
+		for ft in t.valley.features:
+			if ft.type == "lake" and ft.has("water"):
+				var disc := Psx.cylinder(float(ft.radius) + float(ft.get("shore", 8.0)) * 0.5, float(ft.radius) + float(ft.get("shore", 8.0)) * 0.5, 0.02, 16)
+				var at: Vector2 = (ft.pos as Vector2) + t.origin
+				Psx.mesh(self, disc, Vector3(at.x, float(ft.height) + float(ft.water), at.y), WATER_COLOR).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	for t in tiles:
 		var wb := WorldBuilder.new()
 		wb.name = "World_" + t.valley.id
@@ -232,6 +238,12 @@ func water_level(p: Vector2, margin := 0.0) -> float:
 		var i: float = _along(b, p)
 		if absf(d) < float(b.half) + margin and i >= END and i <= Terrain.SIZE - END:
 			return b.water_level
+	for t in tiles:  # ponds and the swamp's deep water: lakes without ice
+		for ft in t.valley.features:
+			if ft.type == "lake" and ft.has("water") and p.distance_to((ft.pos as Vector2) + t.origin) < float(ft.radius) + float(ft.get("shore", 8.0)) * 0.5 + margin:
+				var level := float(ft.height) + float(ft.water)
+				if get_height(p.x, p.y) < level + margin:
+					return level
 	return -INF
 
 
@@ -526,4 +538,273 @@ func crossings() -> Array[Dictionary]:
 					ids.append(t.valley.id)
 		if ends.size() == 2:
 			out.append({"a": ends[0], "b": ends[1], "kind": b.kind, "over": Vector2(ends[0].x, ends[0].z).distance_to(Vector2(ends[1].x, ends[1].z)), "biomes": ids})
+	return out
+
+
+# --- The ground side of the sites (docs/plan.md §5): bridges, fills, slides, gravel roads -------
+
+const CORRIDOR := 7.0  # m: a road's corridor, its width
+const DRIVABLE_CLIMB := 0.4  # m a metre along its centre line, at most
+const DRIVABLE_ACROSS := 0.5  # m across its width, at most
+const COVERED := 0.9  # of a gravel road's corridor spread, and it is done
+const CLEARED := 0.85  # of a slide above the road's level gone, and it is clear
+const GRADE_SMOOTH := 14.0  # m a graded road's profile is averaged over, as a smoothed road's
+const GRADE_MOST := 0.22  # the steepest a graded road climbs
+
+var bridges := {}  # spot id -> the deck built over it (a StaticBody3D)
+var graded := {}  # spot id -> true
+var _spots: Array[Dictionary] = []
+var _slide_volume := {}  # spot id -> m3 of the slide over the road's level as made
+
+
+## Where a road site goes, each found by the fog at pos: {id, kind ("bridge", "fill", "slide",
+## "gravel_road"), path (its centre line, world, every 2 m), a, b (its ends, on the ground),
+## width, pos, biome}. A bridge spans a crossing from bank to bank; a fill crosses a washout, a
+## slide a landslide, a gravel road a bog's stretch of road.
+func site_spots() -> Array[Dictionary]:
+	if not _spots.is_empty():
+		return _spots
+	for c in crossings():
+		var path := PackedVector2Array()
+		var a := Vector2(c.a.x, c.a.z)
+		var b := Vector2(c.b.x, c.b.z)
+		var n := maxi(ceili(a.distance_to(b) / 2.0), 1)
+		for k in n + 1:
+			path.append(a.lerp(b, float(k) / n))
+		var s := _spot("bridge:" + String(c.kind), "bridge", path, c.biomes[0])
+		s.a = c.a
+		s.b = c.b
+		_spots.append(s)
+	for t in tiles:
+		for i in t.valley.features.size():
+			var ft: Dictionary = t.valley.features[i]
+			if ft.type in ["washout", "slide"]:
+				var reach := float(ft.width) + 5.0
+				var kind := "fill" if ft.type == "washout" else "slide"
+				var s := _spot("%s:%s%d" % [kind, t.valley.id, i], kind, _road_path(t, int(ft.road), float(ft.s) - reach, float(ft.s) + reach), t.valley.id)
+				_spots.append(s)
+				if kind == "slide":
+					_slide_volume[s.id] = _above(s, true)
+		for i in t.valley.bogs.size():
+			var bg: Dictionary = t.valley.bogs[i]
+			_spots.append(_spot("gravel_road:%s%d" % [t.valley.id, i], "gravel_road", _road_path(t, int(bg.road), float(bg.from), float(bg.to)), t.valley.id))
+	return _spots
+
+
+func spot(id: String) -> Dictionary:
+	for s in site_spots():
+		if s.id == id:
+			return s
+	return {}
+
+
+func _spot(id: String, kind: String, path: PackedVector2Array, biome: String) -> Dictionary:
+	var a := path[0]
+	var b := path[path.size() - 1]
+	return {"id": id, "kind": kind, "path": path, "width": CORRIDOR, "biome": biome, "pos": path[path.size() / 2],
+		"a": Vector3(a.x, get_height(a.x, a.y), a.y), "b": Vector3(b.x, get_height(b.x, b.y), b.y)}
+
+
+## Road r of tile t from s0 to s1 metres along it, in the world, every 2 m.
+func _road_path(t: Terrain, r: int, s0: float, s1: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var s := s0
+	while s < s1:
+		out.append((t.along(r, s)[0] as Vector2) + t.origin)
+		s += 2.0
+	out.append((t.along(r, s1)[0] as Vector2) + t.origin)
+	return out
+
+
+## How a road site's corridor stands now: {drivable, why ("" or where it is not), covered (the
+## share spread with gravel), cleared (the share of a slide dug away; 1 for the rest)}.
+## Drivable: along its centre line no metre climbs more than DRIVABLE_CLIMB, and across its width
+## it is level to DRIVABLE_ACROSS.
+func corridor_state(s: Dictionary) -> Dictionary:
+	var path: PackedVector2Array = s.path
+	var why := ""
+	var along := 0.0
+	var prev := INF
+	var prev_at := Vector2.ZERO
+	for i in path.size():
+		var p := path[i]
+		var dir := (path[mini(i + 1, path.size() - 1)] - path[maxi(i - 1, 0)]).normalized()
+		var side := Vector2(-dir.y, dir.x) * (float(s.width) * 0.5 - 0.5)
+		var h := get_height(p.x, p.y)
+		if i > 0:
+			along += p.distance_to(prev_at)
+			if absf(h - prev) / maxf(p.distance_to(prev_at), 0.01) > DRIVABLE_CLIMB:
+				why = "Too steep %d m along: dig or fill there first" % roundi(along)
+				break
+		var l := get_height(p.x - side.x, p.y - side.y)
+		var r := get_height(p.x + side.x, p.y + side.y)
+		if maxf(maxf(l, r), h) - minf(minf(l, r), h) > DRIVABLE_ACROSS:
+			why = "Not level across %d m along: dig or fill there first" % roundi(along)
+			break
+		prev = h
+		prev_at = p
+	var cleared := 1.0
+	if s.kind == "slide" and float(_slide_volume.get(s.id, 0.0)) > 0.0:
+		cleared = clampf(1.0 - _above(s, false) / float(_slide_volume[s.id]), 0.0, 1.0)
+	return {"drivable": why == "", "why": why, "covered": _covered(s), "cleared": cleared}
+
+
+## m3 over the corridor's straight level from end to end: as made, or now.
+func _above(s: Dictionary, made: bool) -> float:
+	var path: PackedVector2Array = s.path
+	var a := path[0]
+	var b := path[path.size() - 1]
+	var ha := earthworks.generated(roundi(a.x), roundi(a.y)) if made else get_height(a.x, a.y)
+	var hb := earthworks.generated(roundi(b.x), roundi(b.y)) if made else get_height(b.x, b.y)
+	var sum := 0.0
+	for v in _corridor_vertices(s):
+		var t := clampf((Vector2(v) - a).dot(b - a) / maxf(a.distance_squared_to(b), 0.01), 0.0, 1.0)
+		var h := earthworks.generated(v.x, v.y) if made else earthworks.height(v.x, v.y)
+		sum += maxf(h - lerpf(ha, hb, t), 0.0)
+	return sum
+
+
+## The share of the corridor spread with gravel.
+func _covered(s: Dictionary) -> float:
+	var vs := _corridor_vertices(s)
+	if vs.is_empty():
+		return 0.0
+	var n := 0
+	for v in vs:
+		var t := tile_at(v.x, v.y)
+		var c := t._works_at(Vector3(v.x - t.origin.x, 0.0, v.y - t.origin.y))
+		n += 1 if c.g > 0.5 else 0
+	return float(n) / vs.size()
+
+
+## The vertices within the corridor (width) of the path.
+func _corridor_vertices(s: Dictionary) -> Array[Vector2i]:
+	var path: PackedVector2Array = s.path
+	var half := float(s.width) * 0.5
+	var lo := Vector2.INF
+	var hi := -Vector2.INF
+	for p in path:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	var out: Array[Vector2i] = []
+	for z in range(floori(lo.y - half), ceili(hi.y + half) + 1):
+		for x in range(floori(lo.x - half), ceili(hi.x + half) + 1):
+			if _to_path(path, Vector2(x, z)).x <= half:
+				out.append(Vector2i(x, z))
+	return out
+
+
+## [distance from q to path, metres along it to its nearest point].
+static func _to_path(path: PackedVector2Array, q: Vector2) -> Vector2:
+	var best := Vector2(INF, 0.0)
+	var along := 0.0
+	for i in path.size() - 1:
+		var c := Geometry2D.get_closest_point_to_segment(q, path[i], path[i + 1])
+		var d := q.distance_to(c)
+		if d < best.x:
+			best = Vector2(d, along + path[i].distance_to(c))
+		along += path[i].distance_to(path[i + 1])
+	return best
+
+
+## A road site done: its corridor graded (docs/plan.md §5). Its profile is smoothed as a smoothed
+## road's is (GRADE_SMOOTH m, GRADE_MOST at most), level across, its edges eased into the ground
+## beside; it is marked as road, its mud and soft layer go, and it does not churn (works G).
+func grade(s: Dictionary) -> void:
+	var path: PackedVector2Array = s.path
+	var raw := PackedFloat32Array()
+	var steps := PackedFloat32Array()  # metres along at each point
+	for i in path.size():
+		raw.append(get_height(path[i].x, path[i].y))
+		steps.append(0.0 if i == 0 else steps[i - 1] + path[i].distance_to(path[i - 1]))
+	var total := steps[steps.size() - 1]
+	var prof := PackedFloat32Array()
+	prof.resize(path.size())
+	for i in path.size():
+		var sum := 0.0
+		var n := 0
+		for j in path.size():
+			if absf(steps[j] - steps[i]) <= GRADE_SMOOTH * 0.5:
+				sum += raw[j]
+				n += 1
+		var end_t := smoothstep(0.0, 4.0, minf(steps[i], total - steps[i]))  # its ends stay where the road goes on
+		prof[i] = lerpf(raw[i], sum / n, end_t)
+	for k in 4:
+		for i in range(1, prof.size()):
+			var most := GRADE_MOST * (steps[i] - steps[i - 1])
+			prof[i] = clampf(prof[i], prof[i - 1] - most, prof[i - 1] + most)
+		for i in range(prof.size() - 2, -1, -1):
+			var most := GRADE_MOST * (steps[i + 1] - steps[i])
+			prof[i] = clampf(prof[i], prof[i + 1] - most, prof[i + 1] + most)
+	var half := float(s.width) * 0.5
+	var edge := s.duplicate()
+	edge.width = float(s.width) + 4.0
+	for v in _corridor_vertices(edge):
+		var q := _to_path(path, Vector2(v))
+		var k := 0
+		while k < steps.size() - 2 and steps[k + 1] < q.y:
+			k += 1
+		var level := lerpf(prof[k], prof[k + 1], clampf((q.y - steps[k]) / maxf(steps[k + 1] - steps[k], 0.01), 0.0, 1.0))
+		var w := 1.0 - smoothstep(half, half + 2.0, q.x)
+		earthworks.set_height(v.x, v.y, lerpf(earthworks.height(v.x, v.y), level, w))
+	for i in path.size():
+		for t in tiles:
+			var l := path[i] - t.origin
+			if absf(l.x) < Terrain.HALF + half and absf(l.y) < Terrain.HALF + half:
+				t.paint(l, half, Color(0.0, 1.0, 0.0), Color(1.0, 1.0, 1.0), true, false)
+				t.mark_road(l, half)
+	graded[s.id] = true
+
+
+## A deck over a bridge site, from bank to bank at their heights (docs/plan.md §5): a StaticBody3D
+## of boxes, a deck and its rails, on two piers, with a road's grip (it is not the ground). The
+## bridge's site puts it up when it stands; a test may too.
+func build_deck(s: Dictionary) -> StaticBody3D:
+	var a: Vector3 = s.a
+	var b: Vector3 = s.b
+	# From the road to the road: 4 m onto each bank, its ends just under the ground there, so a
+	# wheel rolls off the road onto it without a step.
+	var dir := Vector3(b.x - a.x, 0.0, b.z - a.z).normalized()
+	a -= dir * 4.0
+	b += dir * 4.0
+	a.y = get_height(a.x, a.z) - 0.05
+	b.y = get_height(b.x, b.z) - 0.05
+	var body := StaticBody3D.new()
+	body.name = "Deck_" + String(s.id).replace(":", "_")
+	var flat := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	var length := Vector2(flat.length(), b.y - a.y).length()
+	var deck := Vector3(float(s.width) - 1.0, 0.4, length)
+	body.position = (a + b) * 0.5
+	body.basis = Basis(Vector3.UP, atan2(-flat.x, -flat.z)) * Basis(Vector3.RIGHT, atan2(b.y - a.y, flat.length()))
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = deck
+	cs.shape = box
+	cs.position = Vector3(0.0, -0.2, 0.0)
+	body.add_child(cs)
+	Psx.box(body, deck, cs.position, Color(0.45, 0.36, 0.26))
+	for side in [-1.0, 1.0]:
+		var rail := CollisionShape3D.new()
+		var rb := BoxShape3D.new()
+		rb.size = Vector3(0.2, 0.9, length)
+		rail.shape = rb
+		rail.position = Vector3(side * deck.x * 0.5, 0.45, 0.0)
+		body.add_child(rail)
+		Psx.box(body, rb.size, rail.position, Color(0.6, 0.58, 0.55))
+	for k: float in [-0.25, 0.25]:
+		var top: Vector3 = body.position + (b - a) * k
+		var depth := maxf(top.y - get_height(top.x, top.z) + 0.5, 1.0)
+		Psx.box(body, Vector3(1.2, depth, 1.2), Vector3(0.0, -0.4 - depth * 0.5, -flat.length() * k), Color(0.55, 0.55, 0.52))
+	add_child(body)
+	bridges[s.id] = body
+	return body
+
+
+## The gravel deposits a quarry may stand on, in the world: {pos, radius, biome}.
+func deposits() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for t in tiles:
+		for loc in t.valley.locations.values():
+			if loc.kind == "gravel":
+				out.append({"pos": (loc.pos as Vector2) + t.origin, "radius": float(loc.radius), "biome": t.valley.id})
 	return out
