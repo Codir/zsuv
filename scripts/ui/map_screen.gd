@@ -27,6 +27,7 @@ void fragment() {
 """
 
 signal truck_picked(v: Vehicle)  # a click on a parked truck's mark: drive it (Fleet)
+signal clicked(p: Vector2)  # a click anywhere else on the paper: a waypoint there, or none (Contracts)
 
 var land: Land
 var terrain: Terrain  # the home tile (the first map drew only it)
@@ -34,6 +35,7 @@ var vehicle: Vehicle
 var contracts: Contracts
 var locations: Dictionary
 var fleet: Fleet  # the trucks out on the map, marked on it (scripts/main.gd sets it)
+var infra: Infra  # the ledger beside the map: every building and site (scripts/main.gd sets it)
 var whole := false  # zoomed out to the whole map
 var scout_track := PackedVector2Array()  # where the scout has been, kept (docs/plan.md §3)
 
@@ -132,6 +134,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			if v:
 				truck_picked.emit(v)
 				get_viewport().set_input_as_handled()
+			elif _rect.has_point(mb.position):  # anywhere else: a waypoint
+				clicked.emit(from_map(mb.position))
+				get_viewport().set_input_as_handled()
 
 
 func _process(_delta: float) -> void:
@@ -163,6 +168,11 @@ func _update_fog() -> void:
 
 func _to_map(p: Vector2) -> Vector2:
 	return _rect.position + (p - _view.position) / _view.size * _rect.size
+
+
+## The world point under the screen point mp on the paper.
+func from_map(mp: Vector2) -> Vector2:
+	return _view.position + (mp - _rect.position) / _rect.size * _view.size
 
 
 func _on_draw() -> void:
@@ -250,6 +260,16 @@ func _on_draw_over() -> void:
 			_text(font, Vector2(x, y), line, Color(1.0, 1.0, 1.0))
 			y += 12.0
 	y += 12.0
+	# The ledger: every building and site, what it holds, needs and does (docs/plan.md §9).
+	if infra:
+		_text(font, Vector2(x, y), "LEDGER", Color(1.0, 0.85, 0.3))
+		y += 12.0
+		for entry in infra.ledger():
+			for line in _wrap(entry, 36):
+				if y < _rect.end.y - 14.0:
+					_text(font, Vector2(x, y), line, Color(0.9, 0.9, 0.85))
+				y += 11.0
+		y += 8.0
 	var legend := [
 		[Color(0.95, 0.25, 0.15), "your truck"],
 		[Color(0.95, 0.45, 0.1), "your trail"],
@@ -262,6 +282,8 @@ func _on_draw_over() -> void:
 	if here.layer != "dust":
 		legend.append([here.layer_color, "deep " + here.layer])
 	for item in legend:
+		if y > _rect.end.y - 14.0:  # the ledger took the room
+			break
 		_over.draw_rect(Rect2(Vector2(x, y - 7), Vector2(8, 8)), item[0])
 		_text(font, Vector2(x + 13, y), item[1], Color(0.9, 0.9, 0.85))
 		y += 13.0

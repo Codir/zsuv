@@ -12,16 +12,22 @@ signal towing  # T: the truck is about to be set down at the railhead (main.gd s
 
 const INTERACT_RADIUS := 12.0
 const SHORT := {"pickup": "PICKUP", "six": "6X6", "tractor": "TRACTOR", "semi": "SEMI", "trailer": "TRAILER"}
+const FETCH := 50.0  # litres from a base's tank to fetch a truck out on the map to it (docs/plan.md §6)
+const WAYPOINT_CLEAR := 12.0  # m: a click this near the waypoint on the map clears it
 
 var vehicle: Vehicle
 var land: Land
 var profile := Profile.new()  # the player's, saved; one kept in memory when there is none
+var infra: Infra  # the bases (the railhead, the outposts); scripts/main.gd sets it
+var fleet: Fleet  # the trucks out on the map; scripts/main.gd sets it
 var prompt := ""
-var spawn_pos := Vector3.ZERO
+var spawn_pos := Vector3.ZERO  # the railhead's spawn
 var spawn_yaw := 0.0
-var garage_open := false  # Tab at the railhead
+var base: Site  # the base trucks are set down at now (the tow's, the garage's); null: the railhead
+var garage_open := false  # Tab at a base
 var trailers: Array[Trailer] = []  # the player's, in this valley (scripts/main.gd parks them)
-var target := {}  # where the arrow points instead of the railhead ({name, pos}); empty: the railhead
+var target := {}  # a waypoint set on the map ({name, pos}); empty: none
+var goal := {}  # the upper village ({name, pos}): where the arrow points with no waypoint
 
 var _depot: Dictionary
 var _arrow: Node3D
@@ -41,23 +47,55 @@ func setup(v: Vehicle, t: Land, locations: Dictionary) -> void:
 	arrow_mesh.rotation.x = -PI * 0.5
 
 
-## Where the arrow points: a target set (a waypoint), else the railhead.
+## Where the arrow points: the waypoint, else the goal, else the railhead.
 func current_target() -> Dictionary:
-	return target if not target.is_empty() else _depot
+	if not target.is_empty():
+		return target
+	return goal if not goal.is_empty() else _depot
 
 
 func objective_text() -> String:
+	var b := here_base()
 	if not target.is_empty():
 		return "%s  %d m" % [String(target.name).to_upper(), _distance_to(target)]
-	if near_depot():
-		return "AT THE %s" % String(_depot.name).to_upper()
+	if b:
+		return "AT THE %s" % base_name(b).to_upper()
+	if not goal.is_empty():
+		return "%s  %d m" % [String(goal.name).to_upper(), _distance_to(goal)]
 	return "BACK TO THE %s  %d m" % [String(_depot.name).to_upper(), _distance_to(_depot)]
 
 
-## The garage: the trucks and trailers, each driven, at the railhead, the player's to drive, or
-## not found yet.
+## A click on the paper map at p: a waypoint there, or, on the waypoint, none.
+func toggle_waypoint(p: Vector2) -> void:
+	if not target.is_empty() and (target.pos as Vector2).distance_to(p) < WAYPOINT_CLEAR:
+		target = {}
+	else:
+		target = {"name": "Waypoint", "pos": p}
+
+
+## The base the truck is at (the railhead, an outpost), or null.
+func here_base() -> Site:
+	var p := Vector2(vehicle.global_position.x, vehicle.global_position.z)
+	if infra:
+		return infra.base_near(p)
+	return null
+
+
+func base_name(b: Site) -> String:
+	return String(_depot.name) if b == null or (infra and b == infra.railhead) else b.spec.title
+
+
+## Where a truck is set down now: {pos, yaw} at the base the last tow or garage used.
+func spawn_now() -> Dictionary:
+	if base == null or infra == null or base == infra.railhead or not is_instance_valid(base):
+		return {"pos": spawn_pos, "yaw": spawn_yaw}
+	return infra.base_spawn(base)
+
+
+## The garage: the trucks and trailers, each driven, at the base, the player's to drive, or not
+## found yet.
 func garage_text() -> String:
-	var lines := PackedStringArray(["GARAGE - %s" % String(_depot.name).to_upper(), ""])
+	var lines := PackedStringArray(["GARAGE - %s" % base_name(here_base() if here_base() else base).to_upper(), ""])
 	var items := garage_items()
 	for i in items.size():
 		var item: Dictionary = items[i]
@@ -79,8 +117,9 @@ func garage_items() -> Array[Dictionary]:
 	return items
 
 
-## The garage's item i: a truck of the player's is driven from here; a trailer waits at the
-## railhead; one not the player's is still out there to be found.
+## The garage's item i: a truck of the player's is driven from here (one out on the map is fetched
+## here for FETCH litres from the base's tank); a trailer waits at the railhead; one not the
+## player's is still out there to be found.
 func garage_pick(i: int) -> void:
 	var item: Dictionary = garage_items()[i]
 	if not profile.has_rig(item.id):
@@ -89,6 +128,15 @@ func garage_pick(i: int) -> void:
 	if item.truck == "":
 		message.emit("The %s waits at the railhead: back up to it and press C" % String(item.title).to_lower())
 	elif item.truck != vehicle.spec.id:
+		var b := here_base()
+		var out: Vehicle = fleet.find(item.truck) if fleet else null
+		if out and infra and b:
+			if b.available("fuel") < FETCH:
+				message.emit("The tank here is dry: fetching the %s takes %d L" % [String(item.title).to_lower(), FETCH])
+				return
+			infra.draw(b, "fuel", FETCH)
+			message.emit("The %s is fetched here: %d L from the tank" % [String(item.title).to_lower(), FETCH])
+		base = b
 		profile.truck = item.truck
 		profile.save()
 		garage_open = false
@@ -107,8 +155,9 @@ func set_vehicle(v: Vehicle) -> void:
 	vehicle = v
 
 
+## Whether the truck is at a base (the railhead, an outpost): its garage opens there.
 func near_depot() -> bool:
-	return _near(_depot)
+	return here_base() != null if infra else _near(_depot)
 
 
 func _process(_delta: float) -> void:
@@ -130,7 +179,7 @@ func _process(_delta: float) -> void:
 	elif near_depot() and slow:
 		prompt = "[Tab] Garage"
 	elif vehicle.fuel <= 0.0:
-		prompt = "Out of fuel! [T] Tow to the %s (the load is lost)" % String(_depot.name).to_lower()
+		prompt = "Out of fuel! [T] Tow to the nearest base (the load is lost)"
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -154,14 +203,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		recover()
 
 
-## T: the tow takes the truck (and its trailer) to the railhead; the load on them is lost.
+## T: the tow takes the truck (and its trailer) to the nearest base; the load on them is lost.
 func recover() -> void:
 	var lost := Loads.text(vehicle)
 	Loads.clear(vehicle)
 	vehicle.fuel = maxf(vehicle.fuel, vehicle.spec.fuel_capacity * 0.5)
+	base = infra.nearest_base(Vector2(vehicle.global_position.x, vehicle.global_position.z)) if infra else null
 	towing.emit()
-	vehicle.set_down(spawn_pos, spawn_yaw)  # clear of the trucks parked there (Vehicle)
-	message.emit("The tow truck dragged you back to the %s%s" % [String(_depot.name).to_lower(),
+	var at := spawn_now()
+	vehicle.set_down(at.pos, at.yaw)  # clear of the trucks parked there (Vehicle)
+	message.emit("The tow truck dragged you back to the %s%s" % [base_name(base).to_lower(),
 		(". Lost: " + lost.to_lower()) if lost != "" else ""])
 
 

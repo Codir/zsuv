@@ -262,6 +262,7 @@ static func _clear(infra: Infra) -> void:
 		s.queue_free()
 	infra.sites.clear()
 	infra.felled.clear()
+	infra._felled_seen = 0  # counted again from the earthworks at the next look
 	infra.railhead.stock = Infra.RAILHEAD_STOCK.duplicate()
 	infra.mode = Infra.Mode.NONE
 	infra.yard = []

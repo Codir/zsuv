@@ -30,8 +30,11 @@ static func find(spec_id: String) -> BuildingSpec:
 	for s in all():
 		if s.id == spec_id:
 			return s
-	if spec_id == "railhead":
-		return railhead()
+	match spec_id:
+		"railhead":
+			return railhead()
+		"village":
+			return village()
 	return null
 
 
@@ -131,3 +134,14 @@ func does() -> String:
 		"outpost":
 			return "a base: a garage, a tank and a yard"
 	return ""
+
+
+## The goal (docs/plan.md §1): the upper village, cut off in the mountains, asks for fuel and
+## parts. It is found, not placed, and the end card shows when its needs are in.
+static func village() -> BuildingSpec:
+	var s := BuildingSpec.new()
+	s.id = "village"
+	s.title = "Upper village"
+	s.needs = {"fuel": 800, "parts": 2}
+	s.size = Vector2(16.0, 16.0)
+	return s

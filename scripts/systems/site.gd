@@ -16,6 +16,7 @@ var fuel := 0.0  # litres in its tank
 var timer := 0.0  # seconds into the load it is making
 var endless := PackedStringArray()  # what never runs out here (the railhead's fuel and parts)
 var trees_left := -1  # a sawmill's trees in reach (Infra counts them); -1 not counted
+var halt := ""  # why it stops making though it has room and fuel ("Dug out: 4 m deep"); "" none
 var status := ""  # what it is doing: "making timber", "Full", "No fuel", "Felled out"
 var ground: Callable  # (x, z) -> height: where it stands
 
@@ -142,6 +143,10 @@ func step(dt: float) -> void:
 			status = "Full"
 			timer = 0.0
 			return
+		if halt != "":
+			status = halt
+			timer = 0.0
+			return
 		if trees_left == 0:
 			status = "Felled out"
 			timer = 0.0
@@ -197,7 +202,7 @@ func to_dict() -> Dictionary:
 ## A site as saved, or null when d is not one.
 static func from_dict(d: Dictionary) -> Site:
 	var s := BuildingSpec.find(str(d.get("kind", "")))
-	if s == null or s.id == "railhead":
+	if s == null or s.id in ["railhead", "village"]:
 		return null
 	var site := Site.new()
 	site.spec = s
@@ -227,7 +232,7 @@ func _height(x: float, z: float) -> float:
 
 ## The stakes and the sign while a site, the building once it stands.
 func _refresh() -> void:
-	if spec == null or spec.id == "railhead":
+	if spec == null or spec.id in ["railhead", "village"]:
 		return
 	if _gfx:
 		_gfx.queue_free()
@@ -288,3 +293,8 @@ func _label(text: String, pos: Vector3) -> void:
 	label.outline_size = 8
 	label.position = pos
 	_gfx.add_child(label)
+
+
+## Where a truck is set down at it, as a base (an outpost): in its yard, across its front.
+func spawn_point() -> Vector2:
+	return at + Vector2(0.0, -spec.size.y * 0.5 + 3.0).rotated(-yaw)

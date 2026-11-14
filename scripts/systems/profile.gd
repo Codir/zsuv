@@ -12,6 +12,14 @@ var last := "steppe"  # the valley the game was in; a new game starts in the ste
 var rigs := PackedStringArray()  # the trucks and trailers that are the player's (TruckSpec, TrailerSpec ids)
 var truck := "pickup"  # the truck the garage puts at the railhead
 var sites: Array = []  # Site.to_dict() of every building and site, in the valley it was in (Infra)
+var stats := {}  # what the end card counts (Infra.stats): buildings, trees_felled, fuel_burnt, played
+var earthworks := {}  # Land.save_earthworks(): the ground dug and dumped, with its map_version
+var fog := {}  # Fog.to_save(): what has been seen, and found
+var scout_track := PackedVector2Array()  # where the scout has been (MapScreen)
+var waypoint: Variant = null  # Vector2 set on the paper map, or null
+var fleet: Array = []  # every truck out on the map: {id, pos, yaw, fuel, hold, trailer, driven} (Saver)
+var trailers: Array = []  # the trailers standing on their own: {id, pos, yaw, hold}
+var new_game := false  # not saved: the game was just begun, the railhead's trucks are to be set out
 
 
 ## Whether there is a save at at to continue.
@@ -34,9 +42,15 @@ static func open(at := PATH) -> Profile:
 	p.last = _value(cfg, "last", TYPE_STRING, p.last)
 	if Valley.find(p.last) == null:
 		p.last = "steppe"
-	var sites: Variant = cfg.get_value("build", "sites", [])
-	if typeof(sites) == TYPE_ARRAY:
-		p.sites = (sites as Array).filter(func(d: Variant) -> bool: return typeof(d) == TYPE_DICTIONARY)
+	p.sites = _dicts(cfg.get_value("build", "sites", []))
+	p.fleet = _dicts(cfg.get_value("world", "fleet", []))
+	p.trailers = _dicts(cfg.get_value("world", "trailers", []))
+	p.stats = _typed(cfg, "world", "stats", TYPE_DICTIONARY, {})
+	p.earthworks = _typed(cfg, "world", "earthworks", TYPE_DICTIONARY, {})
+	p.fog = _typed(cfg, "world", "fog", TYPE_DICTIONARY, {})
+	p.scout_track = _typed(cfg, "world", "scout_track", TYPE_PACKED_VECTOR2_ARRAY, PackedVector2Array())
+	var wp: Variant = cfg.get_value("world", "waypoint") if cfg.has_section_key("world", "waypoint") else null
+	p.waypoint = wp if typeof(wp) == TYPE_VECTOR2 else null
 	return p
 
 
@@ -49,6 +63,18 @@ static func _ids(value: Variant, default: PackedStringArray) -> PackedStringArra
 		if typeof(id) in [TYPE_STRING, TYPE_STRING_NAME] and not str(id) in out:
 			out.append(str(id))
 	return out
+
+
+## The dictionaries in a saved list, or none.
+static func _dicts(v: Variant) -> Array:
+	if typeof(v) != TYPE_ARRAY:
+		return []
+	return (v as Array).filter(func(d: Variant) -> bool: return typeof(d) == TYPE_DICTIONARY)
+
+
+static func _typed(cfg: ConfigFile, section: String, key: String, type: int, default: Variant) -> Variant:
+	var value: Variant = cfg.get_value(section, key, default)
+	return value if typeof(value) == type else default
 
 
 static func _value(cfg: ConfigFile, key: String, type: int, default: Variant) -> Variant:
@@ -64,6 +90,14 @@ func save() -> void:
 	cfg.set_value("progress", "rigs", rigs)
 	cfg.set_value("progress", "truck", truck)
 	cfg.set_value("build", "sites", sites)
+	cfg.set_value("world", "fleet", fleet)
+	cfg.set_value("world", "trailers", trailers)
+	cfg.set_value("world", "stats", stats)
+	cfg.set_value("world", "earthworks", earthworks)
+	cfg.set_value("world", "fog", fog)
+	cfg.set_value("world", "scout_track", scout_track)
+	if waypoint != null:
+		cfg.set_value("world", "waypoint", waypoint)
 	cfg.save(path)
 
 

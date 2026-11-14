@@ -15,6 +15,8 @@ func test_a_sawmill_makes_timber_while_it_has_fuel_and_trees(t: TCase) -> void:
 	if mill == null:
 		return
 	var trees := mill.trees_left
+	infra._sync_felled()
+	var before := infra.felled.duplicate()  # the trees its site took
 	t.ok(trees >= 12, "only %d trees by the sawmill" % trees)
 	infra.advance(130.0)
 	t.eq(mill.stock.get("timber", 0.0), 0.0, "timber made with no fuel")
@@ -26,13 +28,16 @@ func test_a_sawmill_makes_timber_while_it_has_fuel_and_trees(t: TCase) -> void:
 	t.eq(mill.stock.get("timber", 0.0), 1.0, "timber after 2 minutes")
 	t.eq(mill.fuel, 40.0, "fuel after a load, the next one started")
 	t.eq(mill.trees_left, trees - 1, "trees left after a load")
-	t.eq(infra.felled.size(), 1, "trees felled")
-	var nearest := INF
-	for i in infra.trees.size():
-		if not infra.felled.has(i):
-			nearest = minf(nearest, infra.trees[i].distance_to(mill.at))
-	var gone: Vector2 = infra.trees[infra.felled.keys()[0]]
-	t.ok(gone.distance_to(mill.at) <= nearest, "the tree felled is not the nearest")
+	var new: Array = infra.felled.keys().filter(func(i: int) -> bool: return not before.has(i))
+	t.eq(new.size(), 1, "trees felled for a load")
+	if new.size() == 1:
+		var nearest := INF
+		for i in infra.trees.size():
+			if not infra.felled.has(i):
+				nearest = minf(nearest, infra.trees[i].distance_to(mill.at))
+		var gone: Vector2 = infra.trees[new[0]]
+		t.ok(gone.distance_to(mill.at) <= nearest, "the tree felled is not the nearest")
+		t.ok(t.world.land.earthworks.felled.has(gone), "the tree felled still stands in the world")
 	infra.advance(600.0)
 	t.eq(mill.stock.get("timber", 0.0), 3.0, "a full sawmill's timber")
 	t.eq(mill.status, "Full", "when full")
@@ -190,10 +195,11 @@ func test_buildings_are_saved_with_their_stock_and_timers(t: TCase) -> void:
 	var loaded := Infra.new()
 	t.world.add_child(loaded)
 	loaded.setup(t.world.vehicle, t.world.land, q, null, t.world.locations, t.world.builder.tree_points)
-	t.eq(loaded.sites.size(), 2, "sites loaded")
-	if loaded.sites.size() == 2:
-		var m: Site = loaded.sites[0]
-		var s: Site = loaded.sites[1]
+	var placed := loaded.sites.filter(func(x: Site) -> bool: return x != loaded.village)
+	t.eq(placed.size(), 2, "sites loaded")
+	if placed.size() == 2:
+		var m: Site = placed[0]
+		var s: Site = placed[1]
 		t.ok(m.built and m.spec.id == "sawmill" and m.at == mill.at, "the sawmill")
 		t.eq(m.stock, mill.stock, "the sawmill's stock")
 		t.eq(m.fuel, mill.fuel, "the sawmill's fuel")
@@ -202,6 +208,7 @@ func test_buildings_are_saved_with_their_stock_and_timers(t: TCase) -> void:
 		t.ok(not s.built and s.spec.id == "fuel_station" and is_equal_approx(s.yaw, 0.5), "the site")
 		t.eq(s.needs_left(), {"concrete": 1.0}, "the site's needs")
 	t.eq(loaded.railhead.stock.get("timber", 0.0), 3.0, "the railhead's timber")
+	infra._sync_felled()
 	t.eq(loaded.felled.size(), infra.felled.size(), "the trees felled")
 	loaded.land = null  # it saves nothing on its way out
 	loaded.free()
