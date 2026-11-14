@@ -70,6 +70,8 @@ func save() -> void:
 static func _truck(v: Vehicle) -> Dictionary:
 	var d := {"id": v.spec.id, "pos": v.global_position, "yaw": v.global_rotation.y, "fuel": v.fuel,
 		"hold": v.hold.to_dict(), "driven": v.driven, "trailer": ""}
+	if v.has_method("to_dict"):  # the truck's own: condition, flooded, lost, upgrades (stream B)
+		d["truck"] = v.call("to_dict")
 	if v.trailer:
 		d.trailer = v.trailer.spec.id
 		d.trailer_hold = v.trailer.hold.to_dict()
@@ -114,8 +116,13 @@ func _lay_trucks(p: Profile) -> void:
 		if bool(d.get("driven", false)) and main.vehicle.spec.id == spec.id:
 			v = main.vehicle
 			v.teleport(d.pos, float(d.get("yaw", 0.0)))
+		elif main.fleet.find(spec.id) and not main.fleet.find(spec.id).driven:
+			v = main.fleet.find(spec.id)  # already out there (a truck to be found): moved to where it was
+			v.set_down(d.pos, float(d.get("yaw", 0.0)))
 		else:
 			v = main.park_truck(spec, d.pos, float(d.get("yaw", 0.0)))
+		if typeof(d.get("truck")) == TYPE_DICTIONARY and v.has_method("from_dict"):
+			v.call("from_dict", d.truck)
 		v.fuel = clampf(float(d.get("fuel", v.fuel)), 0.0, spec.fuel_capacity)
 		if typeof(d.get("hold")) == TYPE_DICTIONARY:
 			v.hold.from_dict(d.hold)
