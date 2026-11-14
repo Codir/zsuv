@@ -20,6 +20,7 @@ var prompt := ""
 var spawn_pos := Vector3.ZERO
 var spawn_yaw := 0.0
 var garage_open := false  # Tab at the railhead
+var workshop := false  # the garage turned to its workshop (U): upgrades and repair (Upgrades)
 var trailers: Array[Trailer] = []  # the player's, in this valley (scripts/main.gd parks them)
 var target := {}  # where the arrow points instead of the railhead ({name, pos}); empty: the railhead
 
@@ -57,6 +58,8 @@ func objective_text() -> String:
 ## The garage: the trucks and trailers, each driven, at the railhead, the player's to drive, or
 ## not found yet.
 func garage_text() -> String:
+	if workshop:
+		return Upgrades.workshop_text(vehicle, workshop_base())
 	var lines := PackedStringArray(["GARAGE - %s" % String(_depot.name).to_upper(), ""])
 	var items := garage_items()
 	for i in items.size():
@@ -82,6 +85,9 @@ func garage_items() -> Array[Dictionary]:
 ## The garage's item i: a truck of the player's is driven from here; a trailer waits at the
 ## railhead; one not the player's is still out there to be found.
 func garage_pick(i: int) -> void:
+	if workshop:
+		message.emit(Upgrades.workshop_pick(vehicle, i, workshop_base(), get_parent().get("infra")))
+		return
 	var item: Dictionary = garage_items()[i]
 	if not profile.has_rig(item.id):
 		message.emit("Not yet: the %s is out there to be found" % String(item.title).to_lower())
@@ -125,8 +131,13 @@ func _process(_delta: float) -> void:
 	var slow := absf(vehicle.forward_speed) < 2.0
 	if garage_open and not (near_depot() and slow):
 		garage_open = false
+	if not garage_open:
+		workshop = false
 	if garage_open:
-		prompt = "[1]-[%d] drive   [Tab] close" % garage_items().size()
+		if workshop:
+			prompt = "[1]-[%d] fit or repair   [U] trucks   [Tab] close" % Upgrades.workshop_size(vehicle)
+		else:
+			prompt = "[1]-[%d] drive   [U] workshop   [Tab] close" % garage_items().size()
 	elif near_depot() and slow:
 		prompt = "[Tab] Garage"
 	elif vehicle.fuel <= 0.0:
@@ -137,7 +148,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		var k := (event as InputEventKey).physical_keycode
 		if garage_open:
-			var n := garage_items().size()
+			var n := Upgrades.workshop_size(vehicle) if workshop else garage_items().size()
+			if k == KEY_U:
+				workshop = not workshop
+				get_viewport().set_input_as_handled()
+				return
 			if k >= KEY_1 and k < KEY_1 + n:
 				garage_pick(k - KEY_1)
 				get_viewport().set_input_as_handled()
@@ -163,6 +178,19 @@ func recover() -> void:
 	vehicle.set_down(spawn_pos, spawn_yaw)  # clear of the trucks parked there (Vehicle)
 	message.emit("The tow truck dragged you back to the %s%s" % [String(_depot.name).to_lower(),
 		(". Lost: " + lost.to_lower()) if lost != "" else ""])
+
+
+## The base whose workshop the truck is at: the one Infra says (a built outpost, the railhead),
+## else the railhead when the truck is at the depot; null elsewhere.
+func workshop_base() -> Node:
+	if has_method("here_base"):  # stream C's: the railhead or a built outpost the truck is at
+		return call("here_base")
+	var infra: Node = get_parent().get("infra")
+	if infra == null:
+		return null
+	if infra.has_method("base_near"):
+		return infra.base_near(Vector2(vehicle.global_position.x, vehicle.global_position.z))
+	return infra.get("railhead") if near_depot() else null
 
 
 ## The player's trailer with that TrailerSpec id in this valley, or null.

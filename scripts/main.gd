@@ -95,6 +95,8 @@ func _ready() -> void:
 	hud.fleet = fleet
 	map_screen.fleet = fleet
 	map_screen.truck_picked.connect(_pick_from_map)
+	fleet.claimed.connect(_claimed)
+	_place_found_trucks()
 
 	if "--autodrive" in OS.get_cmdline_user_args():
 		vehicle.drive_along(roads[0].slice(1))
@@ -173,6 +175,75 @@ func _pick_from_map(v: Vehicle) -> void:
 	fleet.drive_truck(v)
 
 
+## The trucks left in the floods (docs/plan.md §7), out on the map until they are found and run:
+## the 6x6 by the ruined sawmill in the forest, the semi with its semi-trailer by the old
+## elevator in the steppe, each with an empty tank and the condition it was left in.
+const FOUND := [
+	{"spec": "six", "biome": "khutir", "place": "lumber", "condition": 0.2, "name": "a 6x6, left in the flood"},
+	{"spec": "semi", "biome": "steppe", "place": "elevator", "condition": 0.0, "trailer": "semi_trailer",
+		"name": "a semi truck, left in the flood"},
+]
+
+
+## Each truck of FOUND that is not the player's yet, parked by its place: clear of the place, the
+## roads, the trees and the rocks, on level ground; a thing for the fog to find.
+func _place_found_trucks() -> void:
+	for f in FOUND:
+		if profile.has_rig(f.spec):
+			continue
+		var tile: Terrain = null
+		for tl in land.tiles:
+			if tl.valley.id == f.biome:
+				tile = tl
+		if tile == null or not tile.valley.locations.has(f.place):
+			continue
+		var loc: Dictionary = tile.valley.locations[f.place]
+		var at := _clear_spot((loc.pos as Vector2) + tile.origin, float(loc.radius) + 7.0)
+		if at == Vector2.INF:
+			continue
+		var spec := TruckSpec.find(f.spec)
+		var yaw := float(hash(f.spec) % 628) / 100.0
+		var v := park_truck(spec, Vector3(at.x, land.get_height(at.x, at.y) + 1.5, at.y), yaw)
+		v.lost = true
+		v.fuel = 0.0
+		v.condition = float(f.condition)
+		if f.has("trailer"):
+			var tr := Trailer.new()
+			tr.spec = TrailerSpec.find(f.trailer)
+			tr.land = land
+			add_child(tr)
+			tr.place(tr.behind(Transform3D(v.global_transform.basis, v.hitch_point())))
+			v.hitch.call_deferred(tr)
+			contracts.trailers.append(tr)
+		land.fog.things.append({"id": "truck:" + f.spec, "name": f.name, "kind": "truck", "pos": at, "biome": f.biome, "found": false})
+
+
+## A spot near p, from about r out, where a truck stands clear: off the roads, no tree or rock
+## within 6 m, the ground level within 0.6 m over 8 m, no water; INF if there is none within 40 m.
+func _clear_spot(p: Vector2, r: float) -> Vector2:
+	for ring in 9:
+		for k in 12:
+			var at := p + Vector2(r + ring * 4.0, 0.0).rotated(k * TAU / 12.0 + ring * 0.4)
+			if not land.on_map(at, 20.0) or land.road_distance(at) < Terrain.ROAD_HALF_WIDTH + 4.0 or land.water_level(at, 6.0) > -INF:
+				continue
+			var h := land.get_height(at.x, at.y)
+			var level := true
+			for d: Vector2 in [Vector2(4, 0), Vector2(-4, 0), Vector2(0, 4), Vector2(0, -4)]:
+				level = level and absf(land.get_height(at.x + d.x, at.y + d.y) - h) < 0.6
+			if level and not Array(land.anchor_points).any(func(a: Vector3) -> bool: return Vector2(a.x, a.z).distance_to(at) < 6.0):
+				return at
+	return Vector2.INF
+
+
+## A found truck runs now: it is the player's, and its trailer with it.
+func _claimed(v: Vehicle) -> void:
+	var ids := PackedStringArray([v.spec.id])
+	if v.spec.comes_with != "":
+		ids.append(v.spec.comes_with)
+	contracts.give_rigs(ids)
+	hud.show_message("The %s runs: it is yours" % v.spec.title.to_lower())
+
+
 ## A truck of spec parked out on the map at pos facing yaw, its engine off: the fleet's (a found
 ## truck, the ones standing by the railhead at the start).
 func park_truck(spec: TruckSpec, pos: Vector3, yaw: float) -> Vehicle:
@@ -183,7 +254,7 @@ func park_truck(spec: TruckSpec, pos: Vector3, yaw: float) -> Vehicle:
 	v.position = pos
 	v.rotation.y = yaw
 	add_child(v)
-	v.winch.anchors = builder.anchor_points
+	v.winch.anchors = land.anchor_points
 	fleet.add(v)
 	return v
 
@@ -217,13 +288,14 @@ func _towing() -> void:
 	for h in vehicle.holds():  # the load on the rig is what the tow costs (docs/plan.md §5)
 		if h.kind in Hold.RESOURCES:
 			h.clear()
+	vehicle.towed()  # water out of its engine (docs/plan.md §8)
 	var hitched := vehicle.trailer
 	vehicle.unhitch()
 	var moved := _on_spawn()
 	if hitched and not hitched in moved:
 		moved.append(hitched)
 	for t in contracts.trailers:
-		if is_instance_valid(t) and not t in moved and (t.global_transform.basis.y.y < 0.7 \
+		if is_instance_valid(t) and not t in moved and t.truck == null and (t.global_transform.basis.y.y < 0.7 \
 				or Vector2(t.global_position.x - _spawn().x, t.global_position.z - _spawn().z).length() > TOW_HOME):
 			moved.append(t)
 	# Not in the way of the spots: the truck, towed to the spawn, and the trailers going to theirs.

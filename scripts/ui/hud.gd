@@ -95,7 +95,7 @@ func _process(delta: float) -> void:
 	if vehicle == null:
 		return
 	var fuel_bars := roundi(vehicle.fuel / vehicle.spec.fuel_capacity * 10.0)
-	_status.text = "%3d km/h  %s  %s  DIFF:%s\nFUEL %s%s %2d L\n%s" % [
+	_status.text = "%3d km/h  %s  %s  DIFF:%s\nFUEL %s%s %2d L  %d%%\n%s" % [
 		roundi(absf(vehicle.forward_speed) * 3.6),
 		"LOW " if vehicle.low_range else "HIGH",
 		_drive_text(),
@@ -103,8 +103,14 @@ func _process(delta: float) -> void:
 		"█".repeat(fuel_bars),
 		"░".repeat(10 - fuel_bars),
 		roundi(vehicle.fuel),
+		roundi(vehicle.condition * 100.0),
 		Loads.text(vehicle),
 	]
+	if vehicle.flooded:
+		_status.text += "\nENGINE FLOODED"
+	elif vehicle.water_depth > 0.05:  # the water against the intake (docs/plan.md §8)
+		var intake := vehicle.water_depth - vehicle.water_over_intake if vehicle.water_over_intake > -INF else 0.0
+		_status.text += "\nWATER %.1f / %.1f m%s" % [vehicle.water_depth, intake, "  !" if vehicle.water_over_intake > -0.25 else ""]
 	if vehicle.load_text() != "":
 		_status.text += "\n" + vehicle.load_text()
 	if vehicle.winch.attached:

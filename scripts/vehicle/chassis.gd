@@ -17,6 +17,9 @@ class Wheel:
 	var drive2: bool  # driven in 2WD too
 	var sink := 1.0  # how much of the drag of snow and mud its tyre feels (a big one floats)
 	var bite := 0.0  # how much of the grip snow and mud take its tread wins back (not on ice)
+	var chains := false  # snow chains on it (an upgrade): ice grips, snow bites more (docs/plan.md §8)
+	var width := 0.4
+	var wet := 0.0  # m of it in water, 0 dry
 	var pivot: Node3D
 	var spin: Node3D
 	var spray: CPUParticles3D
@@ -43,6 +46,8 @@ var spring_k := 32000.0
 var damping := 3800.0
 var anti_roll := 16000.0
 var steer := 0.0  # of the steered wheels, radians
+var boxes: Array[Dictionary] = []  # its body's collision boxes, {size, pos} (the spec's): what water lifts and drags
+var water_depth := 0.0  # m of water over the ground under its deepest wheel, 0 dry
 
 
 ## Springs, dampers and anti-roll for every wheel, then each wheel's grip on what it stands on.
@@ -85,9 +90,72 @@ func _update_suspension(w: Wheel, space: PhysicsDirectSpaceState3D, up: Vector3,
 		if w.sink != 1.0 or w.bite != 0.0:
 			w.surface.rolling *= w.sink
 			w.surface.grip = lerpf(w.surface.grip, 1.0, w.bite * (1.0 - w.surface.ice))
+		if w.chains:  # ice 0.15 -> 0.4, and 0.3 more bite in snow
+			w.surface.grip = lerpf(w.surface.grip, maxf(w.surface.grip, 0.4), w.surface.ice)
+			if w.surface.snow > 0.02:
+				w.surface.grip = lerpf(w.surface.grip, 1.0, 0.3)
 	var comp_vel := clampf((w.compression - prev) / delta, -5.0, 5.0)
 	w.load = maxf(spring_k * w.compression + damping * comp_vel, 0.0)
 	apply_force(up * w.load, w.point - global_position)
+
+
+## Water (docs/plan.md §8): each wheel in it is dragged against its motion through the water, the
+## more the deeper and the faster, and the body is lifted by half the water its boxes put aside
+## (never afloat: at most LIFT_MAX of its weight) and dragged too; the water's motion is the
+## current's, so standing in a river it is pushed downstream, the more the deeper. Spray flies off
+## a wheel going in fast. Sets water_depth and each wheel's wet.
+const WATER := 1000.0  # kg/m3
+const WHEEL_DRAG := 0.6  # its drag coefficient, on the tyre's wet side
+const BODY_DRAG := 0.9
+const LIFT_MAX := 0.35  # of its weight
+
+
+func _apply_water() -> void:
+	water_depth = 0.0
+	if land == null:
+		return
+	var down := -global_transform.basis.y
+	var any := false
+	for w in wheels:
+		var hub := global_transform * w.mount + down * (w.dist - w.radius)
+		var level := land.water_level(Vector2(hub.x, hub.z))
+		var bottom := hub.y - w.radius
+		w.wet = clampf(level - bottom, 0.0, 2.0 * w.radius) if level > -INF else 0.0
+		if w.wet <= 0.0:
+			continue
+		any = true
+		water_depth = maxf(water_depth, level - bottom)
+		var flow := land.water_current(Vector2(hub.x, hub.z))
+		var rel := point_velocity(hub) - Vector3(flow.x, 0.0, flow.y)
+		rel.y *= 0.3
+		var area := w.wet * w.width * 2.0  # the tyre and the wheel well before it
+		apply_force(-rel * rel.length() * 0.5 * WATER * WHEEL_DRAG * area - rel * 300.0 * w.wet, hub - global_position)
+	if not any and boxes.is_empty():
+		return
+	var lift_total := 0.0
+	var pushes: Array = []
+	for b in boxes:
+		var c: Vector3 = global_transform * (b.pos as Vector3)
+		var level := land.water_level(Vector2(c.x, c.z))
+		if level == -INF:
+			continue
+		var size: Vector3 = b.size
+		var sub := clampf(level - (c.y - size.y * 0.5), 0.0, size.y)
+		if sub <= 0.0:
+			continue
+		water_depth = maxf(water_depth, level - land.get_height(c.x, c.z))
+		var at := Vector3(c.x, c.y - size.y * 0.5 + sub * 0.5, c.z)
+		var lift := 0.5 * WATER * 9.8 * size.x * size.z * sub
+		lift_total += lift
+		var flow := land.water_current(Vector2(c.x, c.z))
+		var rel := point_velocity(at) - Vector3(flow.x, 0.0, flow.y)
+		rel.y = 0.0
+		var local := global_transform.basis.inverse() * rel
+		var area := sub * (absf(local.z) * size.x + absf(local.x) * size.z) / maxf(rel.length(), 0.001)
+		pushes.append([at, lift, -rel * rel.length() * 0.5 * WATER * BODY_DRAG * area])
+	var scale := minf(1.0, LIFT_MAX * mass * 9.8 / maxf(lift_total, 0.001))
+	for p in pushes:
+		apply_force(Vector3.UP * p[1] * scale + p[2], p[0] - global_position)
 
 
 func _apply_anti_roll(a: Wheel, b: Wheel, up: Vector3) -> void:
@@ -153,9 +221,14 @@ func _animate_wheels(delta: float) -> void:
 			w.pivot.rotation.y = steer
 		w.spin_angle = wrapf(w.spin_angle + w.spin_speed * delta, -PI, PI)
 		w.spin.rotation.x = -w.spin_angle
+		var splash := w.wet > 0.05 and linear_velocity.length() > 2.5  # through water, fast
 		var spraying := w.contact and w.slip and (w.surface.snow > 0.05 or w.surface.mud > 0.1)
-		w.spray.emitting = spraying
-		if spraying:
+		w.spray.emitting = spraying or splash
+		if splash:
+			w.spray.global_position = w.point + up * w.wet
+			w.spray.direction = Vector3(0.0, 1.0, 0.5)
+			w.spray.color = Color(0.75, 0.82, 0.88)
+		elif spraying:
 			w.spray.global_position = w.point + up * 0.15
 			w.spray.direction = Vector3(0.0, 1.0, 1.2 * signf(w.request))
 			w.spray.color = Color(0.3, 0.22, 0.15) if w.surface.mud > w.surface.snow else _layer_spray()
@@ -173,6 +246,7 @@ func _add_wheel(mount: Vector3, radius: float, width: float, front: bool, drive2
 	w.front = front
 	w.drive2 = drive2
 	w.dist = rest_length + radius
+	w.width = width
 	w.pivot = Node3D.new()
 	w.pivot.position = mount
 	add_child(w.pivot)

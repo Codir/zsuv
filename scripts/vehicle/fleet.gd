@@ -10,12 +10,14 @@ extends Node
 
 signal switched(v: Vehicle)  # the player drives v now
 signal message(text: String)
+signal claimed(v: Vehicle)  # a truck found in the floods runs: the player's now (main.gd)
 
 const FREEZE_FAR := 80.0  # m from the truck being driven: frozen beyond
 const WAKE_NEAR := 70.0  # and woken within
 const STEP_ACROSS := 5.0  # m between the two trucks' sides for E to step across
 const POUR_REACH := 6.0  # and to pour fuel from barrels
 const STOPPED := 1.0  # m/s
+const MEND := 0.5  # a load of parts beside a truck found brings its condition up to this
 
 var trucks: Array[Vehicle] = []  # out on the map, the driven one among them
 var driven: Vehicle
@@ -43,10 +45,10 @@ func remove(v: Vehicle) -> void:
 		driven = null
 
 
-## The truck of spec id out on the map, or null.
+## The player's truck of spec id out on the map, or null (not one still lost in the floods).
 func find(id: String) -> Vehicle:
 	for v in trucks:
-		if is_instance_valid(v) and v.spec.id == id:
+		if is_instance_valid(v) and v.spec.id == id and not v.lost:
 			return v
 	return null
 
@@ -99,12 +101,39 @@ func interact() -> bool:
 	if into:
 		pour(into)
 		return true
+	var m := mend_target()
+	if m:
+		driven.rig_take("parts", 1.0)
+		m.condition = MEND
+		message.emit("The %s is mended: %d%%" % [m.spec.title.to_lower(), roundi(MEND * 100.0)])
+		return true
 	var v := parked_near(STEP_ACROSS)
+	if v and v.lost:
+		message.emit(_lost_text(v))
+		return true
 	if v:
 		drive_truck(v)
 		message.emit("Driving the %s" % v.spec.title.to_lower())
 		return true
 	return false
+
+
+## A truck found in the floods, beside the driven one, that a load of parts on the rig mends.
+func mend_target() -> Vehicle:
+	if driven == null or driven.rig_holding("parts") < 1.0:
+		return null
+	var v := parked_near(STEP_ACROSS)
+	return v if v and v.lost and v.condition < MEND else null
+
+
+## What a truck found still needs to run.
+func _lost_text(v: Vehicle) -> String:
+	var needs := PackedStringArray()
+	if v.fuel <= 0.0:
+		needs.append("fuel from barrels")
+	if v.condition <= 0.0:
+		needs.append("a load of parts")
+	return "The %s needs %s to run" % [v.spec.title.to_lower(), " and ".join(needs)] if not needs.is_empty() else ""
 
 
 ## Pours fuel from the driven rig's barrels into v until its tank is full or they are empty.
@@ -124,7 +153,12 @@ func prompt() -> String:
 	var into := pour_target()
 	if into:
 		return "[E] Pour fuel into the %s" % into.spec.title.to_lower()
+	var m := mend_target()
+	if m:
+		return "[E] Mend the %s with the parts" % m.spec.title.to_lower()
 	var v := parked_near(STEP_ACROSS)
+	if v and v.lost:
+		return _lost_text(v)
 	return "[E] Drive the %s" % v.spec.title.to_lower() if v else ""
 
 
@@ -138,6 +172,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(_delta: float) -> void:
 	if driven == null or not is_instance_valid(driven):
 		return
+	for v in trucks:
+		if is_instance_valid(v) and v.lost and v.fuel > 0.0 and v.condition > 0.0:
+			v.lost = false
+			claimed.emit(v)
 	for v in trucks:
 		if v == driven or not is_instance_valid(v):
 			continue
