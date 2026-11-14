@@ -246,3 +246,13 @@ func _clear(p: Vector2) -> void:
 		if absf(l.x) < Terrain.HALF + CLEAR and absf(l.y) < Terrain.HALF + CLEAR:
 			for q in land.builders[i].clear_near(l, CLEAR):
 				felled.append(q + t.origin)
+
+
+## The tree or rock at p (world) goes, as a bite beside it would take it.
+func fell(p: Vector2) -> void:
+	for i in land.tiles.size():
+		var t := land.tiles[i]
+		var l := p - t.origin
+		if absf(l.x) <= Terrain.HALF and absf(l.y) <= Terrain.HALF:
+			for q in land.builders[i].clear_near(l, 0.05):
+				felled.append(q + t.origin)

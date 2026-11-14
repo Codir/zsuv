@@ -116,7 +116,12 @@ func _bite() -> void:
 		message = why
 		return
 	var fwd := -vehicle.global_transform.basis.z
-	var got := land.earthworks.bite(at, Vector2(fwd.x, fwd.z), Earthworks.BITE_DEPTH, _blade())
+	# Into a face higher than the wheels the bucket shaves it down to where they stand; on the
+	# level it bites a little lower each pass.
+	var blade := _blade()
+	if blade > -INF and land.get_height(at.x, at.y) > blade + 2.0 * Earthworks.BITE_DEPTH:
+		blade += Earthworks.BITE_DEPTH
+	var got := land.earthworks.bite(at, Vector2(fwd.x, fwd.z), Earthworks.BITE_DEPTH, blade)
 	if got > room:  # a bite never overfills: the rest goes back
 		land.earthworks.dump(at, got - room)
 		got = room

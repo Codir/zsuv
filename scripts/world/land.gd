@@ -14,7 +14,7 @@ extends Node3D
 ## for 2 x GATE_FLAT m. A river or a gorge needs no profile: both tiles carve their half of its bed
 ## from their own ground, down to one level along it, and the water's level runs along it.
 
-const MAP_VERSION := 1  # moves with any change to what the generator makes (docs/plan.md §3, §11)
+const MAP_VERSION := 2  # moves with any change to what the generator makes (docs/plan.md §3, §11)
 const BAND := 24.0
 const SMOOTH := 20.0
 const GATE_FLAT := 8.0
@@ -469,3 +469,33 @@ func reset_ground() -> void:
 	for t in tiles:
 		t.reset_ground()
 	earthworks.shifted = 0.0
+	earthworks.felled = PackedVector2Array()
+
+
+## The earthworks as a save keeps them (docs/plan.md §11): the map's version, every chunk an
+## earthwork touched (Terrain.save_chunk), the trees and rocks gone, the m³ shifted.
+func save_earthworks() -> Dictionary:
+	var chunks := {}
+	for t in tiles:
+		for c in t.edited:
+			chunks["%s:%d:%d" % [t.valley.id, c.x, c.y]] = t.save_chunk(c)
+	return {"map_version": MAP_VERSION, "chunks": chunks, "felled": earthworks.felled, "shifted": earthworks.shifted}
+
+
+## Lays saved earthworks over the map as made. A save from another version of the map is dropped:
+## false, and the ground stays as made (the game says so).
+func load_earthworks(d: Dictionary) -> bool:
+	reset_ground()
+	if int(d.get("map_version", -1)) != MAP_VERSION:
+		return false
+	var chunks: Dictionary = d.get("chunks", {})
+	for key in chunks:
+		var parts := String(key).split(":")
+		var t := _tile(parts[0]) if parts.size() == 3 else null
+		if t:
+			t.load_chunk(Vector2i(int(parts[1]), int(parts[2])), chunks[key])
+	var felled: PackedVector2Array = d.get("felled", PackedVector2Array())
+	for p in felled:
+		earthworks.fell(p)
+	earthworks.shifted = float(d.get("shifted", 0.0))
+	return true

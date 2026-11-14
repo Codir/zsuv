@@ -55,6 +55,7 @@ var _ground_timer := 0.0
 var _heights_dirty := false
 var _images_dirty := false
 var _dirty_chunks: Array[Vector2i] = []
+var edited := {}  # Vector2i chunk -> true: every chunk an earthwork touched since the ground was made
 var works_img: Image  # 0.5 m a pixel: R loose earth, G gravel spread, B bare earth (docs/plan.md §4)
 var works_tex: ImageTexture
 var generated := PackedFloat32Array()  # the heights as the map was made, before any earthworks
@@ -682,6 +683,7 @@ func reset_ground() -> void:
 	_paint_slides()
 	_images_dirty = true
 	touch(Rect2i(0, 0, N, N))
+	edited.clear()
 
 
 ## The vertex at (x, z) is h now (its chunk's collision is rebuilt before the next tick).
@@ -699,6 +701,7 @@ func touch(rect: Rect2i) -> void:
 		for cx in range(c0.x, c1.x + 1):
 			if not Vector2i(cx, cz) in _dirty_chunks:
 				_dirty_chunks.append(Vector2i(cx, cz))
+			edited[Vector2i(cx, cz)] = true
 
 
 ## Paints the works image within radius of local p: each channel (R loose earth, G gravel, B bare
@@ -855,3 +858,40 @@ func _paint_slides() -> void:
 				for x in range(maxi(floori((c.x - reach + HALF) * 2.0), 0), mini(ceili((c.x + reach + HALF) * 2.0), TRACK_RES - 1) + 1):
 					if _cut(ft, Vector2(x * 0.5 - HALF, z * 0.5 - HALF)) > 0.2:
 						works_img.set_pixel(x, z, Color(1.0, 0.0, 0.0, 1.0))
+
+
+## Chunk c's earthworks as a save keeps them (docs/plan.md §11): its heights less the generated
+## ones at 1 cm in 16 bits, its works image and its ground image, compressed.
+func save_chunk(c: Vector2i) -> PackedByteArray:
+	var out := PackedByteArray()
+	var k := CHUNK + 1
+	out.resize(k * k * 2)
+	for z in k:
+		for x in k:
+			var i := (c.y * CHUNK + z) * N + c.x * CHUNK + x
+			out.encode_s16((z * k + x) * 2, clampi(roundi((heights[i] - generated[i]) * 100.0), -32768, 32767))
+	out.append_array(works_img.get_region(Rect2i(c * CHUNK * 2, Vector2i.ONE * CHUNK * 2)).get_data())
+	out.append_array(snow_img.get_region(Rect2i(c * CHUNK, Vector2i.ONE * k)).get_data())
+	return out.compress(FileAccess.COMPRESSION_DEFLATE)
+
+
+## Lays a chunk saved by save_chunk over the ground as made; false when the bytes do not fit.
+func load_chunk(c: Vector2i, bytes: PackedByteArray) -> bool:
+	var k := CHUNK + 1
+	var size := k * k * 2 + (CHUNK * 2) * (CHUNK * 2) * 4 + k * k * 4
+	var raw := bytes.decompress(size, FileAccess.COMPRESSION_DEFLATE)
+	if raw.size() != size or c.x < 0 or c.y < 0 or c.x >= CHUNKS or c.y >= CHUNKS:
+		return false
+	for z in k:
+		for x in k:
+			var i := (c.y * CHUNK + z) * N + c.x * CHUNK + x
+			heights[i] = generated[i] + raw.decode_s16((z * k + x) * 2) / 100.0
+	var at := k * k * 2
+	var w := Image.create_from_data(CHUNK * 2, CHUNK * 2, false, Image.FORMAT_RGBA8, raw.slice(at, at + CHUNK * CHUNK * 16))
+	works_img.blit_rect(w, Rect2i(Vector2i.ZERO, w.get_size()), c * CHUNK * 2)
+	at += CHUNK * CHUNK * 16
+	var s := Image.create_from_data(k, k, false, Image.FORMAT_RGBA8, raw.slice(at))
+	snow_img.blit_rect(s, Rect2i(Vector2i.ZERO, s.get_size()), c * CHUNK)
+	_images_dirty = true
+	touch(Rect2i(c * CHUNK, Vector2i.ONE * k))
+	return true

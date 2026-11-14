@@ -7,6 +7,7 @@ extends RefCounted
 
 const SCENE := preload("res://scenes/main.tscn")
 const SPOT := Vector2(40.0, 60.0)  # open ground in the khutir valley, off its roads and places
+const WHEELS := 2.0  # m either side of a road's centre line a dug-out landslide is level across: the pickup's wheels
 
 
 func test_a_bite_and_a_dump_keep_the_volume(t: TCase) -> void:
@@ -123,6 +124,35 @@ func test_a_tree_in_the_way_goes(t: TCase) -> void:
 	land.reset_ground()
 
 
+func test_earthworks_survive_a_save_and_a_save_of_another_map_drops_them(t: TCase) -> void:
+	var land: Land = t.world.land
+	var ew := land.earthworks
+	var p := _open(t, SPOT + Vector2(0.0, -20.0))
+	for i in 8:
+		ew.bite(p + Vector2(i * 0.8, 0.0), Vector2(1, 0))
+	ew.dump(p + Vector2(0.0, 6.0), 3.0)
+	var want := {}
+	for z in range(-6, 12):
+		for x in range(-4, 12):
+			want[Vector2i(roundi(p.x) + x, roundi(p.y) + z)] = ew.height(roundi(p.x) + x, roundi(p.y) + z)
+	var shifted := ew.shifted
+	var saved := land.save_earthworks()
+	var bytes := var_to_bytes(saved).size()
+	land.reset_ground()
+	t.ok(absf(ew.height(roundi(p.x), roundi(p.y)) - ew.generated(roundi(p.x), roundi(p.y))) < 0.001, "the ground is not as made after a reset")
+	t.ok(land.load_earthworks(saved), "the save does not load")
+	var worst := 0.0
+	for v in want:
+		worst = maxf(worst, absf(ew.height(v.x, v.y) - want[v]))
+	t.ok(worst <= 0.006, "the ground loaded is %.3f m off" % worst)
+	t.ok(absf(ew.shifted - shifted) < 0.001, "m3 shifted %.2f after a load, %.2f before" % [ew.shifted, shifted])
+	saved.map_version = Land.MAP_VERSION - 1
+	t.ok(not land.load_earthworks(saved), "a save of another map loads")
+	t.ok(absf(ew.height(roundi(p.x), roundi(p.y)) - ew.generated(roundi(p.x), roundi(p.y))) < 0.001, "a save of another map left its earthworks")
+	t.note = "%d bytes saved" % bytes
+	land.reset_ground()
+
+
 func test_the_tractor_fills_the_washout_and_the_pickup_drives_to_the_river(t: TCase) -> void:
 	var shared: Vehicle = t.world.vehicle
 	shared.autodrive = true  # deaf to the keys pressed here
@@ -184,6 +214,7 @@ func test_the_tractor_fills_the_washout_and_the_pickup_drives_to_the_river(t: TC
 			passes += 1
 	t.ok(_drivable(land, tile, r, s0), "after %d loads and %d passes the washout is not drivable: %s" % [loads, passes, _profile_note(land, tile, r, s0)])
 	t.ok(land.earthworks.shifted >= dug - 0.1, "the m3 shifted %.1f, dug %.1f" % [land.earthworks.shifted, dug])
+	await _set_rig(t, tractor, farm, tile.along(r, s0 - 22.0)[0] + across * 13.0, road_dir)  # out of the way
 	# Then the pickup drives the road to the river.
 	world.set_truck(TruckSpec.pickup())
 	await t.ticks(2)
@@ -194,9 +225,71 @@ func test_the_tractor_fills_the_washout_and_the_pickup_drives_to_the_river(t: TC
 	shared.autodrive = false
 
 
+func test_the_tractor_digs_out_the_landslide_and_the_pickup_drives_up_through_it(t: TCase) -> void:
+	var shared: Vehicle = t.world.vehicle
+	shared.autodrive = true
+	shared.autodrive_path = PackedVector2Array()
+	var profile := Profile.new()
+	profile.rigs = PackedStringArray(["tractor", "farm"])
+	var vp := SubViewport.new()
+	vp.own_world_3d = true
+	vp.size = Vector2i(480, 270)
+	var world = SCENE.instantiate()
+	world.valley = Valley.zakarpattia()
+	world.profile = profile
+	vp.add_child(world)
+	t.tree.root.add_child(vp)
+	await t.ticks(30)
+	var land: Land = world.land
+	var tile := land.home
+	var ft: Dictionary = tile.valley.features.filter(func(f: Dictionary) -> bool: return f.type == "slide")[0]
+	var r := int(ft.road)
+	var s0 := float(ft.s)
+	var road_dir: Vector2 = tile.along(r, s0)[1]
+	var across := Vector2(-road_dir.y, road_dir.x)
+	world.set_truck(TruckSpec.pickup())
+	await t.ticks(2)
+	t.ok(await _drive(t, world, _stretch(tile, r, s0 - 20.0, s0 + 20.0), 25) == 0.0, "the pickup gets over the landslide before it is dug")
+	world.set_truck(TruckSpec.tractor())
+	await t.ticks(2)
+	var tractor: Vehicle = world.vehicle
+	tractor.low_range = true
+	tractor.awd = true
+	var farm: Trailer = world.contracts._trailer("farm")
+	var loads := 0
+	var passes := 0
+	var dug := 0.0
+	while loads + passes < 18 and not _drivable(land, tile, r, s0, WHEELS):
+		if _lowest(land, tile, r, s0, true)[0] < 0.4:
+			# Dug down to the road: drag the bucket back over it, both ways and in three lanes.
+			for lane in [-2.4, 0.0, 2.4]:
+				for dir in [1.0, -1.0]:
+					await _set_rig(t, tractor, farm, tile.along(r, s0 + 10.0 * dir)[0] + across * lane, road_dir * dir)
+					await _drag(t, tractor, tile.along(r, s0 - 10.0 * dir)[0] + across * lane)
+			passes += 1
+			await _pour_at(t, tractor, farm, tile.along(r, s0 - 22.0)[0] + across * 13.0, road_dir, 0.0)  # off the road
+			continue
+		# Into its face along the road, from below and from above in turn, and in three lanes.
+		var way := 1.0 if loads % 2 == 0 else -1.0
+		var lane := across * ((loads / 2) % 3 - 1) * 2.4
+		await _set_rig(t, tractor, farm, tile.along(r, s0 - 6.5 * way)[0] + lane, road_dir * way)
+		await _dig(t, tractor, farm, 25.0, tile.along(r, s0 + 3.0 * way)[0] + lane)
+		dug += Loader.soil_in(farm)
+		await _pour_at(t, tractor, farm, tile.along(r, s0 - 22.0)[0] + across * 13.0, road_dir, 0.0)
+		loads += 1
+	t.ok(_drivable(land, tile, r, s0, WHEELS), "after %d loads and %d passes the landslide is not dug out: %s" % [loads, passes, _profile_note(land, tile, r, s0)])
+	world.set_truck(TruckSpec.pickup())
+	await t.ticks(2)
+	var secs := await _drive(t, world, _stretch(tile, r, s0 - 25.0, s0 + 25.0), 40)
+	t.ok(secs > 0.0, "the pickup does not drive up through the dug landslide: %s" % _profile_note(land, tile, r, s0))
+	t.note = "%d loads and %d passes levelling, %.0f m3 dug; the pickup through it in %.0f s" % [loads, passes, dug, secs]
+	vp.free()
+	shared.autodrive = false
+
+
 ## Whether the road over the washout drives as a road: along its centre line no metre climbs
 ## more than 0.4 m, and across it the ground is level to 0.5 m (docs/plan.md §5).
-func _drivable(land: Land, tile: Terrain, r: int, s0: float) -> bool:
+func _drivable(land: Land, tile: Terrain, r: int, s0: float, half := 3.0) -> bool:
 	var dir: Vector2 = tile.along(r, s0)[1]
 	var across := Vector2(-dir.y, dir.x)
 	var prev := INF
@@ -206,8 +299,8 @@ func _drivable(land: Land, tile: Terrain, r: int, s0: float) -> bool:
 		if prev < INF and absf(h - prev) > 0.4:
 			return false
 		prev = h
-		var l := land.get_height(c.x - across.x * 3.0, c.y - across.y * 3.0)
-		var rt := land.get_height(c.x + across.x * 3.0, c.y + across.y * 3.0)
+		var l := land.get_height(c.x - across.x * half, c.y - across.y * half)
+		var rt := land.get_height(c.x + across.x * half, c.y + across.y * half)
 		if absf(l - rt) > 0.5 or absf(l - h) > 0.5 or absf(rt - h) > 0.5:
 			return false
 	return true
@@ -218,7 +311,13 @@ func _profile_note(land: Land, tile: Terrain, r: int, s0: float) -> String:
 	for k in range(-8, 9, 2):
 		var c: Vector2 = tile.along(r, s0 + k)[0] + tile.origin
 		out.append("%.1f" % land.get_height(c.x, c.y))
-	return "heights along it " + " ".join(out)
+	var dir: Vector2 = tile.along(r, s0)[1]
+	var side := Vector2(-dir.y, dir.x)
+	var across := PackedStringArray()
+	for k in range(-8, 9, 4):
+		var c: Vector2 = tile.along(r, s0 + k)[0] + tile.origin
+		across.append("%.1f/%.1f/%.1f" % [land.get_height(c.x - side.x * 3.0, c.y - side.y * 3.0), land.get_height(c.x, c.y), land.get_height(c.x + side.x * 3.0, c.y + side.y * 3.0)])
+	return "heights along it " + " ".join(out) + "; across it " + " ".join(across)
 
 
 ## Sets the tractor down at p facing dir with the tipper hitched straight behind, and lets it settle.
@@ -311,8 +410,9 @@ func _volume(ew: Earthworks, p: Vector2, reach: int) -> float:
 
 
 ## [how far the lowest of the spots over the washout is under the road's level there, that spot
-## (world)]: the road's level is the line between the ground 9 m either side of the washout.
-func _lowest(land: Land, tile: Terrain, r: int, s0: float) -> Array:
+## (world)]: the road's level is the line between the ground 9 m either side of the washout. Highest:
+## the highest spot over it, and how far above.
+func _lowest(land: Land, tile: Terrain, r: int, s0: float, highest := false) -> Array:
 	var dir: Vector2 = tile.along(r, s0)[1]
 	var across := Vector2(-dir.y, dir.x)
 	var a: Vector2 = tile.along(r, s0 - 9.0)[0] + tile.origin
@@ -324,6 +424,8 @@ func _lowest(land: Land, tile: Terrain, r: int, s0: float) -> Array:
 		for side in [-2.4, 0.0, 2.4]:
 			var p: Vector2 = tile.along(r, s0 + k)[0] + tile.origin + across * side
 			var deficit := lerpf(ha, hb, (k + 9.0) / 18.0) - land.get_height(p.x, p.y)
+			if highest:
+				deficit = -deficit
 			if deficit > best[0]:
 				best = [deficit, p]
 	return best

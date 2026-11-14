@@ -235,7 +235,7 @@ static func zakarpattia() -> Valley:
 		PackedVector2Array([Vector2(-30, -72), Vector2(-80, -84), Vector2(-128, -88)]),
 	]
 	v.gaps = [v._gap_to_end(5, 11.0)]
-	v.features.append({"type": "slide", "road": 4, "s": 28.0, "width": 3.2, "height": 2.8, "length": 30.0})
+	v.features.append({"type": "slide", "road": 4, "s": 28.0, "width": 3.2, "height": 2.8, "length": 18.0})
 	v.road_smooth = 20.0
 	v.road_grade = 0.2
 	v.ramp_max = 36.0
