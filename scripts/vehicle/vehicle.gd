@@ -43,6 +43,7 @@ var hooked_by: Winch  # another truck's winch has hold of it: its brakes are off
 var dormant := false  # frozen far from the truck driven (Fleet): no wheels, no engine
 var condition := 1.0  # 0..1 (docs/plan.md §8): knocks, a flooded engine and rolling over cost it; low, it pulls less
 var flooded := false  # water got into its intake: the engine is dead until it is out of the water
+var lost := false  # left in the floods, not the player's yet: it is once it runs (Fleet, docs/plan.md §7)
 var upgrades := PackedStringArray()  # fitted in a garage (Upgrades)
 var water_over_intake := -INF  # m of water over its intake, less than 0 out of it; -INF no water
 var _under := 0.0  # s its intake has been under water
@@ -350,14 +351,14 @@ func hitch(t: Trailer) -> void:
 
 
 ## Lets the trailer go: it stands on its stand where it is.
-func unhitch() -> void:
+func unhitch(leaving := false) -> void:
 	if trailer == null:
 		return
 	PhysicsServer3D.free_rid(_joint)
 	_joint = RID()
 	var t := trailer
 	trailer = null
-	t.uncouple()
+	t.uncouple(leaving)
 
 
 ## What C does here, for the HUD's bottom line ("" nothing).
@@ -388,7 +389,7 @@ func _ray_exclude() -> Array[RID]:
 
 
 func _exit_tree() -> void:
-	unhitch()
+	unhitch(true)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -598,7 +599,7 @@ func _apply_upgrades() -> void:
 
 ## Its own state, for saving (Profile): fuel, condition, the engine, upgrades, its load.
 func to_dict() -> Dictionary:
-	return {"spec": spec.id, "fuel": fuel, "condition": condition, "flooded": flooded,
+	return {"spec": spec.id, "fuel": fuel, "condition": condition, "flooded": flooded, "lost": lost,
 		"upgrades": upgrades, "hold": hold.to_dict()}
 
 
@@ -606,6 +607,7 @@ func from_dict(d: Dictionary) -> void:
 	fuel = clampf(float(d.get("fuel", fuel)), 0.0, spec.fuel_capacity)
 	condition = clampf(float(d.get("condition", condition)), 0.0, 1.0)
 	flooded = bool(d.get("flooded", false))
+	lost = bool(d.get("lost", false))
 	upgrades = PackedStringArray(d.get("upgrades", []))
 	_apply_upgrades()
 	if typeof(d.get("hold")) == TYPE_DICTIONARY:

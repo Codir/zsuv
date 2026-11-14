@@ -70,7 +70,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	if truck:
-		truck.unhitch()
+		truck.unhitch(true)
 	_part()
 
 
@@ -116,10 +116,13 @@ func couple(v: Vehicle) -> void:
 
 ## Let go of by its truck (Vehicle.unhitch): on its stand again, passing through the truck until
 ## the two are apart, so a semi-trailer's deck does not knock the truck it sat on.
-func uncouple() -> void:
+func uncouple(leaving := false) -> void:
 	_parting = truck
 	truck = null
 	_spots.fill(NO_SPOT)
+	if leaving:  # the world, the truck or the trailer is going: nothing to stand on
+		_parting = null
+		return
 	# Its stand wound to the ground before the truck pulls out from under it, as a semi-trailer's
 	# legs are: it stays as high as the hitch held it, the stand up to LEGS further down or up to
 	# its whole travel shorter (over a hump), not pressed into the ground.

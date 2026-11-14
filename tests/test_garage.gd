@@ -349,3 +349,108 @@ func _sell_back(t: TCase) -> void:
 	c.profile.rigs = PackedStringArray()
 	c.profile.truck = "pickup"
 	c.garage_open = false
+
+
+## The upgrades (docs/plan.md §8): made in a garage from the parts in its yard, fitted, they do
+## what §8 says: the snorkel lifts the intake, the chains grip on ice, a 6x6 body changes what it
+## carries.
+func test_upgrades_are_made_from_parts_and_fitted(t: TCase) -> void:
+	var w = t.world
+	var v: Vehicle = w.vehicle
+	var ids := Upgrades.list(v).map(func(u: Dictionary) -> String: return u.id)
+	t.eq(ids, ["snorkel", "chains"], "what fits the pickup")
+	var six := await _six(t)
+	var six_ids := Upgrades.list(six).map(func(u: Dictionary) -> String: return u.id)
+	six.free()
+	t.eq(six_ids, ["snorkel", "chains", "body_tank", "body_flatbed", "body_tipper"], "what fits the 6x6")
+	t.ok(not Upgrades.fits(TruckSpec.semi(), "snorkel"), "a snorkel fits the semi")
+	var yard := _Yard.new()
+	t.eq(Upgrades.fit(v, "snorkel", yard), "It takes 1 parts: bring them to the yard", "with no parts in the yard")
+	yard.parts = 1.0
+	var low := v.intake_point().y - v.global_position.y
+	t.ok(Upgrades.fit(v, "snorkel", yard).begins_with("Fitted: snorkel"), "the snorkel is not fitted")
+	t.eq(yard.parts, 0.0, "the parts it took")
+	t.ok(v.intake_point().y - v.global_position.y > low + 0.6, "the intake is not up on the roof")
+	t.ok(v._snorkel_gfx and v._snorkel_gfx.visible, "the snorkel does not show")
+	t.eq(Upgrades.fit(v, "snorkel", w.infra.railhead), "Fitted already", "a second snorkel")
+	v.upgrades = PackedStringArray()
+	v.fit("chains")
+	v.upgrades = PackedStringArray()
+	v._apply_upgrades()
+	t.ok(v.wheels.all(func(wh: Chassis.Wheel) -> bool: return not wh.chains), "the chains stay on")
+	yard.free()
+
+
+func test_the_chains_grip_on_ice(t: TCase) -> void:
+	var land: Land = t.world.land
+	var lake := Vector2.INF
+	for tile in land.tiles:
+		if tile.valley.id == "polissia":
+			lake = tile.origin + Vector2(10.0, -12.0)  # Polissia's frozen lake
+	if not t.ok(lake != Vector2.INF, "no Polissia on the map"):
+		return
+	t.ok(land.sample(Vector3(lake.x, 0.0, lake.y)).ice > 0.5, "no ice on Polissia's lake")
+	var v := Vehicle.new()
+	v.spec = TruckSpec.pickup()
+	v.land = land
+	v.position = Vector3(lake.x, land.get_height(lake.x, lake.y) + 1.5, lake.y)
+	t.world.add_child(v)
+	v.set_driven(false)
+	await t.ticks(90)
+	var bare := v.wheels[0].surface.grip
+	v.fit("chains")
+	await t.ticks(5)
+	var chained := v.wheels[0].surface.grip
+	t.ok(bare < 0.25, "ice grips a bare tyre: %.2f" % bare)
+	t.ok(chained >= 0.39, "ice does not grip a chained tyre: %.2f" % chained)
+	t.note = "on ice: %.2f bare, %.2f in chains" % [bare, chained]
+	v.free()
+
+
+func test_a_6x6_body_changes_what_it_carries(t: TCase) -> void:
+	var six := await _six(t)
+	var yard := _Yard.new()
+	yard.parts = 3.0
+	t.eq(six.rig_room("fuel"), 0.0, "a flatbed takes fuel")
+	t.ok(Upgrades.fit(six, "body_tank", yard).begins_with("Fitted: tank body"), "the tank is not fitted")
+	t.eq(six.rig_room("fuel"), 2000.0, "litres in its tank body")
+	t.eq(six.rig_room("timber"), 0.0, "the tank takes timber")
+	t.ok(six._bodies.body_tank.visible and not six._bodies.body_tipper.visible, "the tank does not show")
+	six.rig_put("fuel", 500.0)
+	t.eq(Upgrades.fit(six, "body_tipper", yard), "Unload it first", "a body changed with fuel in it")
+	six.rig_take("fuel")
+	t.ok(Upgrades.fit(six, "body_tipper", yard).begins_with("Fitted: tipper body"), "the tipper is not fitted")
+	t.ok(not "body_tank" in six.upgrades and "body_tipper" in six.upgrades, "two bodies at once: %s" % six.upgrades)
+	t.eq(six.rig_room("gravel"), 1.0, "a load of gravel in the tipper")
+	t.eq(six.rig_room("soil"), 10.0, "m3 of soil in the tipper")
+	t.ok(Upgrades.fit(six, "body_flatbed", yard).begins_with("Fitted: flatbed body"), "the flatbed is not fitted")
+	t.eq(six.rig_room("timber"), 1.0, "timber on the flatbed")
+	t.eq(yard.parts, 0.0, "parts left")
+	six.free()
+	yard.free()
+
+
+## A 6x6 parked out of the way, not the fleet's.
+func _six(t: TCase) -> Vehicle:
+	var v := Vehicle.new()
+	v.spec = TruckSpec.six()
+	v.land = t.world.land
+	var farm: Vector2 = t.world.locations.farm.pos + Vector2(12.0, -4.0)
+	v.position = Vector3(farm.x, t.world.land.get_height(farm.x, farm.y) + 1.5, farm.y)
+	t.world.add_child(v)
+	v.set_driven(false)
+	await t.ticks(2)
+	return v
+
+
+## A base's yard, as a Site gives from its stock.
+class _Yard extends Node:
+	var parts := 0.0
+
+	func available(res: String) -> float:
+		return parts if res == "parts" else 0.0
+
+	func give(res: String, n: float) -> float:
+		var got := minf(n, available(res))
+		parts -= got
+		return got

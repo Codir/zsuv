@@ -112,7 +112,7 @@ func test_the_garage_fetches_a_truck_out_on_the_map(t: TCase) -> void:
 	t.ok(w.vehicle == six, "a second 6x6 came out of the garage")
 	t.ok(Vector2(six.global_position.x - spawn.x, six.global_position.z - spawn.z).length() < 1.0, "the 6x6 is not at the depot")
 	t.ok(absf(six.fuel - 33.0) < 0.2, "its fuel: %.1f L" % six.fuel)
-	t.eq(w.fleet.trucks.size(), 1, "trucks out on the map")
+	t.eq(w.fleet.trucks.filter(func(o: Vehicle) -> bool: return not o.lost).size(), 1, "trucks of the player's out on the map")
 	w.set_truck(TruckSpec.pickup())
 	await t.ticks(10)
 	t.ok(not is_instance_valid(six) or six.is_queued_for_deletion(), "the 6x6 left at the depot did not go into the garage")
@@ -185,6 +185,67 @@ func test_a_pickup_with_barrels_refuels_a_truck_found_dry(t: TCase) -> void:
 	t.eq(tractor.fuel, 50.0, "the tractor's tank from what was left")
 	t.ok(pickup.hold.is_empty() and pickup.mass == pickup.spec.mass, "the barrels are not empty")
 	await _done(t, [six, tractor], [])
+
+
+func test_found_trucks_run_once_fuelled_and_mended(t: TCase) -> void:
+	var w = t.world
+	var fleet: Fleet = w.fleet
+	var pickup: Vehicle = w.vehicle
+	var lost := fleet.trucks.filter(func(o: Vehicle) -> bool: return o.lost)
+	var six: Vehicle = null
+	var semi: Vehicle = null
+	for v in lost:
+		if v.spec.id == "six":
+			six = v
+		elif v.spec.id == "semi":
+			semi = v
+	if not t.ok(six != null and semi != null, "the 6x6 and the semi are not out on the map: %s" % [lost.map(func(o: Vehicle) -> String: return o.spec.id)]):
+		return
+	t.ok(six.fuel == 0.0 and absf(six.condition - 0.2) < 0.001, "the 6x6 found: %.0f L, %.0f%%" % [six.fuel, six.condition * 100.0])
+	t.ok(semi.fuel == 0.0 and semi.condition == 0.0 and semi.trailer != null and semi.trailer.spec.id == "semi_trailer", "the semi found without its semi-trailer or with fuel")
+	var sawmill: Vector2 = Vector2.INF
+	for tile in w.land.tiles:
+		if tile.valley.id == "khutir":
+			sawmill = tile.valley.locations.lumber.pos + tile.origin
+	t.ok(Vector2(six.global_position.x, six.global_position.z).distance_to(sawmill) < 50.0, "the 6x6 is not by the sawmill")
+	t.ok(not w.profile.has_rig("six") and not w.profile.has_rig("semi"), "found trucks are the player's already")
+	t.ok(w.land.fog.things.any(func(th: Dictionary) -> bool: return th.id == "truck:six"), "the 6x6 is nothing to find")
+	# The pickup beside the 6x6 with barrels: E steps not across, it pours.
+	var near := six.global_transform * Vector3(3.2, 0.0, 0.0)
+	await t.place(Vector2(near.x, near.z), six.global_rotation.y)
+	await t.ticks(30)
+	t.ok(fleet.prompt().begins_with("The heavy 6x6 needs fuel"), "beside it, E: %s" % fleet.prompt())
+	t.ok(fleet.interact() and w.vehicle == pickup, "E stepped into a truck that does not run")
+	pickup.rig_put("fuel")
+	t.ok(fleet.interact(), "E does not pour")
+	await t.ticks(2)
+	t.ok(not six.lost and w.profile.has_rig("six"), "fuelled, the 6x6 is not the player's")
+	# The semi: fuel, and a load of parts, for it has no condition left.
+	near = semi.global_transform * Vector3(3.5, 0.0, -2.0)
+	await t.place(Vector2(near.x, near.z), semi.global_rotation.y)
+	await t.ticks(30)
+	t.ok(fleet.interact(), "E does not pour into the semi")
+	await t.ticks(2)
+	t.ok(semi.lost and semi.fuel > 0.0, "the semi runs with no condition")
+	pickup.hold.clear()
+	pickup.rig_put("parts")
+	t.eq(fleet.prompt(), "[E] Mend the semi truck with the parts", "with parts on, E")
+	t.ok(fleet.interact(), "E does not mend")
+	await t.ticks(2)
+	t.ok(absf(semi.condition - Fleet.MEND) < 0.001 and pickup.hold.is_empty(), "the parts did not mend it")
+	t.ok(not semi.lost and w.profile.has_rig("semi") and w.profile.has_rig("semi_trailer"), "mended and fuelled, the semi and its semi-trailer are not the player's")
+	# As found again, for the tests after.
+	for v: Vehicle in [six, semi]:
+		v.lost = true
+		v.fuel = 0.0
+	six.condition = 0.2
+	semi.condition = 0.0
+	var rigs: PackedStringArray = w.profile.rigs
+	for id in ["six", "semi", "semi_trailer"]:
+		if id in rigs:
+			rigs.remove_at(rigs.find(id))
+	w.profile.rigs = rigs
+	pickup.hold.clear()
 
 
 ## A truck of spec parked out on the map at p facing yaw, settled; the pickup still driven.
