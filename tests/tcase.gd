@@ -43,5 +43,5 @@ func ticks(n: int) -> void:
 func place(p: Vector2, yaw: float, settle := 90) -> void:
 	var v: Vehicle = world.vehicle
 	v.autodrive = false
-	v.teleport(Vector3(p.x, world.terrain.get_height(p.x, p.y) + 1.2, p.y), yaw)
+	v.teleport(Vector3(p.x, world.land.get_height(p.x, p.y) + 1.2, p.y), yaw)
 	await ticks(settle)

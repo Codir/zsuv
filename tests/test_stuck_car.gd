@@ -6,7 +6,9 @@ extends RefCounted
 
 func test_every_road_has_a_ditch_with_room(t: TCase) -> void:
 	for v in Valley.all():
-		t.ok(v.ditches.size() >= v.roads.size() - 1, "%s: %d ditches for %d roads" % [v.id, v.ditches.size(), v.roads.size()])
+		# The roads to the biomes' borders (docs/plan.md §3) are short and new: no stuck cars there.
+		var own := v.roads.filter(func(r: PackedVector2Array) -> bool: return maxf(maxf(absf(r[0].x), absf(r[0].y)), maxf(absf(r[r.size() - 1].x), absf(r[r.size() - 1].y))) < 127.0).size()
+		t.ok(v.ditches.size() >= own - 1, "%s: %d ditches for %d roads" % [v.id, v.ditches.size(), own])
 		for d in v.ditches:
 			t.ok(absf((d.pos as Vector2).distance_to(d.at) - 7.0) < 0.01, "%s: a ditch off its road" % v.id)
 		for ft in v.features:
@@ -36,9 +38,9 @@ func test_a_car_on_the_road_by_itself_is_not_paid(t: TCase) -> void:
 	c.take(o)
 	var car: StuckCar = c._car
 	var p: Vector2 = o.ditch.pos
-	car.global_transform = Transform3D(Basis(), Vector3(p.x, t.world.terrain.get_height(p.x, p.y) + 0.8, p.y))
+	car.global_transform = Transform3D(Basis(), Vector3(p.x, t.world.land.home.get_height(p.x, p.y) + 0.8, p.y))
 	await t.ticks(120)
-	t.ok(car.on_road(t.world.terrain), "the car is not on the road")
+	t.ok(car.on_road(t.world.land), "the car is not on the road")
 	t.ok(not c.job.is_empty() and c.money == 0, "paid for a car the winch never had")
 	c.call("_end_job")
 
@@ -55,7 +57,7 @@ func test_the_winch_pulls_the_car_back_onto_the_road(t: TCase) -> void:
 	if not t.ok(car != null, "no car in the ditch"):
 		return
 	await t.ticks(90)
-	t.ok(not car.on_road(t.world.terrain), "the car starts on the road")
+	t.ok(not car.on_road(t.world.land), "the car starts on the road")
 	t.ok(c.objective_text().begins_with("STUCK CAR"), "objective: " + c.objective_text())
 	# Stand on the far side of the road, facing the ditch.
 	var d: Dictionary = o.ditch

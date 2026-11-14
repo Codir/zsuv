@@ -87,7 +87,7 @@ func _wait(sec: float) -> void:
 func _place(p: Vector2, yaw: float) -> void:
 	var v: Vehicle = world.vehicle
 	v.autodrive = false
-	v.teleport(Vector3(p.x, world.terrain.get_height(p.x, p.y) + 1.2, p.y), yaw)
+	v.teleport(Vector3(p.x, world.land.home.get_height(p.x, p.y) + 1.2, p.y), yaw)
 
 
 ## Each part's loudness: RMS and peak of the 16-bit stereo recording, in dBFS.

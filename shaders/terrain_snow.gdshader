@@ -20,7 +20,7 @@ varying vec3 world_pos;
 
 void vertex() {
 	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	vec2 cell = wp.xz + T_HALF;
+	vec2 cell = wp.xz - tile_origin + T_HALF;
 	vec4 s = textureLod(snow_tex, (cell + 0.5) / T_N, 0.0);
 	float tr = textureLod(track_tex, (cell * 2.0 + 0.5) / TRACK_N, 0.0).r;
 	float snow = s.r * max_snow * (1.0 - tr * 0.7);
@@ -36,7 +36,7 @@ void vertex() {
 }
 
 void fragment() {
-	vec2 cell = world_pos.xz + T_HALF;
+	vec2 cell = world_pos.xz - tile_origin + T_HALF;
 	vec4 s = texture(snow_tex, (cell + 0.5) / T_N);
 	float tr = texture(track_tex_px, (cell * 2.0 + 0.5) / TRACK_N).r;
 	float n = psx_hash(floor(world_pos * 4.0));

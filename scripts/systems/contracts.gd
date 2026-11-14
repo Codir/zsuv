@@ -52,7 +52,7 @@ const JOLT_TICKS := 3
 const OFFROAD := 1.3  # an off-road place is this much further than the straight line
 
 var vehicle: Vehicle
-var terrain: Terrain
+var land: Land
 var profile := Profile.new()  # the player's, saved; one kept in memory when there is none
 var money: int:
 	get:
@@ -85,9 +85,9 @@ var _car: StuckCar  # the stuck job's car, while there is one
 var _pulled := false  # the winch has had hold of it
 
 
-func setup(v: Vehicle, t: Terrain, locations: Dictionary) -> void:
+func setup(v: Vehicle, t: Land, locations: Dictionary) -> void:
 	vehicle = v
-	terrain = t
+	land = t
 	_depot = locations.depot
 	_markers["depot"] = _make_marker(_depot, Color(1.0, 0.8, 0.2))
 	for key in locations:
@@ -113,7 +113,7 @@ func setup(v: Vehicle, t: Terrain, locations: Dictionary) -> void:
 func roll_offers() -> void:
 	var keys: Array = _places.keys()
 	var kinds: Array = KINDS.duplicate()
-	if not terrain.valley.ditches.is_empty():
+	if not land.home.valley.ditches.is_empty():
 		kinds.append("stuck")
 	_shuffle(keys)
 	_shuffle(kinds)
@@ -126,7 +126,7 @@ func roll_offers() -> void:
 	offers.clear()
 	for i in picked.size():
 		if picked[i] == "stuck":
-			offers.append(offer_stuck(rng.randi() % terrain.valley.ditches.size()))
+			offers.append(offer_stuck(rng.randi() % land.home.valley.ditches.size()))
 			continue
 		for j in keys.size():
 			var key: String = keys[(i + j) % keys.size()]
@@ -142,7 +142,7 @@ func _accepts(key: String, kind: String) -> bool:
 
 ## A car stuck in the valley's ditch i, to winch out.
 func offer_stuck(i: int) -> Dictionary:
-	var d: Dictionary = terrain.valley.ditches[i]
+	var d: Dictionary = land.home.valley.ditches[i]
 	var near := ""
 	var best := INF
 	for key in _places:
@@ -152,7 +152,7 @@ func offer_stuck(i: int) -> Dictionary:
 			near = _places[key].name
 	var loc := {"name": "the ditch near %s" % near, "pos": d.pos, "radius": 10.0}
 	return {"key": "ditch%d" % i, "kind": "stuck", "loc": loc, "name": loc.name, "cargo": "pull a car out",
-		"route": _depot.pos.distance_to(d.pos) * OFFROAD, "reward": _round(STUCK_REWARD * terrain.valley.pay),
+		"route": _depot.pos.distance_to(d.pos) * OFFROAD, "reward": _round(STUCK_REWARD * land.home.valley.pay),
 		"record": "", "ditch": d}
 
 
@@ -167,8 +167,8 @@ func offer(key: String, kind: String) -> Dictionary:
 		"long":
 			cargo = LONG.get(loc.kind, "pipes")
 	var o := {"key": key, "kind": kind, "loc": loc, "name": loc.name, "cargo": cargo, "route": route,
-		"reward": _round(float(loc.reward) * terrain.valley.pay * PAY[kind]),
-		"record": "%s:%s:%s" % [terrain.valley.id, key, kind]}
+		"reward": _round(float(loc.reward) * land.home.valley.pay * PAY[kind]),
+		"record": "%s:%s:%s" % [land.home.valley.id, key, kind]}
 	if kind == "timed":
 		var medals := PackedFloat32Array()
 		for kmh in MEDAL_KMH:
@@ -431,7 +431,7 @@ func _physics_process(delta: float) -> void:
 	if job.kind == "stuck" and _car:
 		# Paid once the winch has pulled it out, not for a car that rolled out by itself.
 		_pulled = _pulled or vehicle.winch.anchor_body == _car
-		if _pulled and _car.on_road(terrain):
+		if _pulled and _car.on_road(land):
 			var paid: int = job.reward
 			money += paid
 			if _car.upright():
@@ -585,7 +585,7 @@ func _update_markers() -> void:
 func _spawn_car(d: Dictionary) -> void:
 	_car = StuckCar.new(rng.randi())
 	add_child(_car)
-	_car.slide_into(d, terrain)
+	_car.slide_into(d, land)
 	_pulled = false
 	vehicle.winch.bodies.append(_car)
 
@@ -595,7 +595,7 @@ func _spawn_car(d: Dictionary) -> void:
 func _route_length(a: Vector2, loc: Dictionary) -> float:
 	var pts := PackedVector2Array()
 	var edges := {}  # point index -> [[index, metres], ...]
-	for road in terrain.roads:
+	for road in land.home.roads:
 		var prev := -1
 		for p in road:
 			var i := -1
@@ -662,7 +662,7 @@ func _distance_to(loc: Dictionary) -> float:
 
 func _loc_pos(loc: Dictionary) -> Vector3:
 	var p: Vector2 = loc.pos
-	return Vector3(p.x, terrain.get_height(p.x, p.y), p.y)
+	return Vector3(p.x, land.get_height(p.x, p.y), p.y)
 
 
 func _make_marker(loc: Dictionary, color: Color) -> Node3D:

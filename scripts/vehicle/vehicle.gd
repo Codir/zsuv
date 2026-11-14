@@ -136,14 +136,14 @@ func _clear_of(t: Trailer, xf: Transform3D) -> Transform3D:
 	var fall := BoxShape3D.new()  # and what it would fall onto
 	fall.size = body.size + Vector3(0.0, 2.5, 0.0)
 	var q := PhysicsShapeQueryParameters3D.new()
-	q.exclude = [get_rid(), terrain.body.get_rid()] if terrain else [get_rid()]
+	q.exclude = [get_rid()] + land.bodies() if land else [get_rid()]
 	var space := get_world_3d().direct_space_state
-	var lift := xf.origin.y - (terrain.get_height(xf.origin.x, xf.origin.z) if terrain else 0.0)
+	var lift := xf.origin.y - (land.get_height(xf.origin.x, xf.origin.z) if land else 0.0)
 	for i in 41:
 		for way in ([Vector3.FORWARD] if i == 0 else [Vector3.FORWARD, Vector3.LEFT, Vector3.RIGHT]):
 			var at := xf.translated(xf.basis * way * 0.5 * i)
-			if terrain:
-				at.origin.y = terrain.get_height(at.origin.x, at.origin.z) + lift
+			if land:
+				at.origin.y = land.get_height(at.origin.x, at.origin.z) + lift
 			q.shape = fall
 			q.transform = Transform3D(at.basis, at * ((lo + hi) * 0.5 - Vector3(0.0, 1.25, 0.0)))
 			if space.intersect_shape(q, 32).any(func(hit: Dictionary) -> bool: return hit.collider == t if t else hit.collider is Trailer):
@@ -159,8 +159,8 @@ func _clear_of(t: Trailer, xf: Transform3D) -> Transform3D:
 ## semi-trailer it has just let go).
 func reset_upright() -> void:
 	var p := global_position
-	if terrain:
-		p.y = terrain.get_height(p.x, p.z) + 2.0
+	if land:
+		p.y = land.get_height(p.x, p.z) + 2.0
 	var hitched := trailer != null
 	teleport(p, global_rotation.y)
 	if not hitched:

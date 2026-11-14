@@ -154,7 +154,7 @@ func _tyres(delta: float) -> void:
 
 ## Snow crunches under a tyre; a dry road's dust does not.
 func _layer_heard() -> bool:
-	return vehicle.terrain == null or vehicle.terrain.valley.layer != "dust"
+	return vehicle.land == null or vehicle.land.valley_at(Vector2(vehicle.global_position.x, vehicle.global_position.z)).layer != "dust"
 
 
 ## The motor runs while the winch reels in, lower as the cable takes the strain.

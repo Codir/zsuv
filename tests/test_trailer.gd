@@ -40,7 +40,7 @@ func test_each_trailer_stands_still(t: TCase) -> void:
 			for w in tr.wheels:
 				var m := tr.global_transform * w.mount
 				t.ok(w.contact, "%s: the wheel at %s off level ground, %.2f m short of it" % [
-					where[i], w.mount, m.y - t.world.terrain.get_height(m.x, m.z) - tr.rest_length - w.radius])
+					where[i], w.mount, m.y - t.world.land.home.get_height(m.x, m.z) - tr.rest_length - w.radius])
 	t.note = ", ".join(notes)
 	_free(t, stood)
 
@@ -247,7 +247,7 @@ func test_the_tow_takes_both_to_the_depot(t: TCase) -> void:
 	t.ok(from < 2.0, "the truck is %.1f m from the depot's spot" % from)
 	t.ok(v.trailer == null and tr.truck == null, "the trailer is still hitched")
 	t.ok(at.distance_to(depot) < 45.0, "the trailer is %.0f m from the depot" % at.distance_to(depot))
-	t.ok(t.world.terrain.road_distance(at) > Terrain.ROAD_HALF_WIDTH, "the trailer stands on a road")
+	t.ok(t.world.land.home.road_distance(at) > Terrain.ROAD_HALF_WIDTH, "the trailer stands on a road")
 	t.ok(v.global_transform.basis.y.y > 0.95 and tr.global_transform.basis.y.y > 0.95, "not upright")
 	t.ok(ok_wheels, "the trailer's wheels off the ground")
 	_free(t, [tr])
@@ -307,7 +307,7 @@ func test_r_lets_the_trailer_go_where_there_is_no_room_behind(t: TCase) -> void:
 	var v: Vehicle = t.world.vehicle
 	var tr := await _hitched(t)
 	# The truck sent 25 m ahead, with a wall where the trailer would go straight behind it there.
-	var terrain: Terrain = t.world.terrain
+	var terrain: Terrain = t.world.land.home
 	var yaw := v.global_rotation.y
 	var to := v.global_position - v.global_transform.basis.z * 25.0
 	to.y = terrain.get_height(to.x, to.z) + 2.0
@@ -329,7 +329,7 @@ func test_r_sets_the_semi_down_clear_of_the_semi_trailer_it_lets_go(t: TCase) ->
 	await t.ticks(5)
 	var v: Vehicle = t.world.vehicle
 	var c: Contracts = t.world.contracts
-	var terrain: Terrain = t.world.terrain
+	var terrain: Terrain = t.world.land.home
 	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw)
 	var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), v.global_rotation.y)
 	await t.ticks(20)
@@ -366,7 +366,7 @@ func test_r_does_not_set_the_semi_down_in_a_house_ahead(t: TCase) -> void:
 	await t.ticks(5)
 	var v: Vehicle = t.world.vehicle
 	var c: Contracts = t.world.contracts
-	var terrain: Terrain = t.world.terrain
+	var terrain: Terrain = t.world.land.home
 	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw)
 	var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), v.global_rotation.y)
 	await t.ticks(20)
@@ -454,7 +454,7 @@ func test_after_c_the_semi_backs_into_its_semi_trailer_not_through_it(t: TCase) 
 	await t.ticks(5)
 	var v: Vehicle = t.world.vehicle
 	var c: Contracts = t.world.contracts
-	var terrain: Terrain = t.world.terrain
+	var terrain: Terrain = t.world.land.home
 	var notes := PackedStringArray()
 	for spot in [[Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw, ""], [Vector2(88.5, -42.3), deg_to_rad(-165.0), "long"],
 			[Vector2(88.5, -42.3), deg_to_rad(-165.0), ""], [Vector2(95.8, -13.4), deg_to_rad(-6.0), "long"],
@@ -543,7 +543,7 @@ func test_r_right_after_c_sets_the_semi_down_clear_of_its_semi_trailer(t: TCase)
 	await t.ticks(5)
 	var v: Vehicle = t.world.vehicle
 	var c: Contracts = t.world.contracts
-	var terrain: Terrain = t.world.terrain
+	var terrain: Terrain = t.world.land.home
 	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw, 30)
 	var tr := _behind(t, TrailerSpec.semi_trailer(), v.hitch_point(), v.global_rotation.y)
 	await t.ticks(20)
@@ -600,7 +600,7 @@ func _behind(t: TCase, spec: TrailerSpec, at: Vector3, yaw: float, kind := "") -
 func _trailer(t: TCase, spec: TrailerSpec, at: Vector2, yaw: float, kind := "") -> Trailer:
 	var tr := Trailer.new()
 	tr.spec = spec
-	tr.terrain = t.world.terrain
+	tr.land = t.world.land
 	t.world.add_child(tr)
 	tr.set_load(kind)
 	tr.stand_on(at, yaw)
@@ -648,7 +648,7 @@ func _weight(v: Vehicle, tr: Trailer) -> float:
 ## can be found, clear of the places, the trees and rocks, the truck and the spots taken:
 ## [point, yaw, degrees], or [] none.
 func _spot(t: TCase, lo: float, hi: float, length: float, taken: Array[Vector2]) -> Array:
-	var terrain: Terrain = t.world.terrain
+	var terrain: Terrain = t.world.land.home
 	var truck := Vector2(t.world.vehicle.global_position.x, t.world.vehicle.global_position.z)
 	var best := []
 	var best_warp := 0.15

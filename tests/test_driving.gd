@@ -8,7 +8,7 @@ func test_drives_down_the_road(t: TCase) -> void:
 	await t.place(Vector2(c.spawn_pos.x, c.spawn_pos.z), c.spawn_yaw)
 	v.fuel = v.spec.fuel_capacity
 	var start := v.global_position
-	var ruts_before := _ruts(t.world.terrain)
+	var ruts_before := _ruts(t.world.land.home)
 	v.drive_along(t.world.roads[0].slice(1))
 	var top_speed := 0.0
 	var min_up := 1.0
@@ -23,7 +23,7 @@ func test_drives_down_the_road(t: TCase) -> void:
 	t.ok(top_speed > 5.0, "top speed %.1f m/s" % top_speed)
 	t.ok(min_up > 0.6, "nearly rolled over: up.y %.2f" % min_up)
 	t.ok(v.fuel < v.spec.fuel_capacity, "no fuel burnt")
-	t.ok(_ruts(t.world.terrain) > ruts_before, "the wheels left no ruts")
+	t.ok(_ruts(t.world.land.home) > ruts_before, "the wheels left no ruts")
 
 
 func test_no_drive_without_fuel(t: TCase) -> void:

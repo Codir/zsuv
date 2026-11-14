@@ -3,7 +3,8 @@ extends RefCounted
 ## road no step where its nearest point jumps from one stretch of it to another (the legs of a
 ## hairpin) or to another road. A step, not a slope: what the road holds the ground to is looked at
 ## every 1/64 m between neighbouring pixels, and only what changes there faster than anything smooth
-## counts. The terrain alone, without its world (the shared world's for the khutir valley).
+## counts. Every tile of the shared world's land; a road's barriers (a gap span, a washout, a slide) are
+## test_map.gd's.
 
 const SHELF := Terrain.ROAD_HALF_WIDTH + 4.0  # how far from its centre line a road holds the ground
 const MAX_STEP := 0.6  # m
@@ -14,10 +15,8 @@ const MAX_GRADE := 0.5
 
 func test_no_step_beside_the_roads_and_the_places_level(t: TCase) -> void:
 	var notes := PackedStringArray()
-	for v in Valley.all():
-		var terrain: Terrain = t.world.terrain if v.id == t.world.valley.id else Terrain.new()
-		if terrain != t.world.terrain:
-			terrain.generate(v)
+	for terrain: Terrain in t.world.land.tiles:
+		var v := terrain.valley
 		var places: Array = terrain.valley.locations.values()
 		for loc in places:
 			var spread := _spread(terrain, loc.pos, float(loc.radius) - 2.0)
@@ -58,8 +57,6 @@ func test_no_step_beside_the_roads_and_the_places_level(t: TCase) -> void:
 		var near := terrain._road_closest(worst_at)
 		t.ok(worst <= MAX_STEP, "%s: the ground steps %.2f m at %s, %.1f m from road %d" % [v.id, worst, worst_at, near.x, near.road])
 		notes.append("%s %.2f (grade %.2f)" % [v.id, worst, steepest])
-		if terrain != t.world.terrain:
-			terrain.free()
 	t.note = "steepest step: " + ", ".join(notes)
 
 
@@ -97,6 +94,9 @@ func _steepest(terrain: Terrain, road: PackedVector2Array) -> Vector2:
 	for k in pts.size() - 4:
 		var a := pts[k]
 		var b := pts[k + 4]
+		if terrain.barrier(a) or terrain.barrier(b):
+			along += a.distance_to(pts[k + 1])
+			continue
 		var g := absf(terrain.get_height(b.x, b.y) - terrain.get_height(a.x, a.y)) / maxf(a.distance_to(b), 0.01)
 		if g > worst.x:
 			worst = Vector2(g, along)

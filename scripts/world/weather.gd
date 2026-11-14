@@ -92,3 +92,31 @@ static func dusk() -> Weather:
 	var w := Weather.new()
 	w.name = "winter dusk"
 	return w
+
+
+## a's sky going over into b's, t of the way (a border crossed, docs/plan.md §3): the colours, the
+## light and the fog blend; what falls is a's up to halfway and b's after, its amount blending
+## from none on the side where nothing falls.
+static func mix(a: Weather, b: Weather, t: float) -> Weather:
+	if t <= 0.0:
+		return a
+	if t >= 1.0:
+		return b
+	var w := Weather.new()
+	w.name = a.name if t < 0.5 else b.name
+	w.sky = a.sky.lerp(b.sky, t)
+	w.fog = a.fog.lerp(b.fog, t)
+	w.fog_density = lerpf(a.fog_density, b.fog_density, t)
+	w.ambient = a.ambient.lerp(b.ambient, t)
+	w.ambient_energy = lerpf(a.ambient_energy, b.ambient_energy, t)
+	w.sun = a.sun.lerp(b.sun, t)
+	w.sun_energy = lerpf(a.sun_energy, b.sun_energy, t)
+	w.sun_angle = a.sun_angle.lerp(b.sun_angle, t)
+	var main := a if t < 0.5 else b
+	w.fall = main.fall if main.fall != "none" else (b.fall if t < 0.5 else a.fall)
+	var amount_a := a.fall_amount if a.fall == w.fall else 0
+	var amount_b := b.fall_amount if b.fall == w.fall else 0
+	w.fall_amount = roundi(lerpf(amount_a, amount_b, t))
+	w.wind = lerpf(a.wind, b.wind, t)
+	w.night = a.night if t < 0.5 else b.night
+	return w

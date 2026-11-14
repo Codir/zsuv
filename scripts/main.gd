@@ -8,7 +8,7 @@ signal leave  # Esc: back to the title (scripts/game.gd)
 
 var valley: Valley  # set before the scene enters the tree; the khutir valley if not
 var profile: Profile  # the same; a profile in memory if not
-var terrain: Terrain
+var land: Land  # the map; the world's origin is the middle of valley's biome
 var vehicle: Vehicle
 var camera_rig: CameraRig
 var contracts: Contracts
@@ -22,6 +22,9 @@ var _env: Environment
 var _sun: DirectionalLight3D
 var _parked := {}  # trailer -> the spot it was given by the depot, about the spawn: [its footprint, the lane ahead of it, the spot]
 var _fall: CPUParticles3D
+var _sky: Weather  # the sky the land last gave where the truck is (Land.weather_at)
+var _biome := ""  # the biome the truck is in
+var _reveal_t := 0.0
 
 
 func _ready() -> void:
@@ -32,15 +35,11 @@ func _ready() -> void:
 	locations = valley.locations
 	roads = valley.roads
 
-	terrain = Terrain.new()
-	terrain.name = "Terrain"
-	add_child(terrain)
-	terrain.generate(valley)
-
-	builder = WorldBuilder.new()
-	builder.name = "World"
-	add_child(builder)
-	builder.build(terrain, valley)
+	land = Land.new()
+	land.name = "Land"
+	add_child(land)
+	land.build(valley)
+	builder = land.builders[land.tiles.find(land.home)]
 
 	if profile == null:
 		profile = Profile.new()
@@ -50,7 +49,7 @@ func _ready() -> void:
 
 	camera_rig = CameraRig.new()
 	camera_rig.target = vehicle
-	camera_rig.terrain = terrain
+	camera_rig.land = land
 	add_child(camera_rig)
 	camera_rig.snap_to_target()
 
@@ -60,7 +59,7 @@ func _ready() -> void:
 	add_child(contracts)
 	contracts.profile = profile
 	_park_trailers()
-	contracts.setup(vehicle, terrain, locations)
+	contracts.setup(vehicle, land, locations)
 	contracts.truck_wanted.connect(set_truck)
 	contracts.rigs_changed.connect(_park_trailers)
 	contracts.towing.connect(_towing)
@@ -71,7 +70,11 @@ func _ready() -> void:
 	hud.setup(vehicle, contracts)
 	map_screen = MapScreen.new()
 	add_child(map_screen)
-	map_screen.setup(terrain, vehicle, contracts, locations, builder.tree_points)
+	map_screen.setup(land, vehicle, contracts, locations, builder.tree_points)
+	# The paper map is blank but around the camp; it draws itself as the truck goes (docs/plan.md §3).
+	land.fog.found.connect(_found)
+	land.fog.reveal(Vector2(valley.spawn.x, valley.spawn.y), Fog.BUILDING)
+	_biome = valley.id
 
 	if "--autodrive" in OS.get_cmdline_user_args():
 		vehicle.drive_along(roads[0].slice(1))
@@ -86,7 +89,7 @@ func _ready() -> void:
 
 ## Where the truck starts: beside the depot, facing the first road out.
 func _spawn() -> Vector3:
-	return Vector3(valley.spawn.x, terrain.get_height(valley.spawn.x, valley.spawn.y) + 1.5, valley.spawn.y)
+	return Vector3(valley.spawn.x, land.get_height(valley.spawn.x, valley.spawn.y) + 1.5, valley.spawn.y)
 
 
 ## A truck of spec at the spawn, in the world (the pickup when spec is null).
@@ -94,11 +97,17 @@ func _truck(spec: TruckSpec) -> Vehicle:
 	var v := Vehicle.new()
 	v.name = "Truck"
 	v.spec = spec if spec else TruckSpec.pickup()
-	v.terrain = terrain
+	v.land = land
 	v.position = _spawn()
 	v.rotation.y = valley.spawn_yaw
 	add_child(v)
-	v.winch.anchors = builder.anchor_points
+	v.winch.anchors = land.anchor_points
+	if v.spec.id == "tractor":  # its front loader, and the farm trailer is its tipper (docs/plan.md §4)
+		var loader := Loader.new()
+		loader.name = "Loader"
+		loader.vehicle = v
+		loader.land = land
+		v.add_child(loader)
 	return v
 
 
@@ -126,7 +135,7 @@ func _park_trailers() -> void:
 		var t := Trailer.new()
 		t.name = "Trailer_%s" % spec.id
 		t.spec = spec
-		t.terrain = terrain
+		t.land = land
 		add_child(t)
 		_park(t)
 		contracts.trailers.append(t)
@@ -178,7 +187,7 @@ func _on_spawn() -> Array[Trailer]:
 	var q := PhysicsShapeQueryParameters3D.new()
 	q.shape = box
 	q.transform = Transform3D(Basis(Vector3.UP, valley.spawn_yaw), _spawn() + Vector3(0.0, 0.5, 0.0))
-	q.exclude = [terrain.body.get_rid()]
+	q.exclude = land.bodies()
 	var out: Array[Trailer] = []
 	for hit in get_world_3d().direct_space_state.intersect_shape(q, 8):
 		var t := hit.collider as Trailer
@@ -237,7 +246,7 @@ func _parking(t: Trailer, away: Array[RID] = []) -> Transform3D:
 		spots.push_front(mine)
 	var space := get_world_3d().direct_space_state
 	var q := PhysicsShapeQueryParameters3D.new()
-	q.exclude = [t.get_rid(), terrain.body.get_rid()] + away
+	q.exclude = [t.get_rid()] + land.bodies() + away
 	# How good a spot is, the lower the better: 0 level (0.6 m along it at most) and off the roads;
 	# 1 fairly level (1.2 m); 2 as steep as a trailer stands still on (1.7 m, 8 degrees along a
 	# semi-trailer); all three with its wheels on the ground and the lane even with it; 3 anywhere
@@ -255,14 +264,14 @@ func _parking(t: Trailer, away: Array[RID] = []) -> Transform3D:
 				or lanes_taken.any(func(r: Rect2) -> bool: return r.intersects(rect)):
 			continue
 		var p := _spawn() + Basis(Vector3.UP, valley.spawn_yaw) * Vector3(s.x, 0.0, s.y)
-		p.y = terrain.get_height(p.x, p.z)
+		p.y = land.get_height(p.x, p.z)
 		if ends.any(func(e: Vector3) -> bool: var c := p + turn * e; return maxf(absf(c.x), absf(c.z)) > Terrain.HALF - 4.0):
 			continue
 		var low := INF
 		var high := -INF
 		for f in feet:
 			var c: Vector3 = p + turn * f
-			var h := terrain.get_height(c.x, c.z)
+			var h := land.get_height(c.x, c.z)
 			low = minf(low, h)
 			high = maxf(high, h)
 		var grade := 3
@@ -271,7 +280,7 @@ func _parking(t: Trailer, away: Array[RID] = []) -> Transform3D:
 			var off_road := INF
 			for f in feet:
 				var c: Vector3 = p + turn * f
-				off_road = minf(off_road, terrain.road_distance(Vector2(c.x, c.z)))
+				off_road = minf(off_road, land.road_distance(Vector2(c.x, c.z)))
 			if off_road > Terrain.ROAD_HALF_WIDTH:
 				grade = 0 if high - low <= 0.6 and off_road > Terrain.ROAD_HALF_WIDTH + 0.5 else (1 if high - low <= 1.2 else 2)
 				if grade < best_grade and (t.unevenness(Vector2(p.x, p.z), yaw) > Trailer.DROOP * 0.75 or not t.reachable(Vector2(p.x, p.z), yaw, lane)):
@@ -283,7 +292,7 @@ func _parking(t: Trailer, away: Array[RID] = []) -> Transform3D:
 		var clear := space.intersect_shape(q, 1).is_empty()
 		q.shape = lane_box
 		var mid := p + turn * Vector3(0.0, 0.0, lo.z - lane * 0.5)  # the lane's, on the ground there
-		q.transform = Transform3D(turn, Vector3(mid.x, terrain.get_height(mid.x, mid.z) + 1.4, mid.z))
+		q.transform = Transform3D(turn, Vector3(mid.x, land.get_height(mid.x, mid.z) + 1.4, mid.z))
 		clear = clear and space.intersect_shape(q, 1).is_empty()
 		if not clear:
 			grade = 4
@@ -337,9 +346,41 @@ func _capture(what: String) -> void:
 func _process(_delta: float) -> void:
 	if vehicle.autodrive and Engine.get_process_frames() % 30 == 0:
 		print("autodrive pos %s  speed %.1f" % [vehicle.global_position.snapped(Vector3.ONE * 0.1), vehicle.forward_speed])
+	_blend_sky()
+	_reveal(_delta)
 	var cam := camera_rig.camera
 	if _fall:
 		_fall.global_position = cam.global_position - cam.global_transform.basis.z * 10.0 + Vector3(0.0, 8.0, 0.0)
+
+
+## The truck being driven uncovers the map around it, and crossing into a biome shows its name.
+func _reveal(delta: float) -> void:
+	_reveal_t -= delta
+	if _reveal_t > 0.0:
+		return
+	_reveal_t = 0.25
+	var p := Vector2(vehicle.global_position.x, vehicle.global_position.z)
+	land.fog.reveal(p, land.fog.radius_of(vehicle))
+	var here := land.valley_at(p)
+	if here.id != _biome:
+		_biome = here.id
+		hud.show_message(here.biome.to_upper())
+
+
+func _found(thing: Dictionary) -> void:
+	if thing.kind != "biome":
+		hud.show_message("Found: %s" % thing.name)
+
+
+## Crossing a border, the sky, fog, light and what falls blend into the next biome's over 60 m
+## (docs/plan.md §3). Only when the land's sky changes, so a sky set by hand stays until then.
+func _blend_sky() -> void:
+	var w := land.weather_at(Vector2(vehicle.global_position.x, vehicle.global_position.z))
+	if _sky == null:
+		_sky = w
+	elif w != _sky and (w.name != _sky.name or not w.sky.is_equal_approx(_sky.sky) or w.fall_amount != _sky.fall_amount):
+		_sky = w
+		apply_weather(w)
 
 
 ## The window or the browser tab lost the keyboard: a key let go out there never reaches the game
@@ -374,7 +415,7 @@ func _toggle_map() -> void:
 func _winch_test() -> void:
 	# Park the truck nose-first in deep snow on a slope, hook up and pull.
 	var p := Vector2(-40.0, -60.0)
-	vehicle.teleport(Vector3(p.x, terrain.get_height(p.x, p.y) + 1.5, p.y), 0.0)
+	vehicle.teleport(Vector3(p.x, land.get_height(p.x, p.y) + 1.5, p.y), 0.0)
 	vehicle.set_cargo(true)
 	await get_tree().create_timer(1.5).timeout
 	print("winch candidate %d  prompt: %s" % [vehicle.winch.candidate, vehicle.winch.prompt()])
@@ -405,6 +446,8 @@ func _setup_input() -> void:
 		"winch": [KEY_F],
 		"winch_reel": [KEY_SHIFT],
 		"hitch": [KEY_C],
+		"dig": [KEY_B],
+		"tip": [KEY_V],
 	}
 	for action in map:
 		if InputMap.has_action(action):
@@ -442,12 +485,15 @@ func apply_weather(w: Weather) -> void:
 
 ## Snow drifting down around the camera, or rain streaking through, or nothing.
 func _setup_fall(w: Weather) -> void:
+	if _fall and w.fall != "none" and _fall.get_meta("fall", "") == w.fall and absi(_fall.amount - w.fall_amount) < maxi(_fall.amount / 5, 1):
+		return  # near enough: a new one would start falling from the top again
 	if _fall:
 		_fall.queue_free()
 		_fall = null
-	if w.fall == "none":
+	if w.fall == "none" or w.fall_amount <= 0:
 		return
 	_fall = CPUParticles3D.new()
+	_fall.set_meta("fall", w.fall)
 	_fall.amount = w.fall_amount
 	_fall.local_coords = false
 	_fall.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX

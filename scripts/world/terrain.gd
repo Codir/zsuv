@@ -1,16 +1,23 @@
 class_name Terrain
 extends Node3D
 ## Procedural 256x256 m terrain from a Valley: heights + a snow (or dust) and mud layer that the
-## wheels deform, ice on frozen lakes.
+## wheels deform, ice on frozen lakes. One tile of the Land (docs/plan.md §3): its node stands at
+## origin, everything here is in the tile's own metres (-128..128), and Land turns the world's
+## into them. shape() makes the ground, Land joins the tiles at their borders, finish() builds
+## what is seen and what is driven on.
 
 const SIZE := 256
 const HALF := 128.0
 const N := SIZE + 1
 const TRACK_RES := SIZE * 2 + 1  # 0.5 m per pixel
 const CHUNK := 32
+const CHUNKS := SIZE / CHUNK  # chunks a side
 const MAX_SNOW := 0.8
 const MAX_MUD := 0.4
 const ROAD_HALF_WIDTH := 3.5
+const LOOSE := 0.3  # m: how deep loose earth is soft, as snow that deep
+
+signal ground_changed(rect: Rect2i)  # vertices whose heights changed (once a tick at most)
 
 const GROUND_SHADER := preload("res://shaders/terrain_ground.gdshader")
 const SNOW_SHADER := preload("res://shaders/terrain_snow.gdshader")
@@ -30,10 +37,29 @@ var snow_img: Image  # R - snow or dust, G - mud, B - road, A - 1 - ice
 var track_img: Image  # compaction 0..1
 var track_tex: ImageTexture
 var roads: Array[PackedVector2Array] = []
-var body: StaticBody3D  # its collision: the height map, one shape that a query meets many times over
+var body: StaticBody3D  # its collision: a height map per CHUNK, all under this one body
+var origin := Vector2.ZERO  # the tile's middle in the world
+var keep_clear: Array[Rect2] = []  # where nothing is to stand (a river's bed and banks), in its own metres
+var outer := {"west": true, "east": true, "north": true, "south": true}  # its edges that are the map's
+var height_img: Image  # heights as the shaders read them (FORMAT_RF)
+var height_tex: ImageTexture
+var ground_mat: ShaderMaterial
+var snow_mat: ShaderMaterial
+var snow_tex: ImageTexture
+var _chunk_meshes: Array = []  # per chunk, row by row: [its ground mesh, its snow mesh]
+var _chunk_shapes: Array[HeightMapShape3D] = []  # per chunk, row by row
 
 var _track_dirty := false
 var _track_timer := 0.0
+var _ground_timer := 0.0
+var _heights_dirty := false
+var _images_dirty := false
+var _dirty_chunks: Array[Vector2i] = []
+var edited := {}  # Vector2i chunk -> true: every chunk an earthwork touched since the ground was made
+var works_img: Image  # 0.5 m a pixel: R loose earth, G gravel spread, B bare earth (docs/plan.md §4)
+var works_tex: ImageTexture
+var generated := PackedFloat32Array()  # the heights as the map was made, before any earthworks
+var _ground_made: Image  # the ground image as the map was made
 var _base: FastNoiseLite
 var _profiles: Array[Dictionary] = []  # per road: {at: cumulative length at each point, h: heights every PROFILE_STEP}
 var _seg_road := PackedInt32Array()  # every segment of every road in order: its road,
@@ -52,31 +78,32 @@ const GRID := int(SIZE / GRID_CELL) + 1  # squares a side, one past the map's fa
 const NO_ROAD := {"x": INF}  # _road_near where no road is that near
 
 
+## The ground of v, seen and driven on: a tile on its own, every edge the map's.
 func generate(v: Valley) -> void:
-	valley = v
-	roads = v.roads
-	_base = _noise(v.seed, 0.008, 3)
+	shape(v)
+	finish()
+
+
+## The ground of v (heights and the ground image), before the tile is joined to its neighbours:
+## edges is which of its edges are the map's (the rim climbs only there).
+func shape(v: Valley, edges := {"west": true, "east": true, "north": true, "south": true}) -> void:
+	outer = edges
+	prepare(v)
 	var detail := _noise(v.seed + 1, 0.05, 2)
 	var snow_noise := _noise(v.seed + 2, 0.03, 2)
 	var mud_noise := _noise(v.seed + 3, 0.025, 2)
-
 	var flats: Array = v.locations.values()
-	for f in flats:
-		f.height = base_height(f.pos) - float(f.get("below", 0.0))
 	var lakes: Array[Dictionary] = []
 	var ditches: Array[Dictionary] = []
+	var cuts: Array[Dictionary] = []  # washouts and slides, laid after the roads' shelves
 	for ft in v.features:
 		match ft.type:
 			"lake":
-				ft.height = base_height(ft.pos) - float(ft.depth)
 				lakes.append(ft)
 			"ditch":
 				ditches.append(ft)
-
-	_profiles.clear()
-	for road in roads:
-		_profiles.append(_profile(road, v.road_smooth))
-	_index_roads()
+			"washout", "slide":
+				cuts.append(ft)
 
 	heights.resize(N * N)
 	snow_img = Image.create_empty(N, N, false, Image.FORMAT_RGBA8)
@@ -85,10 +112,12 @@ func generate(v: Valley) -> void:
 			var p := Vector2(x - HALF, z - HALF)
 			var b := base_height(p)
 			var h := b + detail.get_noise_2d(p.x, p.y) * v.detail
-			# A road is a shelf: as high as the ground at its centre line, level across.
+			# A road is a shelf: as high as the ground at its centre line, level across; none over
+			# a gap span (a bridge site), where the ground keeps its gorge or riverbed.
 			var near := _road_near(p)
 			var rd: float = near.x
-			var road_t := 1.0 - smoothstep(ROAD_HALF_WIDTH, ROAD_HALF_WIDTH + 4.0, rd)
+			var gap := _gap(near)
+			var road_t := (1.0 - smoothstep(ROAD_HALF_WIDTH, ROAD_HALF_WIDTH + 4.0, rd)) * (1.0 - gap)
 			# A smoothed road is laid after the ramps off the places, which it was smoothed over.
 			var road_last := v.road_smooth > 0.0
 			if road_t > 0.0 and not road_last:
@@ -104,8 +133,9 @@ func generate(v: Valley) -> void:
 				if l.get("ice", false):
 					ice = maxf(ice, 1.0 - smoothstep(r * 0.82, r * 0.92, d))
 			# The rim at the map's edge goes on after the flats, so a long ramp off a location
-			# near the edge cannot drag the rim down with it.
-			var rim := smoothstep(100.0, 126.0, maxf(absf(p.x), absf(p.y))) * v.rim * (1.0 - road_t)
+			# near the edge cannot drag the rim down with it. Only on the map's edges: where the
+			# tile meets another, the land goes on.
+			var rim := smoothstep(100.0, 126.0, _toward_edge(p)) * v.rim * (1.0 - road_t)
 			var flat_t := 0.0
 			for f in flats:
 				var r: float = f.radius
@@ -122,10 +152,16 @@ func generate(v: Valley) -> void:
 				h = lerpf(h, _road_height(p, near), road_t)
 				for f in flats:  # a place stays level where the road arrives in it
 					h = lerpf(h, f.height, 1.0 - smoothstep(f.radius - 3.0, f.radius, p.distance_to(f.pos)))
-			h += rim
+			# What the flood did after the roads were made: washouts cut across them, slides
+			# over them.
+			var cut := 0.0
+			for ft in cuts:
+				cut += _cut(ft, p)
+			h += rim + cut
 			heights[z * N + x] = h
 
-			var on_road := 1.0 - smoothstep(ROAD_HALF_WIDTH - 0.5, ROAD_HALF_WIDTH + 1.0, rd)
+			var on_road := (1.0 - smoothstep(ROAD_HALF_WIDTH - 0.5, ROAD_HALF_WIDTH + 1.0, rd)) * (1.0 - gap)
+			on_road *= 1.0 - smoothstep(0.2, 0.4, absf(cut))  # the road is gone where the ground moved
 			var snow := clampf(v.layer_base + snow_noise.get_noise_2d(p.x, p.y) * v.layer_noise, v.layer_min, 1.0)
 			snow *= 1.0 - maxf(on_road * (1.0 - v.layer_on_road), flat_t * 0.9)
 			if v.layer_from > -INF:
@@ -141,8 +177,98 @@ func generate(v: Valley) -> void:
 			snow_img.set_pixel(x, z, Color(snow, mud, on_road, 1.0 - ice))
 	_dig(ditches)
 
+
+## What the ground needs of v before its heights: the roads' profiles and index, the places' and
+## the lakes' levels. A baked tile (Land) loads its heights and does only this.
+func prepare(v: Valley) -> void:
+	valley = v
+	roads = v.roads
+	_base = _noise(v.seed, 0.008, 3)
+	for f in v.locations.values():
+		f.height = base_height(f.pos) - float(f.get("below", 0.0))
+	for ft in v.features:
+		if ft.type == "lake":
+			ft.height = base_height(ft.pos) - float(ft.depth)
+	_profiles.clear()
+	for road in roads:
+		_profiles.append(_profile(road, v.road_smooth))
+	_index_roads()
+
+
+## What is seen and what is driven on, from the heights as they are now.
+func finish() -> void:
 	_build_visuals()
 	_build_collision()
+
+
+## How far p is toward the nearest of the map's edges among this tile's (as max(|x|, |z|) is for
+## a tile on its own); -INF when none of its edges is the map's.
+func _toward_edge(p: Vector2) -> float:
+	var t := -INF
+	if outer.get("west", true):
+		t = maxf(t, -p.x)
+	if outer.get("east", true):
+		t = maxf(t, p.x)
+	if outer.get("north", true):
+		t = maxf(t, -p.y)
+	if outer.get("south", true):
+		t = maxf(t, p.y)
+	return t
+
+
+## 1 where the road nearest (near) crosses one of the valley's gap spans (a bridge site), easing
+## to 0 over 2 m at its ends; 0 off it or off the roads.
+func _gap(near: Dictionary) -> float:
+	if near.x == INF or valley.gaps.is_empty():
+		return 0.0
+	var g := 0.0
+	for span in valley.gaps:
+		if int(span.road) != int(near.road):
+			continue
+		var s: float = near.s
+		g = maxf(g, smoothstep(float(span.from) - 2.0, float(span.from), s) * (1.0 - smoothstep(float(span.to), float(span.to) + 2.0, s)))
+	return g
+
+
+## The point s metres along road r and the road's way there.
+func along(r: int, s: float) -> Array:
+	var road := roads[r]
+	var left := s
+	for i in road.size() - 1:
+		var l := road[i].distance_to(road[i + 1])
+		if left <= l or i == road.size() - 2:
+			var d := (road[i + 1] - road[i]) / l
+			return [road[i] + d * clampf(left, 0.0, l), d]
+		left -= l
+	return [road[road.size() - 1], Vector2.RIGHT]
+
+
+## Whether p is on one of the roads' barriers as generated: a gap span, or where a washout or a
+## slide moved the ground.
+func barrier(p: Vector2) -> bool:
+	if _gap(_road_near(p)) > 0.0:
+		return true
+	for ft in valley.features:
+		if ft.type in ["washout", "slide"] and absf(_cut(ft, p)) > 0.05:
+			return true
+	return false
+
+
+## How much a washout (down) or a slide (up) moves the ground at p.
+func _cut(ft: Dictionary, p: Vector2) -> float:
+	match ft.type:
+		"washout", "slide":
+			# A gully (a ridge) across the road: deepest (highest) along a line across it, easing
+			# out to its ends.
+			var at: Array = along(int(ft.road), float(ft.s))
+			var c: Vector2 = at[0]
+			var d: Vector2 = at[1]
+			var off := p - c
+			var across := absf(off.dot(Vector2(-d.y, d.x)))
+			var half := float(ft.length) * 0.5
+			var size := -float(ft.depth) if ft.type == "washout" else float(ft.height)
+			return size * _bump(absf(off.dot(d)) / float(ft.width)) * (1.0 - smoothstep(half - 6.0, half, across))
+	return 0.0
 
 
 ## The ground before the roads and the places are cut in: noise, hills, ridges, gullies.
@@ -364,7 +490,7 @@ func _road_height(p: Vector2, near: Dictionary) -> float:
 		if weights > 0.0:
 			h = lerpf(h, sum / weights, off * far)
 	var other: Dictionary = near.other
-	if valley.road_smooth > 0.0 and not other.is_empty() and other.x - near.x < 4.0:
+	if not other.is_empty() and other.x - near.x < 4.0:
 		h = lerpf(h, _profile_height(other), 0.5 * (1.0 - smoothstep(0.0, 4.0, other.x - near.x)))
 	return h
 
@@ -453,13 +579,23 @@ func sample(pos: Vector3) -> Surface:
 	var s := Surface.new()
 	var c := snow_img.get_pixel(clampi(roundi(pos.x + HALF), 0, N - 1), clampi(roundi(pos.z + HALF), 0, N - 1))
 	var tr := _track_at(pos)
+	var wk := _works_at(pos)
 	s.snow = c.r * MAX_SNOW * (1.0 - tr * 0.7)
-	s.mud = c.g * (1.0 - tr * 0.2)
+	s.mud = c.g * (1.0 - tr * 0.2) * (1.0 - wk.g)  # gravel spread does not churn
 	s.ice = 1.0 - c.a
 	s.grip = lerpf(1.0, valley.layer_grip, clampf(s.snow / 0.4, 0.0, 1.0))
 	s.grip = lerpf(s.grip, 0.4, s.mud)
 	s.grip = lerpf(s.grip, 0.15, s.ice)
 	s.rolling = 0.015 + s.snow * valley.layer_rolling + s.mud * 0.17
+	# Loose earth (dug, dumped or slid) is soft, like snow LOOSE m deep, until wheels pack it.
+	var loose := wk.r * LOOSE * (1.0 - tr)
+	if loose > 0.0:
+		s.snow = maxf(s.snow, loose)
+		s.grip = minf(s.grip, lerpf(1.0, 0.55, clampf(loose / 0.3, 0.0, 1.0)))
+		s.rolling += loose * 0.45
+	# Gravel spread: a road's grip.
+	s.grip = lerpf(s.grip, 1.0, wk.g * (1.0 - s.ice))
+	s.rolling = lerpf(s.rolling, 0.015, wk.g)
 	return s
 
 
@@ -480,12 +616,114 @@ func _process(delta: float) -> void:
 		track_tex.update(track_img)
 		_track_dirty = false
 		_track_timer = 0.0
+	_ground_timer += delta
+	if (_heights_dirty or _images_dirty) and _ground_timer > 0.1:
+		_ground_timer = 0.0
+		if _heights_dirty:
+			height_img.set_data(N, N, false, Image.FORMAT_RF, heights.to_byte_array())
+			height_tex.update(height_img)
+			_heights_dirty = false
+		if _images_dirty:
+			snow_tex.update(snow_img)
+			works_tex.update(works_img)
+			_images_dirty = false
+
+
+## Before any body moves this tick, the collision of the chunks the ground changed in, so a
+## wheel's ray meets the new height on this physics tick.
+func _physics_process(_delta: float) -> void:
+	flush()
+
+
+## Rebuilds the collision and the boxes of the chunks changed since the last time.
+func flush() -> void:
+	if _dirty_chunks.is_empty():
+		return
+	for c in _dirty_chunks:
+		_fill_chunk_shape(c.x, c.y)
+		_fit_chunk(c.x, c.y)
+	var rect := Rect2i()
+	for c in _dirty_chunks:
+		var r := Rect2i(c * CHUNK, Vector2i(CHUNK + 1, CHUNK + 1))
+		rect = r if rect.size == Vector2i.ZERO else rect.merge(r)
+	_dirty_chunks.clear()
+	ground_changed.emit(rect)
 
 
 func _track_at(pos: Vector3) -> float:
 	var ix := clampi(roundi((pos.x + HALF) * 2.0), 0, TRACK_RES - 1)
 	var iz := clampi(roundi((pos.z + HALF) * 2.0), 0, TRACK_RES - 1)
 	return track_img.get_pixel(ix, iz).r
+
+
+func _works_at(pos: Vector3) -> Color:
+	if works_img == null:
+		return Color(0, 0, 0, 0)
+	return works_img.get_pixel(clampi(roundi((pos.x + HALF) * 2.0), 0, TRACK_RES - 1), clampi(roundi((pos.z + HALF) * 2.0), 0, TRACK_RES - 1))
+
+
+# --- The ground changed after it was built (docs/plan.md §4) -----------------------------------
+
+## Writes values (row by row) into the heights in rect (vertices: x, z from the tile's north-west
+## corner) and marks the chunks it touches: their collision is rebuilt before the next physics
+## tick, the shaders' height texture at most 10 times a second.
+func set_heights(rect: Rect2i, values: PackedFloat32Array) -> void:
+	rect = rect.intersection(Rect2i(0, 0, N, N))
+	for z in rect.size.y:
+		for x in rect.size.x:
+			heights[(rect.position.y + z) * N + rect.position.x + x] = values[z * rect.size.x + x]
+	touch(rect)
+
+
+## The ground as the map made it again: every earthwork undone (a save lays its own over it).
+func reset_ground() -> void:
+	heights = generated.duplicate()
+	snow_img.copy_from(_ground_made)
+	works_img.fill(Color(0, 0, 0, 0))
+	_paint_slides()
+	_images_dirty = true
+	touch(Rect2i(0, 0, N, N))
+	edited.clear()
+
+
+## The vertex at (x, z) is h now (its chunk's collision is rebuilt before the next tick).
+func set_vertex(x: int, z: int, h: float) -> void:
+	heights[z * N + x] = h
+	touch(Rect2i(x, z, 1, 1))
+
+
+## The chunks of rect (vertices) changed: one on a chunk's edge is in both.
+func touch(rect: Rect2i) -> void:
+	_heights_dirty = true
+	var c0 := Vector2i(clampi((rect.position.x - 1) / CHUNK, 0, CHUNKS - 1), clampi((rect.position.y - 1) / CHUNK, 0, CHUNKS - 1))
+	var c1 := Vector2i(clampi(rect.end.x / CHUNK, 0, CHUNKS - 1), clampi(rect.end.y / CHUNK, 0, CHUNKS - 1))
+	for cz in range(c0.y, c1.y + 1):
+		for cx in range(c0.x, c1.x + 1):
+			if not Vector2i(cx, cz) in _dirty_chunks:
+				_dirty_chunks.append(Vector2i(cx, cz))
+			edited[Vector2i(cx, cz)] = true
+
+
+## Paints the works image within radius of local p: each channel (R loose earth, G gravel, B bare
+## earth) goes to works' as far as mask's says; clear_layer takes the snow (or dust) and the mud
+## off the ground image there, clear_road the road's mark.
+func paint(p: Vector2, radius: float, works: Color, mask: Color, clear_layer := false, clear_road := false) -> void:
+	var lo := Vector2i(floori((p.x - radius + HALF) * 2.0), floori((p.y - radius + HALF) * 2.0))
+	var hi := Vector2i(ceili((p.x + radius + HALF) * 2.0), ceili((p.y + radius + HALF) * 2.0))
+	for z in range(maxi(lo.y, 0), mini(hi.y, TRACK_RES - 1) + 1):
+		for x in range(maxi(lo.x, 0), mini(hi.x, TRACK_RES - 1) + 1):
+			if Vector2(x * 0.5 - HALF, z * 0.5 - HALF).distance_to(p) > radius:
+				continue
+			var w := works_img.get_pixel(x, z)
+			works_img.set_pixel(x, z, Color(lerpf(w.r, works.r, mask.r), lerpf(w.g, works.g, mask.g), lerpf(w.b, works.b, mask.b), 1.0))
+	if clear_layer or clear_road:
+		for z in range(maxi(floori(p.y - radius + HALF), 0), mini(ceili(p.y + radius + HALF), N - 1) + 1):
+			for x in range(maxi(floori(p.x - radius + HALF), 0), mini(ceili(p.x + radius + HALF), N - 1) + 1):
+				if Vector2(x - HALF, z - HALF).distance_to(p) > radius:
+					continue
+				var c := snow_img.get_pixel(x, z)
+				snow_img.set_pixel(x, z, Color(0.0 if clear_layer else c.r, 0.0 if clear_layer else c.g, 0.0 if clear_road else c.b, c.a))
+	_images_dirty = true
 
 
 func _noise(s: int, freq: float, octaves: int) -> FastNoiseLite:
@@ -498,21 +736,32 @@ func _noise(s: int, freq: float, octaves: int) -> FastNoiseLite:
 
 
 func _build_visuals() -> void:
-	var height_tex := ImageTexture.create_from_image(Image.create_from_data(N, N, false, Image.FORMAT_RF, heights.to_byte_array()))
-	var snow_tex := ImageTexture.create_from_image(snow_img)
+	generated = heights.duplicate()
+	_ground_made = snow_img.duplicate()
+	works_img = Image.create_empty(TRACK_RES, TRACK_RES, false, Image.FORMAT_RGBA8)
+	_paint_slides()
+	works_tex = ImageTexture.create_from_image(works_img)
+	process_physics_priority = -100  # its collision is up to date before anything moves
+	height_img = Image.create_from_data(N, N, false, Image.FORMAT_RF, heights.to_byte_array())
+	height_tex = ImageTexture.create_from_image(height_img)
+	snow_tex = ImageTexture.create_from_image(snow_img)
 	track_img = Image.create_empty(TRACK_RES, TRACK_RES, false, Image.FORMAT_R8)
 	track_tex = ImageTexture.create_from_image(track_img)
+	var tile_origin := Vector2(position.x, position.z)
 
-	var ground_mat := ShaderMaterial.new()
+	ground_mat = ShaderMaterial.new()
 	ground_mat.shader = GROUND_SHADER
+	ground_mat.set_shader_parameter("tile_origin", tile_origin)
 	ground_mat.set_shader_parameter("height_tex", height_tex)
 	ground_mat.set_shader_parameter("snow_tex", snow_tex)
+	ground_mat.set_shader_parameter("works_tex", works_tex)
 	ground_mat.set_shader_parameter("earth_col", _rgb(valley.earth))
 	ground_mat.set_shader_parameter("gravel_col", _rgb(valley.gravel))
 	ground_mat.set_shader_parameter("ice_col", _rgb(valley.ice_color))
 
-	var snow_mat := ShaderMaterial.new()
+	snow_mat = ShaderMaterial.new()
 	snow_mat.shader = SNOW_SHADER
+	snow_mat.set_shader_parameter("tile_origin", tile_origin)
 	snow_mat.set_shader_parameter("height_tex", height_tex)
 	snow_mat.set_shader_parameter("snow_tex", snow_tex)
 	snow_mat.set_shader_parameter("track_tex", track_tex)
@@ -534,43 +783,115 @@ func _build_visuals() -> void:
 	snow_mesh.subdivide_width = CHUNK * 2 - 1
 	snow_mesh.subdivide_depth = CHUNK * 2 - 1
 
-	var chunks := SIZE / CHUNK
-	for cz in chunks:
-		for cx in chunks:
-			var min_h := INF
-			var max_h := -INF
-			for z in range(cz * CHUNK, (cz + 1) * CHUNK + 1):
-				for x in range(cx * CHUNK, (cx + 1) * CHUNK + 1):
-					var h := heights[z * N + x]
-					min_h = minf(min_h, h)
-					max_h = maxf(max_h, h)
-			var aabb := AABB(Vector3(-CHUNK * 0.5, min_h - 1.0, -CHUNK * 0.5), Vector3(CHUNK, max_h - min_h + 2.0, CHUNK))
+	_chunk_meshes.clear()
+	for cz in CHUNKS:
+		for cx in CHUNKS:
 			var center := Vector3(-HALF + (cx + 0.5) * CHUNK, 0.0, -HALF + (cz + 0.5) * CHUNK)
-			_add_chunk(ground_mesh, ground_mat, aabb, center)
-			_add_chunk(snow_mesh, snow_mat, aabb, center)
+			var pair := [_add_chunk(ground_mesh, ground_mat, center), _add_chunk(snow_mesh, snow_mat, center)]
+			_chunk_meshes.append(pair)
+			_fit_chunk(cx, cz)
+
+
+## The chunk's meshes' boxes, to the heights in it now (or the camera culls what rose out of them).
+func _fit_chunk(cx: int, cz: int) -> void:
+	var min_h := INF
+	var max_h := -INF
+	for z in range(cz * CHUNK, (cz + 1) * CHUNK + 1):
+		for x in range(cx * CHUNK, (cx + 1) * CHUNK + 1):
+			var h := heights[z * N + x]
+			min_h = minf(min_h, h)
+			max_h = maxf(max_h, h)
+	var aabb := AABB(Vector3(-CHUNK * 0.5, min_h - 1.0, -CHUNK * 0.5), Vector3(CHUNK, max_h - min_h + 2.0, CHUNK))
+	for mi in _chunk_meshes[cz * CHUNKS + cx]:
+		(mi as MeshInstance3D).custom_aabb = aabb
 
 
 func _rgb(c: Color) -> Vector3:
 	return Vector3(c.r, c.g, c.b)
 
 
-func _add_chunk(m: Mesh, material: Material, aabb: AABB, pos: Vector3) -> void:
+func _add_chunk(m: Mesh, material: Material, pos: Vector3) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = m
 	mi.material_override = material
-	mi.custom_aabb = aabb
 	mi.position = pos
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+	return mi
 
 
+## One height map per CHUNK (33x33, the edges shared with the next), all under one body, so an
+## edit of the ground rebuilds only the chunks it touched.
 func _build_collision() -> void:
-	var shape := HeightMapShape3D.new()
-	shape.map_width = N
-	shape.map_depth = N
-	shape.map_data = heights
-	var cs := CollisionShape3D.new()
-	cs.shape = shape
 	body = StaticBody3D.new()
-	body.add_child(cs)
 	add_child(body)
+	_chunk_shapes.clear()
+	for cz in CHUNKS:
+		for cx in CHUNKS:
+			var shape := HeightMapShape3D.new()
+			shape.map_width = CHUNK + 1
+			shape.map_depth = CHUNK + 1
+			var cs := CollisionShape3D.new()
+			cs.shape = shape
+			cs.position = Vector3(-HALF + (cx + 0.5) * CHUNK, 0.0, -HALF + (cz + 0.5) * CHUNK)
+			body.add_child(cs)
+			_chunk_shapes.append(shape)
+			_fill_chunk_shape(cx, cz)
+
+
+func _fill_chunk_shape(cx: int, cz: int) -> void:
+	var data := PackedFloat32Array()
+	data.resize((CHUNK + 1) * (CHUNK + 1))
+	for z in CHUNK + 1:
+		for x in CHUNK + 1:
+			data[z * (CHUNK + 1) + x] = heights[(cz * CHUNK + z) * N + cx * CHUNK + x]
+	_chunk_shapes[cz * CHUNKS + cx].map_data = data
+
+
+## A slide is loose earth until it is dug or packed.
+func _paint_slides() -> void:
+	for ft in valley.features:
+		if ft.type == "slide":
+			var c: Vector2 = along(int(ft.road), float(ft.s))[0]
+			var reach := float(ft.length) * 0.5 + float(ft.width)
+			for z in range(maxi(floori((c.y - reach + HALF) * 2.0), 0), mini(ceili((c.y + reach + HALF) * 2.0), TRACK_RES - 1) + 1):
+				for x in range(maxi(floori((c.x - reach + HALF) * 2.0), 0), mini(ceili((c.x + reach + HALF) * 2.0), TRACK_RES - 1) + 1):
+					if _cut(ft, Vector2(x * 0.5 - HALF, z * 0.5 - HALF)) > 0.2:
+						works_img.set_pixel(x, z, Color(1.0, 0.0, 0.0, 1.0))
+
+
+## Chunk c's earthworks as a save keeps them (docs/plan.md §11): its heights less the generated
+## ones at 1 cm in 16 bits, its works image and its ground image, compressed.
+func save_chunk(c: Vector2i) -> PackedByteArray:
+	var out := PackedByteArray()
+	var k := CHUNK + 1
+	out.resize(k * k * 2)
+	for z in k:
+		for x in k:
+			var i := (c.y * CHUNK + z) * N + c.x * CHUNK + x
+			out.encode_s16((z * k + x) * 2, clampi(roundi((heights[i] - generated[i]) * 100.0), -32768, 32767))
+	out.append_array(works_img.get_region(Rect2i(c * CHUNK * 2, Vector2i.ONE * CHUNK * 2)).get_data())
+	out.append_array(snow_img.get_region(Rect2i(c * CHUNK, Vector2i.ONE * k)).get_data())
+	return out.compress(FileAccess.COMPRESSION_DEFLATE)
+
+
+## Lays a chunk saved by save_chunk over the ground as made; false when the bytes do not fit.
+func load_chunk(c: Vector2i, bytes: PackedByteArray) -> bool:
+	var k := CHUNK + 1
+	var size := k * k * 2 + (CHUNK * 2) * (CHUNK * 2) * 4 + k * k * 4
+	var raw := bytes.decompress(size, FileAccess.COMPRESSION_DEFLATE)
+	if raw.size() != size or c.x < 0 or c.y < 0 or c.x >= CHUNKS or c.y >= CHUNKS:
+		return false
+	for z in k:
+		for x in k:
+			var i := (c.y * CHUNK + z) * N + c.x * CHUNK + x
+			heights[i] = generated[i] + raw.decode_s16((z * k + x) * 2) / 100.0
+	var at := k * k * 2
+	var w := Image.create_from_data(CHUNK * 2, CHUNK * 2, false, Image.FORMAT_RGBA8, raw.slice(at, at + CHUNK * CHUNK * 16))
+	works_img.blit_rect(w, Rect2i(Vector2i.ZERO, w.get_size()), c * CHUNK * 2)
+	at += CHUNK * CHUNK * 16
+	var s := Image.create_from_data(k, k, false, Image.FORMAT_RGBA8, raw.slice(at))
+	snow_img.blit_rect(s, Rect2i(Vector2i.ZERO, s.get_size()), c * CHUNK)
+	_images_dirty = true
+	touch(Rect2i(c * CHUNK, Vector2i.ONE * k))
+	return true

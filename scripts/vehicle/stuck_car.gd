@@ -37,12 +37,12 @@ func _init(colour := 0) -> void:
 
 ## In ditch d (a valley's, by road d.pos), nose up towards the road and a little along it, so a
 ## pull from the road brings it up the bank head first.
-func slide_into(d: Dictionary, terrain: Terrain) -> void:
+func slide_into(d: Dictionary, land: Land) -> void:
 	var at: Vector2 = d.at
 	var out: Vector2 = ((d.pos as Vector2) - at).normalized()
 	var nose: Vector2 = (out * 0.9 + (d.dir as Vector2) * 0.35).normalized()
 	global_transform = Transform3D(Basis(Vector3.UP, atan2(-nose.x, -nose.y)) * Basis(Vector3.FORWARD, 0.25),
-		Vector3(at.x, terrain.get_height(at.x, at.y) + 0.7, at.y))
+		Vector3(at.x, land.get_height(at.x, at.y) + 0.7, at.y))
 
 
 func hook_point() -> Vector3:
@@ -51,10 +51,10 @@ func hook_point() -> Vector3:
 
 ## Back on the road: out of the ditch, up by the road's edge at the road's level (a truck in the
 ## middle of the road reels it in that far), at rest. On its roof counts too.
-func on_road(terrain: Terrain) -> bool:
+func on_road(land: Land) -> bool:
 	var p := Vector2(global_position.x, global_position.z)
-	return terrain.road_distance(p) < Terrain.ROAD_HALF_WIDTH + 2.5 \
-		and terrain.get_height(p.x, p.y) > terrain.road_height(p) - 0.6 and linear_velocity.length() < 1.5
+	return land.road_distance(p) < Terrain.ROAD_HALF_WIDTH + 2.5 \
+		and land.get_height(p.x, p.y) > land.road_height(p) - 0.6 and linear_velocity.length() < 1.5
 
 
 func upright() -> bool:

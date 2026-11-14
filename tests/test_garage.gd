@@ -257,7 +257,7 @@ func test_each_rig_backs_up_to_its_trailer_by_the_depot_in_every_valley(t: TCase
 			var yaw := atan2(b.z.x, b.z.z)
 			var ahead := -Vector3(b.z.x, 0.0, b.z.z).normalized()
 			var at: Vector3 = tr.coupler_point() + ahead * 3.0 - Basis(Vector3.UP, yaw) * v.spec.hitch
-			v.teleport(Vector3(at.x, world.terrain.get_height(at.x, at.z) + 1.2, at.z), yaw)
+			v.teleport(Vector3(at.x, world.land.home.get_height(at.x, at.z) + 1.2, at.z), yaw)
 			await t.ticks(90)
 			var ticks := 0
 			while (v.hitch_candidate() != tr or v.hitch_point().distance_to(tr.coupler_point()) > 0.6) and ticks < 900:
@@ -326,7 +326,7 @@ func test_the_rigs_are_saved(t: TCase) -> void:
 ## is set down, and with 5 m ahead of its coupler clear for a truck to back up to it.
 func _parked_well(t: TCase, world: Node, label: String) -> void:
 	var c: Contracts = world.contracts
-	var terrain: Terrain = world.terrain
+	var terrain: Terrain = world.land.home
 	var turn := Basis(Vector3.UP, c.spawn_yaw)
 	var spawn := PackedVector2Array()
 	for k in [Vector3(-2.5, 0.0, -6.0), Vector3(2.5, 0.0, -6.0), Vector3(2.5, 0.0, 6.0), Vector3(-2.5, 0.0, 6.0)]:

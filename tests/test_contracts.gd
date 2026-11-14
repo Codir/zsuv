@@ -141,7 +141,7 @@ func test_a_fragile_load_breaks_on_hard_landings(t: TCase) -> void:
 	t.ok(driven > 0.95, "the road broke the load: %d%%" % roundi(driven * 100.0))
 	# A drop of 4 m is.
 	var farm: Vector2 = t.world.locations.farm.pos
-	v.teleport(Vector3(farm.x, t.world.terrain.get_height(farm.x, farm.y - 4.0) + 5.2, farm.y - 4.0), 0.0)
+	v.teleport(Vector3(farm.x, t.world.land.home.get_height(farm.x, farm.y - 4.0) + 5.2, farm.y - 4.0), 0.0)
 	await t.ticks(120)
 	t.note = "%d%% whole after the road, %d%% after a 4 m drop" % [roundi(driven * 100.0), roundi(c.integrity * 100.0)]
 	t.ok(c.integrity < driven - 0.3, "a 4 m drop did not break it: %d%%" % roundi(c.integrity * 100.0))

@@ -18,7 +18,7 @@ class Held extends Vehicle:
 
 
 func test_every_truck_builds_stands_and_drives_off(t: TCase) -> void:
-	var terrain: Terrain = t.world.terrain
+	var terrain: Terrain = t.world.land.home
 	var c: Contracts = t.world.contracts
 	var spawn := Vector2(c.spawn_pos.x, c.spawn_pos.z)
 	var road: PackedVector2Array = t.world.roads[0]
@@ -127,7 +127,7 @@ func test_top_speeds_and_turning_circles_on_a_flat(t: TCase) -> void:
 
 
 func test_six_loaded_gets_through_a_drift_where_the_pickup_bogs(t: TCase) -> void:
-	var terrain: Terrain = t.world.terrain
+	var terrain: Terrain = t.world.land.home
 	var a: Vector2 = DRIFT[0]
 	var b: Vector2 = DRIFT[1]
 	var depth := 0.0
@@ -159,7 +159,7 @@ func test_six_loaded_gets_through_a_drift_where_the_pickup_bogs(t: TCase) -> voi
 
 
 func test_six_loaded_climbs_the_steepest_pitch_in_low_range(t: TCase) -> void:
-	var terrain: Terrain = t.world.terrain
+	var terrain: Terrain = t.world.land.home
 	# Road 1 every metre, and its steepest metre.
 	var pts := _every_metre(t.world.roads[1])
 	var steep := 0.0
@@ -206,7 +206,7 @@ func test_tractor_crawls_through_a_polissia_bog_where_the_pickup_sticks(t: TCase
 	vp.add_child(world)
 	t.tree.root.add_child(vp)
 	await t.ticks(10)
-	var terrain: Terrain = world.terrain
+	var terrain: Terrain = world.land.home
 	var a: Vector2 = BOG[0]
 	var b: Vector2 = BOG[1]
 	var mud := 0.0
@@ -224,7 +224,7 @@ func test_tractor_crawls_through_a_polissia_bog_where_the_pickup_sticks(t: TCase
 	terrain.track_img.fill(Color.BLACK)
 	var tractor := Vehicle.new()
 	tractor.spec = TruckSpec.tractor()
-	tractor.terrain = terrain
+	tractor.land = world.land
 	tractor.position = Vector3(a.x, terrain.get_height(a.x, a.y) + 1.5, a.y)
 	tractor.rotation.y = _yaw(b - a)
 	world.add_child(tractor)
@@ -259,7 +259,7 @@ func _check_wheels(t: TCase, s: TruckSpec) -> void:
 func _check_hitch(t: TCase, v: Vehicle) -> void:
 	var s := v.spec
 	var p := v.global_transform * s.hitch
-	var over := p.y - (t.world.terrain as Terrain).get_height(p.x, p.z)
+	var over := p.y - (t.world.land.home as Terrain).get_height(p.x, p.z)
 	var last: float = s.wheels[s.wheels.size() - 1].mount.z
 	var heights := {"ball": Vector2(0.5, 0.9), "pin": Vector2(0.55, 0.9), "fifth": Vector2(1.2, 1.4)}
 	t.ok(heights.has(s.hitch_kind), "%s: a hitch of no kind (%s)" % [s.id, s.hitch_kind])
@@ -298,8 +298,8 @@ func _truck(t: TCase, spec: TruckSpec) -> Vehicle:
 	_park(t, pickup)
 	var v := Vehicle.new()
 	v.spec = spec
-	v.terrain = t.world.terrain
-	v.position = Vector3(110.0, t.world.terrain.get_height(110.0, -110.0) + 3.0, -110.0)
+	v.land = t.world.land
+	v.position = Vector3(110.0, t.world.land.home.get_height(110.0, -110.0) + 3.0, -110.0)
 	t.world.add_child(v)
 	v.winch.anchors = t.world.builder.anchor_points
 	await t.ticks(2)
@@ -316,12 +316,12 @@ func _done(t: TCase, v: Vehicle) -> void:
 func _park(t: TCase, v: Vehicle) -> void:
 	var farm: Vector2 = t.world.locations.farm.pos + Vector2(0.0, -4.0)
 	v.autodrive = false
-	v.teleport(Vector3(farm.x, t.world.terrain.get_height(farm.x, farm.y) + 1.2, farm.y), 0.0)
+	v.teleport(Vector3(farm.x, t.world.land.home.get_height(farm.x, farm.y) + 1.2, farm.y), 0.0)
 
 
 func _place(t: TCase, v: Vehicle, p: Vector2, dir: Vector2) -> void:
 	v.autodrive = false
-	v.teleport(Vector3(p.x, t.world.terrain.get_height(p.x, p.y) + 1.2, p.y), _yaw(dir))
+	v.teleport(Vector3(p.x, t.world.land.home.get_height(p.x, p.y) + 1.2, p.y), _yaw(dir))
 	await t.ticks(90)
 
 

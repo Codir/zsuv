@@ -1,7 +1,8 @@
 class_name Valley
 extends RefCounted
 ## One valley: its places and roads, the shape of its ground, what lies on it (snow or dust, mud,
-## ice), its trees, colours and price. Valley.all() lists the five in the order they open, easiest
+## ice), its trees, colours and price. Valley.all() lists the five biomes of the map in the order the
+## route climbs them (docs/plan.md §3); they were Khutir Road's valleys, easiest
 ## first, with more places to deliver to as they go (docs/valleys.md at the tag base-khutir-road-0.3.0; docs/plan.md §3 turns them into biomes); every one is 256 m square.
 
 const DITCH_LENGTH := 10.0
@@ -16,7 +17,19 @@ var season := "winter"  # winter | spring | summer | autumn: snow or rain, the t
 var pay := 1.0  # jobs here pay this many times the khutir valley's
 var own: Weather  # its own sky; the start screen can switch it (Weather.Kind)
 
-# Ground: noise relief, then features: {type: hill | ridge | lake | gully | ditch, ...}.
+# Its place on the map (docs/plan.md §3): the biome it is, its cell on the grid (cell x 256 m),
+# and what its borders with its neighbours are, by side (west, east, north, south): a river or a
+# gorge along the border ({kind, depth, half, water}), declared by either side; plain ground if
+# not. A road that ends on a border is a gate, and its neighbour's road goes on from the same point.
+var biome := ""
+var cell := Vector2i.ZERO
+var borders := {}
+var gaps: Array[Dictionary] = []  # {road, from, to}: metres along it with no shelf (a bridge site)
+
+# Ground: noise relief, then features: {type: hill | ridge | lake | gully | ditch | washout | slide,
+# ...}. A washout {road, s, width, depth, length} is a gully cut across road s metres along it, a
+# slide {road, s, width, height, length} a ridge of loose earth over it (soft until dug, Earthworks),
+# both after the roads were made.
 var seed := 1337
 var relief := 16.0
 var detail := 2.5
@@ -63,7 +76,7 @@ var poles := true  # orange snow poles along the roads
 
 
 static func all() -> Array[Valley]:
-	return [khutir(), steppe(), zakarpattia(), polissia(), carpathians()]
+	return [steppe(), khutir(), polissia(), zakarpattia(), carpathians()]
 
 
 static func find(valley_id: String) -> Valley:
@@ -79,6 +92,8 @@ static func khutir() -> Valley:
 	v.id = "khutir"
 	v.title = "The Khutir Valley"
 	v.blurb = "Winter dusk. Snow on every road, mud in the hollows."
+	v.biome = "The Forest"
+	v.cell = Vector2i(1, 0)
 	v.own = Weather.dusk()
 	v.locations = {
 		"depot": {"name": "Depot", "pos": Vector2(-95, -95), "radius": 14.0, "kind": "depot", "out": Vector2(35, -7)},
@@ -93,12 +108,16 @@ static func khutir() -> Valley:
 		PackedVector2Array([Vector2(-95, -95), Vector2(-60, -102), Vector2(-25, -85), Vector2(8, -96), Vector2(45, -80),
 			Vector2(85, -55), Vector2(96, -15), Vector2(92, 25), Vector2(78, 55), Vector2(75, 88)]),
 		PackedVector2Array([Vector2(-95, -95), Vector2(-100, -55), Vector2(-88, -15), Vector2(-98, 25), Vector2(-85, 60), Vector2(-72, 92)]),
+		# Across the river from the steppe (its bridge gone), and north to the swamp.
+		PackedVector2Array([Vector2(-128, 0), Vector2(-104, -4), Vector2(-88, -15)]),
+		PackedVector2Array([Vector2(-25, -85), Vector2(-10, -108), Vector2(0, -128)]),
 	]
 	v.puddles = [
 		{"pos": Vector2(8, -96), "radius": 7.0},
 		{"pos": Vector2(-88, -15), "radius": 6.0},
 		{"pos": Vector2(92, 25), "radius": 6.0},
 	]
+	v.gaps = [{"road": 2, "from": 0.0, "to": 12.0}]
 	v.spawn = Vector2(-88.0, -93.0)
 	v.spawn_yaw = -PI * 0.5
 	return v._with_ditches()
@@ -110,6 +129,9 @@ static func steppe() -> Valley:
 	v.id = "steppe"
 	v.title = "The Steppe"
 	v.blurb = "Sunny autumn. Long dry dirt roads, gullies, mud at their bottoms."
+	v.biome = "The Steppe"
+	v.cell = Vector2i(0, 0)
+	v.borders = {"east": {"kind": "river", "depth": 3.4, "half": 10.0, "water": 1.5}}
 	v.price = 1500
 	v.stars = 1
 	v.season = "autumn"
@@ -143,7 +165,11 @@ static func steppe() -> Valley:
 		PackedVector2Array([Vector2(-90, -85), Vector2(-96, -30), Vector2(-72, 20), Vector2(-42, 60)]),
 		PackedVector2Array([Vector2(20, -88), Vector2(36, -30), Vector2(44, 15), Vector2(60, 55)]),
 		_bends(PackedVector2Array([Vector2(-42, 60), Vector2(-52, 84), Vector2(-72, 92)]), 9.0),
+		# The road to the river, cut by a washout, its bridge gone.
+		PackedVector2Array([Vector2(36, -30), Vector2(80, -14), Vector2(128, 0)]),
 	]
+	v.gaps = [v._gap_to_end(4, 14.0)]
+	v.features.append({"type": "washout", "road": 4, "s": 27.0, "width": 2.6, "depth": 3.4, "length": 26.0})
 	v.road_smooth = 14.0
 	v.road_grade = 0.22
 	v.ramp_max = 36.0
@@ -173,6 +199,9 @@ static func zakarpattia() -> Valley:
 	v.id = "zakarpattia"
 	v.title = "Zakarpattia"
 	v.blurb = "Spring sun after rain. Meltwater mud in the lows, snow on the peaks."
+	v.biome = "The Foothills"
+	v.cell = Vector2i(1, -2)
+	v.borders = {"west": {"kind": "gorge", "depth": 8.0, "half": 8.0, "water": 0.5}}
 	v.price = 2500
 	v.stars = 2
 	v.season = "spring"
@@ -201,7 +230,12 @@ static func zakarpattia() -> Valley:
 		_bends(PackedVector2Array([Vector2(10, 38), Vector2(40, 44), Vector2(48, 66), Vector2(62, 80), Vector2(76, 70)]), 9.0),
 		_bends(PackedVector2Array([Vector2(10, 38), Vector2(-4, 10), Vector2(-28, -14), Vector2(-8, -38), Vector2(-40, -52), Vector2(-30, -72)]), 9.0),
 		_bends(PackedVector2Array([Vector2(10, 38), Vector2(40, 22), Vector2(58, -8), Vector2(66, -34)]), 9.0),
+		# Up from the swamp (a landslide over it), and west to the gorge, its bridge gone.
+		PackedVector2Array([Vector2(-40, 128), Vector2(-30, 96), Vector2(-12, 60)]),
+		PackedVector2Array([Vector2(-30, -72), Vector2(-80, -84), Vector2(-128, -88)]),
 	]
+	v.gaps = [v._gap_to_end(5, 11.0)]
+	v.features.append({"type": "slide", "road": 4, "s": 28.0, "width": 3.2, "height": 2.8, "length": 18.0})
 	v.road_smooth = 20.0
 	v.road_grade = 0.2
 	v.ramp_max = 36.0
@@ -229,6 +263,8 @@ static func polissia() -> Valley:
 	v.id = "polissia"
 	v.title = "Polissia"
 	v.blurb = "A grey morning in the thaw. Fog, bog, mud, and ice on the lake."
+	v.biome = "The Swamp"
+	v.cell = Vector2i(1, -1)
 	v.price = 4000
 	v.stars = 3
 	v.season = "spring"
@@ -260,6 +296,9 @@ static func polissia() -> Valley:
 		PackedVector2Array([Vector2(62, -22), Vector2(78, 14), Vector2(72, 50), Vector2(66, 82)]),
 		PackedVector2Array([Vector2(-76, 25), Vector2(-42, 36), Vector2(-8, 46)]),
 		PackedVector2Array([Vector2(-85, -80), Vector2(-52, -88), Vector2(-22, -84), Vector2(4, -78)]),
+		# South to the forest, north up out of the lowland to the foothills.
+		PackedVector2Array([Vector2(-8, 46), Vector2(0, 88), Vector2(0, 128)]),
+		PackedVector2Array([Vector2(4, -78), Vector2(-20, -104), Vector2(-40, -128)]),
 	]
 	v.puddles = [{"pos": Vector2(-44, 54), "radius": 16.0}, {"pos": Vector2(-72, 40), "radius": 11.0},
 		{"pos": Vector2(-90, 0), "radius": 7.0}, {"pos": Vector2(76, 30), "radius": 7.0}]
@@ -287,6 +326,8 @@ static func carpathians() -> Valley:
 	v.id = "carpathians"
 	v.title = "The Carpathian Pass"
 	v.blurb = "Night, a blizzard. Switchbacks through deep snow up to the ridge."
+	v.biome = "The Mountains"
+	v.cell = Vector2i(0, -2)
 	v.price = 6000
 	v.stars = 5
 	v.season = "winter"
@@ -325,7 +366,10 @@ static func carpathians() -> Valley:
 		_bends(PackedVector2Array([Vector2(-62, -10), Vector2(-40, 6), Vector2(-18, 22)]), 9.0),
 		_bends(PackedVector2Array([Vector2(-18, 22), Vector2(8, 16), Vector2(8, 2), Vector2(-22, -6), Vector2(-22, -20),
 			Vector2(-12, -28)]), 7.0),  # U turns too
+		# East over the gorge to the foothills, its bridge gone.
+		PackedVector2Array([Vector2(46, -64), Vector2(90, -82), Vector2(128, -88)]),
 	]
+	v.gaps = [v._gap_to_end(5, 11.0)]
 	v.road_smooth = 24.0
 	v.road_grade = 0.2
 	v.ramp_max = 36.0
@@ -443,3 +487,11 @@ static func _bends(points: PackedVector2Array, radius: float) -> PackedVector2Ar
 			out.append(o + Vector2.from_angle(a1 + sweep * k / n) * r)
 	out.append(points[points.size() - 1])
 	return out
+
+
+## A gap span over the last metres of road r, to the border it ends on.
+func _gap_to_end(r: int, metres: float) -> Dictionary:
+	var total := 0.0
+	for i in roads[r].size() - 1:
+		total += roads[r][i].distance_to(roads[r][i + 1])
+	return {"road": r, "from": total - metres, "to": total + 2.0}

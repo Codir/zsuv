@@ -20,6 +20,7 @@ H     headlights   R  flip upright
 E     job board, unload, refuel
 TAB   garage, on the board
 C     hitch / unhitch a trailer
+B/V   tractor: dig / tip the tipper
 F     winch, Shift - reel in
 M     map
 T     tow back to depot
@@ -104,6 +105,9 @@ func _process(delta: float) -> void:
 	if vehicle.winch.attached:
 		_status.text += "\nWINCH %4.1f m  pull %2d kN%s" % [
 			vehicle.winch.length, roundi(vehicle.winch.tension / 1000.0), "  <<" if vehicle.winch.reeling else ""]
+	var loader := vehicle.get_node_or_null("Loader") as Loader
+	if loader:  # the tractor's bucket and tipper, and the m³ shifted (docs/plan.md §4, §9)
+		_status.text += "\n%s  SHIFTED %d m3" % [loader.status(), roundi(loader.land.earthworks.shifted)]
 	_objective.text = contracts.objective_text()
 	_board.visible = contracts.board_open
 	_board_bg.visible = contracts.board_open

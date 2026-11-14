@@ -1,6 +1,7 @@
 class_name WorldBuilder
 extends Node3D
-## Places a valley's trees, rocks, buildings and the snow marker poles along its roads.
+## Places a valley's trees, rocks, buildings and the snow marker poles along its roads. One per tile
+## of the Land, standing where its tile does: everything here is in the tile's own metres.
 
 const TRUNK := Color(0.28, 0.18, 0.12)
 const PINE := Color(0.12, 0.24, 0.18)
@@ -12,6 +13,7 @@ var terrain: Terrain
 var valley: Valley
 var tree_points := PackedVector2Array()
 var anchor_points := PackedVector3Array()  # winch anchors
+var props: Array[Dictionary] = []  # every tree and rock: {p (its own metres), kind, shape}; gone: shape null
 var _rng := RandomNumberGenerator.new()
 
 
@@ -29,6 +31,9 @@ func build(t: Terrain, v: Valley) -> void:
 
 
 func _is_clear(p: Vector2, locations: Dictionary, margin: float) -> bool:
+	for r in terrain.keep_clear:  # a river's bed and banks
+		if r.grow(margin).has_point(p):
+			return false
 	if terrain.road_distance(p) < Terrain.ROAD_HALF_WIDTH + margin:
 		return false
 	for l in locations.values():
@@ -65,6 +70,7 @@ func _scatter_trees(locations: Dictionary) -> void:
 		cs.shape = shape
 		cs.position = Vector3(p.x, y + 2.0 * s, p.y)
 		body.add_child(cs)
+		props.append({"p": p, "kind": "tree", "shape": cs})
 	_trees(valley.trees, xforms)
 
 
@@ -144,6 +150,7 @@ func _scatter_rocks(locations: Dictionary) -> void:
 		cs.shape = shape
 		cs.position = Vector3(p.x, y, p.y)
 		body.add_child(cs)
+		props.append({"p": p, "kind": "rock", "shape": cs})
 	var sphere := SphereMesh.new()
 	sphere.radial_segments = 6
 	sphere.rings = 3
@@ -450,6 +457,8 @@ func _boundary_walls() -> void:
 	var body := StaticBody3D.new()
 	add_child(body)
 	for i in 4:
+		if not terrain.outer[["west", "east", "north", "south"][i]]:
+			continue  # another biome goes on past it: no wall
 		var shape := BoxShape3D.new()
 		shape.size = Vector3(2.0, 200.0, 260.0) if i < 2 else Vector3(260.0, 200.0, 2.0)
 		var cs := CollisionShape3D.new()
@@ -823,3 +832,27 @@ func _build_pump_room(loc: Dictionary) -> void:
 		_piece(Vector3(2.0, 0.45, 0.5), _at(-3.0, 6.0 * side), Vector3(0.0, 0.55, 0.0), _yaw(0.0), Color(0.42, 0.28, 0.16))
 	_lamp(_at(-4.0, -3.0))
 	_sign(c + Vector3(0.0, 7.5, 0.0), loc.name.to_upper())
+
+
+## Every tree and rock within radius of p (its own metres) goes (docs/plan.md §4): its meshes
+## shrink to nothing, its collision goes. The points of those that went.
+func clear_near(p: Vector2, radius: float) -> PackedVector2Array:
+	var gone := PackedVector2Array()
+	for pr in props:
+		if pr.shape != null and (pr.p as Vector2).distance_to(p) < radius:
+			(pr.shape as CollisionShape3D).queue_free()
+			pr.shape = null
+			gone.append(pr.p)
+	if gone.is_empty():
+		return gone
+	for c in get_children():
+		var mmi := c as MultiMeshInstance3D
+		if mmi == null:
+			continue
+		var mm := mmi.multimesh
+		for i in mm.instance_count:
+			var o := mm.get_instance_transform(i).origin
+			for q in gone:
+				if absf(o.x - q.x) < 0.01 and absf(o.z - q.y) < 0.01:
+					mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3.ZERO), o))
+	return gone

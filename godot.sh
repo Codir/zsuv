@@ -6,6 +6,7 @@
 #   ./godot.sh editor                open the editor
 #   ./godot.sh check                 parse every script, compile every shader, headless
 #   ./godot.sh test [filter]         tests/run_tests.gd
+#   ./godot.sh bake                  generate the map and write it to map/ (the game loads it; export does this first)
 #   ./godot.sh export [preset|all]   Web | Windows | Linux | macOS -> builds/
 #   ./godot.sh web                   export Web and serve it on http://localhost:8060
 #   ./godot.sh capture               record the trailer scenes into capture/trailer/ (tools/make_media.py)
@@ -73,12 +74,13 @@ case "$cmd" in
     echo "$out" | grep -v "^Godot Engine" || true
     [ "$rc" -eq 0 ] && ! echo "$out" | grep -q "SCRIPT ERROR\|SHADER ERROR\|Parse Error\|Failed to load";;
   test) fetch; imported; exec ${LIMIT:+$LIMIT 900} "$BIN" --headless --fixed-fps 60 --path . -s res://tests/run_tests.gd -- "$@";;
-  export) export_presets "${1:-all}";;
+  bake) fetch; imported; "$BIN" --headless --path . -s res://tests/bake_map.gd 2>&1 | grep -v "^Godot Engine";;
+  export) "$0" bake; export_presets "${1:-all}";;
   web) export_presets Web; echo "http://localhost:8060"; cd builds/web && exec python3 -m http.server 8060;;
   capture) fetch; imported; what="${1:-trailer}"; out="$(pwd -W 2>/dev/null || pwd)/capture/$what"; rm -rf "$out"; mkdir -p "$out"
     ${LIMIT:+$LIMIT 900} "$BIN" --path . --fixed-fps 30 --disable-vsync -- --capture="$what" --out="$out"
     cat "$out/done.txt";;
   soundcheck) fetch; imported; out="$(pwd -W 2>/dev/null || pwd)/capture/soundcheck.wav"
     ${LIMIT:+$LIMIT 300} "$BIN" --headless --path . -s res://tests/soundcheck.gd -- --out="$out" 2>&1 | grep -v "^Godot Engine\|^autodrive pos";;
-  *) sed -n '2,13p' godot.sh; exit 1;;
+  *) sed -n '2,14p' godot.sh; exit 1;;
 esac
