@@ -151,8 +151,7 @@ func test_each_load_counts_and_the_site_stands(t: TCase) -> void:
 
 
 ## The milestone for Nov 20: on the steppe, a fuel station placed and built from the railhead's
-## parts and its plant's concrete, poured from a mixer (a stand-in on the pickup's body until the
-## mixer is in), then filled with the railhead's fuel.
+## parts and its plant's concrete, poured into the mixer, then filled with the railhead's fuel.
 func test_a_fuel_station_on_the_steppe_from_the_railheads_loads(t: TCase) -> void:
 	var shared: Vehicle = t.world.vehicle
 	shared.autodrive = true  # deaf to the keys
@@ -191,10 +190,7 @@ func test_a_fuel_station_on_the_steppe_from_the_railheads_loads(t: TCase) -> voi
 	infra.interact()
 	t.eq(site.needs_left(), {"concrete": 1.0}, "the site's needs after the parts")
 	# Concrete from the railhead's plant, into the mixer under its chute.
-	var mixer := TruckSpec.pickup()
-	mixer.id = "mixer"
-	mixer.title = "Mixer"
-	world.set_truck(mixer)
+	world.set_truck(TruckSpec.mixer())
 	await t.ticks(2)
 	v = world.vehicle
 	await _stand(t, world, depot)

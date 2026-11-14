@@ -103,10 +103,8 @@ func _process(delta: float) -> void:
 		"█".repeat(fuel_bars),
 		"░".repeat(10 - fuel_bars),
 		roundi(vehicle.fuel),
-		Loads.text(vehicle),
+		vehicle.load_text(),
 	]
-	if vehicle.load_text() != "":
-		_status.text += "\n" + vehicle.load_text()
 	if vehicle.winch.attached:
 		_status.text += "\nWINCH %4.1f m  pull %2d kN%s" % [
 			vehicle.winch.length, roundi(vehicle.winch.tension / 1000.0), "  <<" if vehicle.winch.reeling else ""]

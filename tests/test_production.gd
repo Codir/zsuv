@@ -94,9 +94,7 @@ func test_a_concrete_plant_pours_into_a_mixer(t: TCase) -> void:
 	var plant := _built(t, infra, "plant", Vector2(40.0, 40.0))
 	if plant == null:
 		return
-	var mixer := TruckSpec.pickup()  # a stand-in until the mixer is in
-	mixer.id = "mixer"
-	t.world.set_truck(mixer)
+	t.world.set_truck(TruckSpec.mixer())
 	await t.ticks(2)
 	var v: Vehicle = t.world.vehicle
 	await t.place(B._front(plant), plant.yaw + PI * 0.5, 60)
