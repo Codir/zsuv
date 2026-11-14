@@ -315,6 +315,28 @@ func test_a_bridged_crossing_drives_both_ways_with_a_roads_grip(t: TCase) -> voi
 	t.note = ", ".join(notes)
 
 
+func test_the_route_from_the_railhead_to_the_village_meets_its_barriers_in_order(t: TCase) -> void:
+	var land: Land = t.world.land
+	var steppe: Terrain = land.tiles.filter(func(x: Terrain) -> bool: return x.valley.id == "steppe")[0]
+	var hills: Terrain = land.tiles.filter(func(x: Terrain) -> bool: return x.valley.id == "carpathians")[0]
+	var from: Vector2 = (steppe.valley.locations.depot.pos as Vector2) + steppe.origin
+	var to: Vector2 = (hills.valley.locations.village.pos as Vector2) + hills.origin
+	var r := land.route(from, to)
+	var pts: PackedVector2Array = r[0]
+	t.ok(r[1] < INF, "no road from the railhead to the upper village")
+	var kinds := land.sites_along(pts).map(func(s: Dictionary) -> String: return s.id.get_slice(":", 0) + ":" + s.biome)
+	t.eq(kinds, ["fill:steppe", "bridge:steppe", "gravel_road:polissia", "slide:zakarpattia", "bridge:carpathians"], "the barriers on the way, in order")
+	# The swamp's deep water is on the way too: the snorkel's barrier.
+	var swamp: Terrain = land.tiles.filter(func(x: Terrain) -> bool: return x.valley.id == "polissia")[0]
+	var lake: Dictionary = swamp.valley.features.filter(func(f: Dictionary) -> bool: return f.type == "lake" and f.has("water"))[0]
+	t.ok(Land._to_path(pts, (lake.pos as Vector2) + swamp.origin).x < 6.0, "the swamp's deep water is off the way")
+	# Gravel within reach of the way in the biomes that build with it.
+	for d in land.deposits():
+		var off := Land._to_path(pts, d.pos).x
+		t.ok(off < 120.0, "the %s's gravel is %.0f m off the way" % [d.biome, off])
+	t.note = "%.0f m of road from the railhead to the upper village" % r[1]
+
+
 func test_the_sky_blends_across_a_border(t: TCase) -> void:
 	var land: Land = t.world.land
 	for b in land.borders:

@@ -198,6 +198,31 @@ func test_gravel_spread_covers_the_bog_road_and_graded_it_is_firm(t: TCase) -> v
 	land.reset_ground()
 
 
+func test_a_spinning_wheel_churns_mud_and_gravel_does_not(t: TCase) -> void:
+	var land: Land = t.world.land
+	var road: Dictionary = land.site_spots().filter(func(s: Dictionary) -> bool: return s.kind == "gravel_road")[0]
+	var p: Vector2 = road.pos
+	for q in road.path:  # half churned already: the edge of a bog
+		for k in 12:
+			var c: Vector2 = q + Vector2(k - 6.0, 0.0)
+			var m := land.sample(Vector3(c.x, 0.0, c.y)).mud
+			if m > 0.15 and m < 0.6:
+				p = c
+	var at := Vector3(p.x, land.get_height(p.x, p.y), p.y)
+	var before := land.sample(at).mud
+	for i in 30:
+		land.churn(at, Land.CHURN)
+	var after := land.sample(at).mud
+	t.ok(after > before + 0.2, "30 ticks of a spinning wheel churned the mud from %.2f to %.2f" % [before, after])
+	land.earthworks.spread_gravel(p, 2.0)
+	var on_gravel := land.sample(at).mud
+	for i in 30:
+		land.churn(at, Land.CHURN)
+	t.ok(land.sample(at).mud <= on_gravel + 0.001, "gravel churned: %.2f, then %.2f" % [on_gravel, land.sample(at).mud])
+	t.note = "mud %.2f, churned %.2f, on gravel %.2f" % [before, after, on_gravel]
+	land.reset_ground()
+
+
 func test_the_tractor_fills_the_washout_and_the_pickup_drives_to_the_river(t: TCase) -> void:
 	var shared: Vehicle = t.world.vehicle
 	shared.autodrive = true  # deaf to the keys pressed here

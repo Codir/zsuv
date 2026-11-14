@@ -358,11 +358,11 @@ func test_upgrades_are_made_from_parts_and_fitted(t: TCase) -> void:
 	var w = t.world
 	var v: Vehicle = w.vehicle
 	var ids := Upgrades.list(v).map(func(u: Dictionary) -> String: return u.id)
-	t.eq(ids, ["snorkel", "chains"], "what fits the pickup")
+	t.eq(ids, ["snorkel", "chains", "long_winch"], "what fits the pickup")
 	var six := await _six(t)
 	var six_ids := Upgrades.list(six).map(func(u: Dictionary) -> String: return u.id)
 	six.free()
-	t.eq(six_ids, ["snorkel", "chains", "body_tank", "body_flatbed", "body_tipper"], "what fits the 6x6")
+	t.eq(six_ids, ["snorkel", "chains", "long_winch", "body_tank", "body_flatbed", "body_tipper"], "what fits the 6x6")
 	t.ok(not Upgrades.fits(TruckSpec.semi(), "snorkel"), "a snorkel fits the semi")
 	var yard := _Yard.new()
 	t.eq(Upgrades.fit(v, "snorkel", yard), "It takes 1 parts: bring them to the yard", "with no parts in the yard")
@@ -471,13 +471,13 @@ func test_the_workshop_in_the_garage(t: TCase) -> void:
 	t.ok(c.workshop, "U does not turn the garage to the workshop")
 	t.ok(c.workshop_base() != null, "no base at the railhead")
 	var text := c.garage_text()
-	t.ok(text.begins_with("WORKSHOP - PICKUP") and "1  SNORKEL" in text and "3  REPAIR" in text, "the workshop: %s" % text)
+	t.ok(text.begins_with("WORKSHOP - PICKUP") and "1  SNORKEL" in text and "4  REPAIR" in text, "the workshop: %s" % text)
 	var said := []
 	var on_message := func(m: String) -> void: said.append(m)
 	c.message.connect(on_message)
 	c.garage_pick(0)
 	t.ok("snorkel" in v.upgrades, "the snorkel is not fitted: %s" % [said])
-	c.garage_pick(2)
+	c.garage_pick(3)
 	t.eq(v.condition, 1.0, "its condition after the repair")
 	c.message.disconnect(on_message)
 	c._unhandled_input(u)
@@ -485,3 +485,14 @@ func test_the_workshop_in_the_garage(t: TCase) -> void:
 	c.garage_open = false
 	v.upgrades = PackedStringArray()
 	v._apply_upgrades()
+
+
+func test_the_long_winch_reaches_further_and_pulls_harder(t: TCase) -> void:
+	var v: Vehicle = t.world.vehicle
+	var length := v.winch.max_length
+	t.ok(Upgrades.fit(v, "long_winch", t.world.infra.railhead).begins_with("Fitted: long winch"), "the long winch is not fitted")
+	t.eq(v.winch.max_length, length + 10.0, "its cable")
+	t.eq(v.winch.pull, 1.3, "its pull")
+	v.upgrades = PackedStringArray()
+	v._apply_upgrades()
+	t.eq(v.winch.max_length, length, "its cable after")

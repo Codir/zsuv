@@ -7,6 +7,9 @@ extends RigidBody3D
 ## body's to set: Vehicle's engine and differentials, a Trailer's brakes.
 
 const SLIP_SPIN := 14.0
+const SPIN_FREE := 2.5  # m/s a spinning tread may run ahead of the ground and keep its grip
+const SPIN_LOSS := 4.0  # m/s more, and its grip has fallen to SPIN_GRIP
+const SPIN_GRIP := 0.75
 const DARK := Color(0.12, 0.12, 0.13)
 
 
@@ -46,6 +49,7 @@ var spring_k := 32000.0
 var damping := 3800.0
 var anti_roll := 16000.0
 var steer := 0.0  # of the steered wheels, radians
+var spin_limit := INF  # m/s of tread a spinning driven wheel reaches: the gear's top speed (Vehicle)
 var boxes: Array[Dictionary] = []  # its body's collision boxes, {size, pos} (the spec's): what water lifts and drags
 var water_depth := 0.0  # m of water over the ground under its deepest wheel, 0 dry
 
@@ -192,7 +196,10 @@ func _apply_tire(w: Wheel, brake: float, delta: float) -> void:
 	elif w.request != 0.0:
 		if absf(w.request) > w.allowed:
 			w.slip = true
-			f_long = signf(w.request) * w.allowed * 0.85
+			# Spinning, it grips less the faster it runs ahead of the ground: up to the gear's top
+			# speed (spin_limit), so in mud a low gear digs in where a high one polishes it.
+			var over := clampf((_spin_tread(w) - absf(v_long) - SPIN_FREE) / SPIN_LOSS, 0.0, 1.0) * clampf(w.surface.mud, 0.0, 1.0)
+			f_long = signf(w.request) * w.allowed * 0.85 * lerpf(1.0, SPIN_GRIP, over)
 		else:
 			f_long = w.request
 	var f_lat := -v_lat * wheel_mass / delta * 0.5
@@ -203,9 +210,13 @@ func _apply_tire(w: Wheel, brake: float, delta: float) -> void:
 	var roll := w.surface.rolling * w.load * clampf(v_long * 8.0, -1.0, 1.0)
 	apply_force(fwd * (tire.x - roll) + right * tire.y, w.point - global_position)
 
-	w.spin_speed = signf(w.request) * SLIP_SPIN if w.slip else v_long / w.radius
+	w.spin_speed = signf(w.request) * _spin_tread(w) / w.radius if w.slip else v_long / w.radius
 	if land and (w.surface.snow > 0.02 or w.surface.mud > 0.05):
 		land.compact(w.point, 0.08 if w.slip else 0.25)
+		# A heavy rig spinning a wheel in mud churns it deeper (docs/plan.md §4): the busiest dirt
+		# tracks turn to bog, which is what a gravel road is for.
+		if w.slip and mass > Land.CHURN_MASS and w.surface.mud > 0.05:
+			land.churn(w.point, Land.CHURN)
 
 
 func point_velocity(p: Vector3) -> Vector3:
@@ -288,3 +299,8 @@ func _add_box_shape(size: Vector3, pos: Vector3) -> void:
 	cs.shape = shape
 	cs.position = pos
 	add_child(cs)
+
+
+## How fast a spinning wheel's tread runs (m/s): as fast as it spins, up to spin_limit.
+func _spin_tread(w: Wheel) -> float:
+	return minf(SLIP_SPIN * w.radius, spin_limit)

@@ -307,11 +307,13 @@ static func polissia() -> Valley:
 		PackedVector2Array([Vector2(-8, 46), Vector2(0, 88), Vector2(0, 128)]),
 		PackedVector2Array([Vector2(4, -78), Vector2(-20, -104), Vector2(-40, -128)]),
 	]
-	# The bog: deep mud along the road past the peat works, made firm by a gravel road (§5); and deep
+	# The bog: deep mud on the road north from the apiary to the old farm, made firm by a gravel road
+	# (§5), on the way to the foothills; and deep
 	# water over the road to the forestry, over a truck's intake without a snorkel (§8).
-	v.bogs = [{"road": 1, "from": 100.0, "to": 155.0}]
+	v.bogs = [{"road": 1, "from": 25.0, "to": 85.0}]
 	v.features.append({"type": "lake", "pos": Vector2(-37, -86), "radius": 11.0, "depth": 2.2, "water": 1.4, "shore": 10.0})
 	v.puddles = [{"pos": Vector2(-44, 54), "radius": 16.0}, {"pos": Vector2(-72, 40), "radius": 11.0},
+		{"pos": Vector2(-90, -44), "radius": 12.0}, {"pos": Vector2(-92, -24), "radius": 12.0}, {"pos": Vector2(-88, -4), "radius": 12.0},
 		{"pos": Vector2(-90, 0), "radius": 7.0}, {"pos": Vector2(76, 30), "radius": 7.0}]
 	v.layer_base = 0.15
 	v.layer_noise = 0.45

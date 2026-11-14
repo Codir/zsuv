@@ -14,7 +14,7 @@ extends Node3D
 ## for 2 x GATE_FLAT m. A river or a gorge needs no profile: both tiles carve their half of its bed
 ## from their own ground, down to one level along it, and the water's level runs along it.
 
-const MAP_VERSION := 4  # moves with any change to what the generator makes (docs/plan.md §3, §11)
+const MAP_VERSION := 6  # moves with any change to what the generator makes (docs/plan.md §3, §11)
 const BAND := 24.0
 const SMOOTH := 20.0
 const GATE_FLAT := 8.0
@@ -28,6 +28,8 @@ const OPPOSITE := {"west": "east", "east": "west", "north": "south", "south": "n
 var home: Terrain
 var baked := false  # built from the bake (MapBake), not the generator
 var earthworks: Earthworks  # digging and dumping on it (docs/plan.md §4)
+var timings := {}  # ms build took: ground (the bake or the generator), finish (meshes, collision), world (trees, houses)
+var _t0 := 0
 var fog: Fog  # what has been seen of it (docs/plan.md §3)
 var paper := PackedByteArray()  # the paper map as the bake drew it (MapScreen), or empty
 var tiles: Array[Terrain] = []
@@ -44,6 +46,7 @@ var _bodies: Array[RID] = []
 ## play): every tile's ground (from the bake when there is a current one and use_bake, else
 ## from the generator), the borders, then what is seen, driven on and stands on it.
 func build(home_valley: Valley, use_bake := true) -> void:
+	_t0 = Time.get_ticks_msec()
 	_home_cell = home_valley.cell
 	earthworks = Earthworks.new(self)
 	var valleys := {}
@@ -86,10 +89,12 @@ func build(home_valley: Valley, use_bake := true) -> void:
 	for border in borders:
 		_keep_clear(border.a, border.side, border)
 		_keep_clear(border.b, OPPOSITE[border.side], border)
+	timings.ground = Time.get_ticks_msec() - _t0
 	for t in tiles:
 		add_child(t)
 		t.finish()
 		_bodies.append(t.body.get_rid())
+	timings.finish = Time.get_ticks_msec() - _t0 - timings.ground
 	for b in borders:
 		if b.kind != "land":
 			_water_plane(b)
@@ -110,6 +115,7 @@ func build(home_valley: Valley, use_bake := true) -> void:
 			anchor_points.append(p + t.position)
 		for p in wb.tree_points:
 			tree_points.append(p + t.origin)
+	timings.world = Time.get_ticks_msec() - _t0 - timings.ground - timings.finish
 	fog = Fog.new(self)
 
 
@@ -567,6 +573,8 @@ const COVERED := 0.9  # of a gravel road's corridor spread, and it is done
 const CLEARED := 0.85  # of a slide above the road's level gone, and it is clear
 const GRADE_SMOOTH := 14.0  # m a graded road's profile is averaged over, as a smoothed road's
 const GRADE_MOST := 0.22  # the steepest a graded road climbs
+const CHURN_MASS := 5000.0  # kg: a rig this heavy with its load churns the mud it spins in (§4)
+const CHURN := 0.01  # the mud a spinning wheel adds a tick
 const GRAVEL_STRIP := 16.0  # m of half a road a load of gravel covers, crept over in its 12 s
 
 var bridges := {}  # spot id -> the deck built over it (a StaticBody3D), or true
@@ -838,3 +846,77 @@ func deposits() -> Array[Dictionary]:
 			if loc.kind == "gravel":
 				out.append({"pos": (loc.pos as Vector2) + t.origin, "radius": float(loc.radius), "biome": t.valley.id})
 	return out
+
+
+## The shortest way by road from a to b (world): every road of the map, joined where a point of
+## one is within a metre of a point of another (their ends at a place, a junction, a gate on a
+## border). [the points (world), its length in m]; [[], INF] when no road goes there.
+func route(a: Vector2, b: Vector2) -> Array:
+	var pts := PackedVector2Array()
+	var edges := {}  # point index -> [[index, metres], ...]
+	for road in all_roads():
+		var prev := -1
+		for p in road:
+			var i := -1
+			for j in pts.size():
+				if pts[j].distance_to(p) < 1.0:
+					i = j
+					break
+			if i < 0:
+				i = pts.size()
+				pts.append(p)
+				edges[i] = []
+			if prev >= 0 and prev != i:
+				var d := pts[prev].distance_to(pts[i])
+				edges[prev].append([i, d])
+				edges[i].append([prev, d])
+			prev = i
+	var start := -1
+	var goal := -1
+	for j in pts.size():
+		if start < 0 or pts[j].distance_to(a) < pts[start].distance_to(a):
+			start = j
+		if goal < 0 or pts[j].distance_to(b) < pts[goal].distance_to(b):
+			goal = j
+	var dist := {start: 0.0}
+	var from := {}
+	var open := [start]
+	while not open.is_empty():
+		var best := 0
+		for k in open.size():
+			if dist[open[k]] < dist[open[best]]:
+				best = k
+		var i: int = open.pop_at(best)
+		if i == goal:
+			var out := PackedVector2Array([pts[i]])
+			while from.has(i):
+				i = from[i]
+				out.insert(0, pts[i])
+			return [out, dist[goal]]
+		for e in edges[i]:
+			var nd: float = dist[i] + e[1]
+			if not dist.has(e[0]) or nd < dist[e[0]]:
+				dist[e[0]] = nd
+				from[e[0]] = i
+				open.append(e[0])
+	return [PackedVector2Array(), INF]
+
+
+## The road sites (site_spots) along a route's points, in the order it meets them.
+func sites_along(points: PackedVector2Array) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var at := {}
+	for s in site_spots():
+		var q := _to_path(points, s.pos)
+		if q.x < CORRIDOR:
+			at[s.id] = q.y
+			out.append(s)
+	out.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return at[x.id] < at[y.id])
+	return out
+
+
+## The mud at pos (world) deepens by amount, up to 1: a heavy rig's wheel spinning in it. Gravel
+## spread does not churn.
+func churn(pos: Vector3, amount: float) -> void:
+	var t := tile_at(pos.x, pos.z)
+	t.churn(pos - t.position, amount)
