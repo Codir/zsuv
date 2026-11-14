@@ -206,6 +206,10 @@ func _apply_tire(w: Wheel, brake: float, delta: float) -> void:
 	w.spin_speed = signf(w.request) * SLIP_SPIN if w.slip else v_long / w.radius
 	if land and (w.surface.snow > 0.02 or w.surface.mud > 0.05):
 		land.compact(w.point, 0.08 if w.slip else 0.25)
+		# A heavy rig spinning a wheel in mud churns it deeper (docs/plan.md §4): the busiest dirt
+		# tracks turn to bog, which is what a gravel road is for.
+		if w.slip and mass > Land.CHURN_MASS and w.surface.mud > 0.05:
+			land.churn(w.point, Land.CHURN)
 
 
 func point_velocity(p: Vector3) -> Vector3:

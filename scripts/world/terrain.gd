@@ -915,3 +915,16 @@ func mark_road(p: Vector2, radius: float) -> void:
 				var c := snow_img.get_pixel(x, z)
 				snow_img.set_pixel(x, z, Color(c.r * valley.layer_on_road, 0.0, 1.0, c.a))
 	_images_dirty = true
+
+
+## The mud at local pos deepens by amount, up to 1, unless gravel is spread there (Land.churn).
+func churn(pos: Vector3, amount: float) -> void:
+	if _works_at(pos).g > 0.5:
+		return
+	var x := clampi(roundi(pos.x + HALF), 0, N - 1)
+	var z := clampi(roundi(pos.z + HALF), 0, N - 1)
+	var c := snow_img.get_pixel(x, z)
+	if c.g >= 1.0 or c.a < 0.5:  # not on ice
+		return
+	snow_img.set_pixel(x, z, Color(c.r, minf(c.g + amount, 1.0), c.b, c.a))
+	_images_dirty = true
